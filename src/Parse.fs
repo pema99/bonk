@@ -130,6 +130,7 @@ let nonAppP =
 let appP = 
     chainL1 nonAppP (just (curry App))
 
+// TODO: Unop
 (*let unOpP = 
   (specificOperatorP Plus <|> specificOperatorP Minus <|> specificOperatorP Not)
   <+> exprP // TODO: technically should be term
@@ -140,7 +141,7 @@ let specificBinOpP op =
   *> just (curry <| fun (l, r) -> Op (l, op, r))
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
-let termP = appP // unop
+let termP = appP
 let mulDivP = chainL1 termP (chooseBinOpP [Star; Slash])
 let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
@@ -150,4 +151,17 @@ exprPImpl := whitespacedP boolOpP
 let parseProgram txt =
     mkMultiLineParser txt
     |> exprP
+    |> fst
+
+// Incomplete declarations for REPL
+let declP =
+    keywordP "let" *> identP <* one '=' <* whitespaceP
+    <+> exprP
+
+let replP =
+    declP <|> (just "" <+> exprP) 
+
+let parseRepl txt =
+    mkMultiLineParser txt
+    |> replP
     |> fst

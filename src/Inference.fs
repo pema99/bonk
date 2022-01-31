@@ -3,6 +3,8 @@
 // - https://course.ccs.neu.edu/cs4410sp19/lec_type-inference_notes.html
 // - http://dev.stephendiehl.com/fun/006_hindley_milner.html#inference-monad
 
+module Inference
+
 open Repr
 
 // Inference monad is a state monad mixed with result monad
@@ -200,68 +202,13 @@ let renameFresh (t: Type) : Type =
     let (res, _, _) = cont t Map.empty 0
     res
 
-let rec pretty (t: Type) : string =
+let rec prettyType (t: Type) : string =
     match t with
     | TCon v -> v
     | TVar v -> sprintf "'%s" v
-    | TArr (l, r) -> sprintf "(%s -> %s)" (pretty l) (pretty r) 
+    | TArr (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
 
 let inferProgram e =
     inferExpr Map.empty e 0
     |> fst
     |> Result.map (snd >> renameFresh)
-
-// Tests
-let checkTest i e a =
-    match a with
-    | Error err -> printfn "[%A] Error: %A" i err
-    | Ok v ->
-        if e = v then
-            printfn "[%A] Pass." i
-        else
-            printfn "[%A] Fail:" i
-            printfn "\tExpected: %A" e
-            printfn "\tActual: %A" v
-
-let cases = [
-    tInt,                                               Lit (LInt 5)
-    tBool,                                              Lit (LBool false)
-    tInt,                                               Op (Lit (LInt 5), Plus, Lit (LInt 6))
-    tInt,                                               Let ("c", Lit (LInt 5), Op (Var "c", Star, Var "c"))
-    TArr (TVar "a", TArr (TVar "a", TVar "a")),         Let ("add", Lam ("a", Lam ("b", Op (Var "a", Slash, Var "b"))), Var ("add"))
-    TArr (TCon "bool", TArr (TCon "int", TCon "int")),  Lam ("a", Lam("b", If (Var "a", Lit (LInt 5), Var "b")))
-    ]
-
-printfn "Running tests..."
-cases
-|> List.iteri (fun i (t, e) -> checkTest i t (inferProgram e))
-
-// Test quick
-open Common
-open Combinator
-open Parse
-
-let test = mkMultiLineParser "
-    let add = [x] [y]
-        x + y
-    in
-    
-    let mul = [x] [y]
-        x * y
-    in
-    
-    let compose = [f] [g]
-        [l] f (g l)
-    in
-    
-    let foo =
-        compose (add 5) (mul 2) in
-    
-    foo 5
-"
-
-match exprP test |> fst with
-| Success v ->
-    inferProgram v |> Result.map pretty |> printfn "%A" 
-| a ->
-    printfn "%A" (exprP test)

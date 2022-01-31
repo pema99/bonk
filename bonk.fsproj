@@ -1,22 +1,20 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net5.0</TargetFramework>
     <WarnOn>3390;$(WarnOn)</WarnOn>
   </PropertyGroup>
-
   <ItemGroup>
     <Compile Include="plonk/src/Util.fs" />
     <Compile Include="plonk/src/State.fs" />
     <Compile Include="plonk/src/Combinator.fs" />
     <Compile Include="plonk/src/Common.fs" />
   </ItemGroup>
-
   <ItemGroup>
     <Compile Include="src/Repr.fs" />
     <Compile Include="src/Parse.fs" />
     <Compile Include="src/Inference.fs" />
+    <Compile Include="src/Tests.fs" />
+    <Compile Include="src/Repl.fs" />
   </ItemGroup>
-
 </Project>
