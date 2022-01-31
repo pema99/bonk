@@ -10,6 +10,7 @@ type Value =
     | VFloat of float
     | VString of string
     | VClosure of string * Expr * TermEnv
+    | VLazy of Value Lazy
 
 and TermEnv = Map<string, Value>
 
@@ -66,6 +67,12 @@ and eval tenv e =
         | Some (VClosure (a, body, env)), Some v ->
             let nenv = extend env a v 
             eval nenv body
+        | Some (VLazy e), Some v -> // deferred application
+            match e.Value with
+            | VClosure (a, body, env) ->
+                let nenv = extend env a v 
+                eval nenv body
+            | _ -> None
         | _ -> None
     | Lam (x, t) -> Some (VClosure (x, t, tenv))
     | Let (x, v, t) ->
@@ -81,6 +88,9 @@ and eval tenv e =
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
+    | Rec e ->
+        lazy (eval tenv (App (e, (Rec e))) |> Option.get)
+        |> fun x -> Some (VLazy x)
 
 // Printing
 let prettyValue v =
@@ -90,6 +100,7 @@ let prettyValue v =
     | VFloat v -> string v
     | VString v -> sprintf "%A" v
     | VClosure (a, _, _) -> sprintf "Closure@%s" a
+    | VLazy _ -> "Lazy"
 
 let printColor str =
     let rec cont str =

@@ -29,6 +29,7 @@ type Expr =
     | Lit of Lit
     | If of Expr * Expr * Expr
     | Op of Expr * BinOp * Expr
+    | Rec of Expr
 
 type Type =
     | TVar of string

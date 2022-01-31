@@ -93,6 +93,7 @@ let groupP = parens exprP
 let reserved = Set.ofList [
     "in"; "let"; "true"; "false"
     "if"; "then"; "else"; "fn"
+    "rec"
     ]
 
 let varP =
@@ -118,11 +119,17 @@ let ifP =
     <+> keywordP "else" *> exprP
     |>> (fun ((a, b), c) -> If (a, b, c))
 
+let recP =
+    keywordP "rec" *>
+    parens exprP
+    |>> Rec
+
 let nonAppP =
     groupP
     <|> literalP
     <|> lamP
     <|> letP
+    <|> recP
     <|> ifP
     <|> varP
     |> whitespacedP

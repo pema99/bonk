@@ -181,11 +181,18 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         }
     | If (cond, tr, fl) -> infer {
         let! s1, t1 = inferExpr env cond
+        let env = applyEnv s1 env
         let! s2, t2 = inferExpr env tr
+        let env = applyEnv s1 env
         let! s3, t3 = inferExpr env fl
+        let substi = compose s3 (compose s2 s1)
+        let t1 = applyType substi t1
+        let t2 = applyType substi t2
+        let t3 = applyType substi t3
         let! s4 = unify t1 tBool
         let! s5 = unify t2 t3
-        return (compose s5 (compose s4 (compose s3 (compose s2 s1))), applyType s5 t2)
+        let substf = compose s5 (compose s4 substi)
+        return (substf, applyType substf t2)
         }
     | Op (l, op, r) -> infer {
         let! s1, t1 = inferExpr env l
@@ -196,6 +203,12 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         let! s3 = unify (TArr (t1, TArr (t2, tv))) inst
         return (compose s1 (compose s2 s3), applyType s3 tv)
         }
+    | Rec e -> infer {
+        let! _, t1 = inferExpr env e
+        let! tv = fresh()
+        let! s2 = unify (TArr (tv, tv)) t1
+        return (s2, applyType s2 tv)
+    }
 
 // Pretty naming
 let prettyTypeName (i: int) : string =
