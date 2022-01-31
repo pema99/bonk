@@ -84,7 +84,7 @@ while true do
         | Ok (_, ty) ->
             let res = eval termEnv expr
             if name <> "" then
-                typeEnv <- extend typeEnv name ([name], ty)
+                typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
             match res with
             | Some res -> 
                 if name <> "" then
