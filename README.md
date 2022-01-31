@@ -6,6 +6,7 @@ Yet another shitty toy language I started working on, mainly to play with Hindle
 `dotnet run`
 
 # Example code (syntax subject to change)
+This currently typechecks:
 ```fs
 let add = [x] [y] x + y in
 let mul = [x] [y] x * y in
