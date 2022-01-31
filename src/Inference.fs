@@ -59,34 +59,45 @@ let remove env x = Map.remove x env
 type Substitution = Map<string, Type>
 let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
 
+let rec fixedPoint f s t =
+    let subst = f s t
+    if subst = t then subst
+    else fixedPoint f s subst
+
 let rec ftvType (t: Type) : string Set =
     match t with
     | TCon _ -> Set.empty
     | TVar a -> Set.singleton a
     | TArr (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
 
-let rec applyType (s: Substitution) (t: Type) : Type =
-    match t with
-    | TCon _ -> t
-    | TVar a -> Map.tryFind a s |> Option.defaultValue t
-    | TArr (t1, t2) -> TArr (applyType s t1 , applyType s t2)
+let applyType =
+    let rec applyTypeFP (s: Substitution) (t: Type) : Type =
+        match t with
+        | TCon _ -> t
+        | TVar a -> Map.tryFind a s |> Option.defaultValue t
+        | TArr (t1, t2) -> TArr (applyTypeFP s t1 , applyTypeFP s t2)
+    fixedPoint applyTypeFP
 
 let ftvScheme (sc: Scheme) : string Set =
     let a, t = sc
     Set.difference (ftvType t) (Set.ofList a) 
 
-let rec applyScheme (s: Substitution) (sc: Scheme) : Scheme =
-    let a, t = sc
-    let s' = List.fold (fun acc k -> Map.remove k acc) s a // TODO: Is this right?
-    (a, applyType s' t)
+let applyScheme =
+    let rec applySchemeFP (s: Substitution) (sc: Scheme) : Scheme =
+        let a, t = sc
+        let s' = List.fold (fun acc k -> Map.remove k acc) s a // TODO: Is this right?
+        (a, applyType s' t)
+    fixedPoint applySchemeFP
 
 let ftvEnv (t: TypeEnv) : Set<string> =
     let elems = t |> Map.toList |> List.map snd
     let ftv = List.fold (fun acc x -> Set.union acc (ftvScheme x)) Set.empty
     ftv elems
 
-let applyEnv (s: Substitution) (t: TypeEnv) : TypeEnv =
-    Map.map (fun _ v -> applyScheme s v) t
+let applyEnv =
+    let applyEnvFP (s: Substitution) (t: TypeEnv) : TypeEnv =
+        Map.map (fun _ v -> applyScheme s v) t
+    fixedPoint applyEnvFP
 
 // Unification
 let occurs (s: string) (t: Type) : bool =
@@ -94,9 +105,9 @@ let occurs (s: string) (t: Type) : bool =
 
 let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     match t1, t2 with
+    | TVar a, TVar b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TVar a, TVar b when a = b -> return Map.empty
     | TCon a, TCon b when a = b -> return Map.empty
     | TArr (l1, r1), TArr (l2, r2) ->
         let! s1 = unify l1 l2

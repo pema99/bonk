@@ -159,7 +159,7 @@ let declP =
     <+> exprP
 
 let replP =
-    declP <|> (just "" <+> exprP) 
+    attempt (just "" <+> exprP) <|> declP
 
 let parseRepl txt =
     mkMultiLineParser txt

@@ -11,6 +11,7 @@ let compose = [f] [g]
 in
 
 let foo =
-    compose (add 5) (mul 2) in
+    compose (add 5) (mul 2)
+in
 
 foo 5
