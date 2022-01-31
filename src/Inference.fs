@@ -198,7 +198,7 @@ let renameFresh (t: Type) : Type =
             | None ->
                 let name = prettyTypeName count
                 let nt = TVar name
-                nt, Map.ofList [(a, name)], count + 1
+                nt, extend subst a name, count + 1
     let (res, _, _) = cont t Map.empty 0
     res
 
