@@ -13,5 +13,9 @@ let mul = [x] [y] x * y in
 let compose = [f] [g] [l] f (g l) in
 compose (add 5) (mul 2) 10
 ```
-
-#### Damn, I've really been getting a lot of use out my crappy parser combinator library lately. Wew lad.
+# Fluff
+- Dependencies are cringe.
+- Damn, I've really been getting a lot of use out my crappy parser combinator library lately. Wew lad.
+- His palms are sweaty.
+- Knees weak.
+- Arms spaghetti.
