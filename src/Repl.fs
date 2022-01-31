@@ -16,36 +16,36 @@ and TermEnv = Map<string, Value>
 
 let rec binop l op r =
     match l, op, r with
-    | VInt l, Plus, VInt r -> VInt (l + r)
-    | VInt l, Minus, VInt r -> VInt (l - r)
-    | VInt l, Star, VInt r -> VInt (l * r)
-    | VInt l, Slash, VInt r -> VInt (l / r)
-    | VInt l, Equal, VInt r -> VBool (l = r)
-    | VInt l, NotEq, VInt r -> VBool (l <> r)
-    | VInt l, GreaterEq, VInt r -> VBool (l >= r)
-    | VInt l, LessEq, VInt r -> VBool (l <= r)
-    | VInt l, Greater, VInt r -> VBool (l > r)
-    | VInt l, Less, VInt r -> VBool (l < r)
-    | VFloat l, Plus, VFloat r -> VFloat (l + r)
-    | VFloat l, Minus, VFloat r -> VFloat (l - r)
-    | VFloat l, Star, VFloat r -> VFloat (l * r)
-    | VFloat l, Slash, VFloat r -> VFloat (l / r)
-    | VFloat l, Equal, VFloat r -> VBool (l = r)
-    | VFloat l, NotEq, VFloat r -> VBool (l <> r)
-    | VFloat l, GreaterEq, VFloat r -> VBool (l >= r)
-    | VFloat l, LessEq, VFloat r -> VBool (l <= r)
-    | VFloat l, Greater, VFloat r -> VBool (l > r)
-    | VFloat l, Less, VFloat r -> VBool (l < r)
-    | VString l, Plus, VString r -> VString (l + r)
-    | VString l, Equal, VString r -> VBool (l = r)
-    | VString l, NotEq, VString r -> VBool (l <> r)
-    | VString l, GreaterEq, VString r -> VBool (l.Length >= r.Length)
-    | VString l, LessEq, VString r -> VBool (l.Length <= r.Length)
-    | VString l, Greater, VString r -> VBool (l.Length > r.Length)
-    | VString l, Less, VString r -> VBool (l.Length < r.Length)
-    | VBool l, And, VBool r -> VBool (l && r)
-    | VBool l, Or, VBool r -> VBool (l || r)
-    | _ -> failwith (sprintf "Unimplemented binop %A %A %A" l op r)
+    | VInt l, Plus, VInt r -> Some <| VInt (l + r)
+    | VInt l, Minus, VInt r -> Some <| VInt (l - r)
+    | VInt l, Star, VInt r -> Some <| VInt (l * r)
+    | VInt l, Slash, VInt r -> Some <| VInt (l / r)
+    | VInt l, Equal, VInt r -> Some <| VBool (l = r)
+    | VInt l, NotEq, VInt r -> Some <| VBool (l <> r)
+    | VInt l, GreaterEq, VInt r -> Some <| VBool (l >= r)
+    | VInt l, LessEq, VInt r -> Some <| VBool (l <= r)
+    | VInt l, Greater, VInt r -> Some <| VBool (l > r)
+    | VInt l, Less, VInt r -> Some <| VBool (l < r)
+    | VFloat l, Plus, VFloat r -> Some <| VFloat (l + r)
+    | VFloat l, Minus, VFloat r -> Some <| VFloat (l - r)
+    | VFloat l, Star, VFloat r -> Some <| VFloat (l * r)
+    | VFloat l, Slash, VFloat r -> Some <| VFloat (l / r)
+    | VFloat l, Equal, VFloat r -> Some <| VBool (l = r)
+    | VFloat l, NotEq, VFloat r -> Some <| VBool (l <> r)
+    | VFloat l, GreaterEq, VFloat r -> Some <| VBool (l >= r)
+    | VFloat l, LessEq, VFloat r -> Some <| VBool (l <= r)
+    | VFloat l, Greater, VFloat r -> Some <| VBool (l > r)
+    | VFloat l, Less, VFloat r -> Some <| VBool (l < r)
+    | VString l, Plus, VString r -> Some <| VString (l + r)
+    | VString l, Equal, VString r -> Some <| VBool (l = r)
+    | VString l, NotEq, VString r -> Some <| VBool (l <> r)
+    | VString l, GreaterEq, VString r -> Some <| VBool (l.Length >= r.Length)
+    | VString l, LessEq, VString r -> Some <| VBool (l.Length <= r.Length)
+    | VString l, Greater, VString r -> Some <| VBool (l.Length > r.Length)
+    | VString l, Less, VString r -> Some <| VBool (l.Length < r.Length)
+    | VBool l, And, VBool r -> Some <| VBool (l && r)
+    | VBool l, Or, VBool r -> Some <| VBool (l || r)
+    | _ -> None
 
 and eval tenv e =
     match e with
@@ -57,7 +57,7 @@ and eval tenv e =
         let v1 = eval tenv l
         let v2 = eval tenv r
         match v1, v2 with
-        | Some v1, Some v2 -> Some (binop v1 op v2)
+        | Some v1, Some v2 -> binop v1 op v2
         | _ -> None
     | Var a -> lookup tenv a
     | App (f, x) ->
@@ -149,9 +149,6 @@ while true do
                 else
                     printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
             | None ->
-                if name <> "" then
-                    printColor <| sprintf "$w%s : $b%s" name typ
-                else
-                    printColor <| sprintf "$wit : $b%s" typ 
+                printfn "Evaluation error"
         | Error err -> printfn "Typing error: %s" err
     | _ -> printfn "Parsing error"
