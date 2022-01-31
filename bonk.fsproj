@@ -14,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Compile Include="Repr.fs" />
-    <Compile Include="Parse.fs" />
-    <Compile Include="Inference.fs" />
+    <Compile Include="src/Repr.fs" />
+    <Compile Include="src/Parse.fs" />
+    <Compile Include="src/Inference.fs" />
   </ItemGroup>
 
 </Project>
