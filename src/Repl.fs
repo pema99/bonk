@@ -13,14 +13,6 @@ type Value =
 
 and TermEnv = Map<string, Value>
 
-let prettyValue v =
-    match v with
-    | VInt v -> string v
-    | VBool v -> string v
-    | VFloat v -> string v
-    | VString v -> sprintf "%A" v
-    | VClosure (a, _, _) -> sprintf "Closure@%s" a
-
 let rec binop l op r =
     match l, op, r with
     | VInt l, Plus, VInt r -> VInt (l + r)
@@ -66,7 +58,35 @@ and eval tenv e =
             else eval tenv fl 
         | _ -> None
 
-// Test quick
+// Printing
+let prettyValue v =
+    match v with
+    | VInt v -> string v
+    | VBool v -> string v
+    | VFloat v -> string v
+    | VString v -> sprintf "%A" v
+    | VClosure (a, _, _) -> sprintf "Closure@%s" a
+
+let printColor str =
+    let rec cont str =
+        match str with
+        | h :: (t :: r) when h = '$' ->
+                match t with
+                | 'r' -> System.Console.ForegroundColor <- System.ConsoleColor.Red
+                | 'g' -> System.Console.ForegroundColor <- System.ConsoleColor.Green
+                | 'b' -> System.Console.ForegroundColor <- System.ConsoleColor.Blue
+                | 'y' -> System.Console.ForegroundColor <- System.ConsoleColor.Yellow
+                | _ -> System.Console.ForegroundColor <- System.ConsoleColor.White
+                cont r
+        | h :: t ->
+                printf "%c" h
+                cont t
+        | _ -> ()
+    cont (Seq.toList str)
+    printfn ""
+    System.Console.ForegroundColor <- System.ConsoleColor.White
+
+// Repl start
 open Combinator
 open Parse
 
@@ -85,12 +105,18 @@ while true do
             let res = eval termEnv expr
             if name <> "" then
                 typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
+            let typ = (ty |> renameFresh |> prettyType)
             match res with
             | Some res -> 
                 if name <> "" then
                     termEnv <- extend termEnv name res
-                printfn "Result: %s" (prettyValue res)
-            | None -> ()
-            printfn "Type: %s" (ty |> renameFresh |> prettyType)
-        | Error err -> printfn "Typing error: %A" err
+                    printColor <| sprintf "$w%s : $b%s $w= $g%s" name typ (prettyValue res) 
+                else
+                    printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
+            | None ->
+                if name <> "" then
+                    printColor <| sprintf "$w%s : $b%s" name typ
+                else
+                    printColor <| sprintf "$wit : $b%s" typ 
+        | Error err -> printfn "Typing error: %s" err
     | _ -> printfn "Parsing error"
