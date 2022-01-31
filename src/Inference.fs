@@ -135,6 +135,13 @@ let ops = Map.ofList [
     Star, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
     Slash, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
     Equal, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    NotEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    GreaterEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    LessEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    Greater, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    Less, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    And, ([], TArr (tBool, TArr (tBool, tBool)))
+    Or, ([], TArr (tBool, TArr (tBool, tBool)))
     ]
 
 // Inference
