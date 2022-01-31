@@ -121,7 +121,7 @@ let ifP =
 
 let recP =
     keywordP "rec" *>
-    parens exprP
+    exprP
     |>> Rec
 
 let nonAppP =
