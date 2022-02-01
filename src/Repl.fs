@@ -147,7 +147,7 @@ let extendTypeMany names ty =
         match names, ty with
         | [name], ty ->
             typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
-        | names, TCtor (KProduct _, args) ->
+        | names, TCtor (KProduct _, args) when List.length args = List.length names ->
             List.zip names args
             |> List.iter (fun (name, ty) ->
                 typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty))
