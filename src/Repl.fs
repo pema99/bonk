@@ -158,7 +158,7 @@ let extendTermMany names v =
         match names, v with
         | [name], v ->
             termEnv <- extend termEnv name v
-        | names, VTuple args ->
+        | names, VTuple args when List.length args = List.length names ->
             List.zip names args
             |> List.iter (fun (name, ty) ->
                 termEnv <- extend termEnv name ty)
