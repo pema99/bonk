@@ -31,12 +31,15 @@ type InferenceBuilder() =
       | Error err -> Error err, n
   member this.Delay (f: unit -> InferM<'t>) : InferM<'t> =
     this.Bind (this.Return (), f)
-  member this.Fresh() : InferM<Type> =
+  member this.FreshTypeVar() : InferM<Type> =
     fun s -> Ok (TVar (sprintf "_t%A" s)), s + 1
+  member this.FreshName() : InferM<string> =
+    fun s -> Ok (sprintf "_t%A" s), s + 1
 
 let infer = InferenceBuilder()
 let just = infer.Return
-let fresh = infer.Fresh
+let fresh = infer.FreshTypeVar
+let freshName = infer.FreshName
 let failure err = fun s -> Error err, s
 let rec mapM (f: 'a -> InferM<'b>) (t: 'a list) : InferM<'b list> = infer {
     match t with
@@ -130,19 +133,16 @@ let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
         let! s1 = unify l1 l2
         let! s2 = unify (applyType s1 r1) (applyType s1 r2)
         return compose s2 s1
-    | TCtor (kind1, lts), TCtor (kind2, rts) ->
-        if kind1 = kind2 && List.length lts = List.length rts then
-            match kind1 with
-            | Product arity when arity = List.length lts ->
-                let! s1 =
-                    scanM
-                        (fun s (l, r) -> unify (applyType s l) (applyType s r))
-                        Map.empty
-                        (List.zip lts rts)
-                return List.fold compose Map.empty s1
-            | _ -> return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
-        else return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
-        
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        match kind1 with
+        | KProduct arity when arity = List.length lts ->
+            let! s1 =
+                scanM
+                    (fun s (l, r) -> unify (applyType s l) (applyType s r))
+                    Map.empty
+                    (List.zip lts rts)
+            return List.fold compose Map.empty s1
+        | _ -> return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
 }
@@ -180,7 +180,7 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
     | Lit (LInt _) -> just (Map.empty, tInt) 
     | Lit (LBool _) -> just (Map.empty, tBool) 
     | Lit (LFloat _) -> just (Map.empty, tFloat) 
-    | Lit (LString _) -> just (Map.empty, tString) 
+    | Lit (LString _) -> just (Map.empty, tString)
     | Var a -> infer {
         match lookup env a with
         | Some s ->
@@ -197,17 +197,35 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         return (compose s3 (compose s2 s1), applyType s3 tv)
         }
     | Lam (x, e) -> infer {
-        let! tv = fresh()
-        let nenv = extend env x ([], tv)
-        let! s1, t1 = inferExpr nenv e
-        return (s1, TArr (applyType s1 tv, t1))
+        match x with
+        | PName x ->
+            let! tv = fresh()
+            let nenv = extend env x ([], tv)
+            let! s1, t1 = inferExpr nenv e
+            return (s1, TArr (applyType s1 tv, t1))
+        | PTuple x -> 
+            let! tvs = mapM (fun _ -> fresh()) x
+            let nenv = List.fold (fun acc (s, tv) -> extend acc s ([], tv)) env (List.zip x tvs)
+            let! s1, t1 = inferExpr nenv e
+            let tvs = List.map (applyType s1) tvs
+            return (s1, TArr (TCtor (KProduct (List.length tvs), tvs), t1))
         }
     | Let (x, e1, e2) -> infer {
         let! s1, t1 = inferExpr env e1
         let nenv = applyEnv s1 env
-        let nt = generalize nenv t1
-        let! s2, t2 = inferExpr (extend env x nt) e2
-        return (compose s1 s2, t2)
+        match x with
+        | PName x ->
+            let nt = generalize nenv t1
+            let! s2, t2 = inferExpr (extend nenv x nt) e2
+            return (compose s1 s2, t2)
+        | PTuple x ->
+            match t1 with
+            | TCtor (KProduct _, es) when List.length x = List.length es ->
+                let nts = List.map (generalize nenv) es 
+                let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
+                let! s2, t2 = inferExpr nenv e2
+                return (compose s1 s2, t2)
+            | _ -> return! failure "Inference failure, failed to pattern match"
         }
     | If (cond, tr, fl) -> infer {
         let! s1, t1 = inferExpr env cond
@@ -238,7 +256,7 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         let subs, typs = s1 |> List.unzip
         let substf = List.fold compose Map.empty subs
         let typs = List.map (applyType substf) typs
-        return (substf, TCtor (Product (List.length es), typs))
+        return (substf, TCtor (KProduct (List.length es), typs))
         }
     | Rec e -> infer {
         let! _, t1 = inferExpr env e
@@ -285,7 +303,12 @@ let rec prettyType (t: Type) : string =
     | TArr (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
     | TCtor (kind, args) ->
         match kind with
-        | Product _ -> args |> List.map prettyType |> List.toArray |> String.concat " * "
+        | KProduct _ ->
+            args
+            |> List.map prettyType
+            |> List.toArray
+            |> String.concat " * "
+            |> sprintf "(%s)"
         | _ -> "<Invalid>"
 
 let inferProgram e =

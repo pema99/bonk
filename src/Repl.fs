@@ -9,10 +9,17 @@ type Value =
     | VBool of bool
     | VFloat of float
     | VString of string
-    | VClosure of string * Expr * TermEnv
+    | VTuple of Value list
+    | VClosure of Pat * Expr * TermEnv
     | VLazy of Value Lazy
 
 and TermEnv = Map<string, Value>
+
+let extendPat env pat v =
+    match pat, v with
+    | PName n, v -> extend env n v
+    | PTuple n, VTuple v -> List.fold (fun acc (x, ve) -> extend acc x ve) env (List.zip n v)
+    | _ -> env
 
 let rec binop l op r =
     match l, op, r with
@@ -65,12 +72,12 @@ and eval tenv e =
         let arg = eval tenv x
         match clos, arg with
         | Some (VClosure (a, body, env)), Some v ->
-            let nenv = extend env a v 
+            let nenv = extendPat env a v 
             eval nenv body
         | Some (VLazy e), Some v -> // deferred application
             match e.Value with
             | VClosure (a, body, env) ->
-                let nenv = extend env a v 
+                let nenv = extendPat env a v 
                 eval nenv body
             | _ -> None
         | _ -> None
@@ -78,7 +85,7 @@ and eval tenv e =
     | Let (x, v, t) ->
         match eval tenv v with
         | Some ve ->
-            let nenv = extend tenv x ve
+            let nenv = extendPat tenv x ve
             eval nenv t
         | _ -> None
     | If (c, tr, fl) ->
@@ -88,18 +95,24 @@ and eval tenv e =
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
+    | Tup es ->
+        let ev = List.map (eval tenv) es
+        let ev = List.choose id ev
+        if List.length es = List.length ev then Some (VTuple ev)
+        else None
     | Rec e ->
         lazy (eval tenv (App (e, (Rec e))) |> Option.get)
         |> fun x -> Some (VLazy x)
 
 // Printing
-let prettyValue v =
+let rec prettyValue v =
     match v with
     | VInt v -> string v
     | VBool v -> string v
     | VFloat v -> string v
     | VString v -> sprintf "%A" v
-    | VClosure (a, _, _) -> sprintf "Closure@%s" a
+    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
+    | VClosure (a, _, _) -> "Closure"
     | VLazy _ -> "Lazy"
 
 let printColor str =
@@ -121,36 +134,55 @@ let printColor str =
     printfn ""
     System.Console.ForegroundColor <- System.ConsoleColor.White
 
-// Test
-inferProgram (Lam ("x", Tup [Lit (LInt 3); Var "x"; Lit (LBool true)]))
-|> Result.map prettyType
-|> printfn "%A"
-
 // Repl start
 open Combinator
 open Parse
 
 let mutable termEnv : TermEnv = Map.empty
 let mutable typeEnv : TypeEnv = Map.empty
+let mutable freshCount = 0
+
+let extendTypeMany names ty =
+    if not <| List.isEmpty names then
+        match names, ty with
+        | [name], ty ->
+            typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
+        | names, TCtor (KProduct _, args) ->
+            List.zip names args
+            |> List.iter (fun (name, ty) ->
+                typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty))
+        | _ -> ()
+
+let extendTermMany names v =
+    if not <| List.isEmpty names then
+        match names, v with
+        | [name], v ->
+            termEnv <- extend termEnv name v
+        | names, VTuple args ->
+            List.zip names args
+            |> List.iter (fun (name, ty) ->
+                termEnv <- extend termEnv name ty)
+        | _ -> ()
 
 while true do
     printf "> "
     let input = System.Console.ReadLine()
     let ast = parseRepl input
     match ast with
-    | Success (name, expr) -> 
-        let typed, i = inferExpr typeEnv expr 0
+    | Success (names, expr) -> 
+        let typed, i = inferExpr typeEnv expr freshCount
+        freshCount <- i
+        let prettyName = String.concat ", " names
         match typed with
         | Ok (_, ty) ->
             let res = eval termEnv expr
-            if name <> "" then
-                typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
+            extendTypeMany names ty
             let typ = (ty |> renameFresh |> prettyType)
             match res with
             | Some res -> 
-                if name <> "" then
-                    termEnv <- extend termEnv name res
-                    printColor <| sprintf "$w%s : $b%s $w= $g%s" name typ (prettyValue res) 
+                if not <| List.isEmpty names then
+                    extendTermMany names res
+                    printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName typ (prettyValue res) 
                 else
                     printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
             | None ->

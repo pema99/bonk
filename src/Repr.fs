@@ -1,12 +1,6 @@
 module Repr
 
 // AST and types
-type Lit =
-    | LFloat of float
-    | LString of string
-    | LInt of int
-    | LBool of bool
-
 type BinOp =
     | Plus
     | Minus
@@ -21,11 +15,23 @@ type BinOp =
     | And
     | Or
 
-type Expr =
+type Pat =
+    | PName of string
+    | PTuple of string list
+    // TODO: Sum types
+    // TODO: Nested tuple patterns
+
+type Lit =
+    | LFloat of float
+    | LString of string
+    | LInt of int
+    | LBool of bool
+
+and Expr =
     | Var of string
     | App of Expr * Expr
-    | Lam of string * Expr
-    | Let of string * Expr * Expr
+    | Lam of Pat * Expr
+    | Let of Pat * Expr * Expr
     | Lit of Lit
     | If of Expr * Expr * Expr
     | Op of Expr * BinOp * Expr
@@ -33,8 +39,8 @@ type Expr =
     | Rec of Expr
 
 type Kind =
-    | Product of int
-    | Constant of string 
+    | KProduct of int
+    | KConstant of string 
     // TODO: Sum types
 
 type Type =

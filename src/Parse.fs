@@ -102,13 +102,19 @@ let varP =
     |> attempt
     |>> Var
 
+let patP =
+    sepBy1 identP (one ',')
+    |>> fun s ->
+        if List.length s > 1 then PTuple s
+        else PName (List.head s)
+
 let lamP : Com<Expr, char> =
-    between (one '[') identP (one ']')
+    between (one '[') patP (one ']')
     <+> exprP
     |>> Lam
 
 let letP =
-    keywordP "let" *> identP <* one '=' <* whitespaceP
+    keywordP "let" *> patP <* one '=' <* whitespaceP
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
     |>> (fun ((a, b), c) -> Let (a, b, c))
@@ -153,7 +159,14 @@ let mulDivP = chainL1 termP (chooseBinOpP [Star; Slash])
 let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
-exprPImpl := whitespacedP boolOpP
+
+let tupleP =
+  sepBy1 boolOpP (one ',')
+  |> guard (fun s -> List.length s > 1)
+  |>> Tup
+  |> attempt
+
+exprPImpl := whitespacedP (tupleP <|> boolOpP)
 
 let parseProgram txt =
     mkMultiLineParser txt
@@ -162,11 +175,13 @@ let parseProgram txt =
 
 // Incomplete declarations for REPL
 let declP =
-    keywordP "let" *> identP <* one '=' <* whitespaceP
+    keywordP "let" *>
+    (sepBy1 identP (one ','))
+    <* one '=' <* whitespaceP
     <+> exprP
 
 let replP =
-    attempt (just "" <+> exprP) <|> declP
+    attempt (just [] <+> exprP) <|> declP
 
 let parseRepl txt =
     mkMultiLineParser txt
