@@ -121,6 +121,11 @@ let printColor str =
     printfn ""
     System.Console.ForegroundColor <- System.ConsoleColor.White
 
+// Test
+inferProgram (Lam ("x", Tup [Lit (LInt 3); Var "x"; Lit (LBool true)]))
+|> Result.map prettyType
+|> printfn "%A"
+
 // Repl start
 open Combinator
 open Parse

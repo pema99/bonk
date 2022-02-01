@@ -46,6 +46,21 @@ let rec mapM (f: 'a -> InferM<'b>) (t: 'a list) : InferM<'b list> = infer {
         return v :: next
     | _ -> return []
 }
+let rec foldM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a> = infer {
+    match t with
+    | h :: t ->
+        let! v = f acc h 
+        return! foldM f v t
+    | _ -> return acc
+}
+let rec scanM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a list> = infer {
+    match t with
+    | h :: t ->
+        let! v = f acc h 
+        let! next = scanM f v t
+        return v :: next 
+    | _ -> return []
+}
 
 // Schemes and environments
 type Scheme = string list * Type
@@ -69,6 +84,7 @@ let rec ftvType (t: Type) : string Set =
     | TCon _ -> Set.empty
     | TVar a -> Set.singleton a
     | TArr (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
+    | TCtor (_, args) -> args |> List.map ftvType |> List.fold Set.union Set.empty
 
 let applyType =
     let rec applyTypeFP (s: Substitution) (t: Type) : Type =
@@ -76,6 +92,7 @@ let applyType =
         | TCon _ -> t
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
         | TArr (t1, t2) -> TArr (applyTypeFP s t1 , applyTypeFP s t2)
+        | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
     fixedPoint applyTypeFP
 
 let ftvScheme (sc: Scheme) : string Set =
@@ -113,6 +130,19 @@ let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
         let! s1 = unify l1 l2
         let! s2 = unify (applyType s1 r1) (applyType s1 r2)
         return compose s2 s1
+    | TCtor (kind1, lts), TCtor (kind2, rts) ->
+        if kind1 = kind2 && List.length lts = List.length rts then
+            match kind1 with
+            | Product arity when arity = List.length lts ->
+                let! s1 =
+                    scanM
+                        (fun s (l, r) -> unify (applyType s l) (applyType s r))
+                        Map.empty
+                        (List.zip lts rts)
+                return List.fold compose Map.empty s1
+            | _ -> return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
+        else return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
+        
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
 }
@@ -203,12 +233,19 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         let! s3 = unify (TArr (t1, TArr (t2, tv))) inst
         return (compose s1 (compose s2 s3), applyType s3 tv)
         }
+    | Tup es -> infer {
+        let! s1 = scanM (fun (s, _) x -> inferExpr (applyEnv s env) x) (Map.empty, tVoid) es
+        let subs, typs = s1 |> List.unzip
+        let substf = List.fold compose Map.empty subs
+        let typs = List.map (applyType substf) typs
+        return (substf, TCtor (Product (List.length es), typs))
+        }
     | Rec e -> infer {
         let! _, t1 = inferExpr env e
         let! tv = fresh()
         let! s2 = unify (TArr (tv, tv)) t1
         return (s2, applyType s2 tv)
-    }
+        }
 
 // Pretty naming
 let prettyTypeName (i: int) : string =
@@ -230,6 +267,14 @@ let renameFresh (t: Type) : Type =
                 let name = prettyTypeName count
                 let nt = TVar name
                 nt, extend subst a name, count + 1
+        | TCtor (kind, args) ->
+            let lst =
+                args
+                |> List.scan (fun (_, subst, count) x -> cont x subst count) (tVoid, subst, count)
+                |> List.tail
+            let args, substs, counts = List.unzip3 lst
+            TCtor (kind, args), List.last substs, List.last counts
+
     let (res, _, _) = cont t Map.empty 0
     res
 
@@ -238,6 +283,10 @@ let rec prettyType (t: Type) : string =
     | TCon v -> v
     | TVar v -> sprintf "'%s" v
     | TArr (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
+    | TCtor (kind, args) ->
+        match kind with
+        | Product _ -> args |> List.map prettyType |> List.toArray |> String.concat " * "
+        | _ -> "<Invalid>"
 
 let inferProgram e =
     inferExpr Map.empty e 0
