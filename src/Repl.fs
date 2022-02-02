@@ -166,6 +166,7 @@ let extendTermMany names v =
 
 while true do
     printf "> "
+    //let input = System.IO.File.ReadAllText "examples/map.bonk"
     let input = System.Console.ReadLine()
     let ast = parseRepl input
     match ast with

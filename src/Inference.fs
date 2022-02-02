@@ -142,9 +142,9 @@ let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
                     Map.empty
                     (List.zip lts rts)
             return List.fold compose Map.empty s1
-        | _ -> return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
+        | _ -> return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
     | _ ->
-        return! failure <| sprintf "Failed to unify types %A and %A" t1 t2
+        return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
 }
 
 // Instantiation and generalization
@@ -187,7 +187,7 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
             let! inst = instantiate s
             return (Map.empty, inst)
         | None ->
-            return! failure <| sprintf "Inference failure, use of unbound variable %A" a
+            return! failure <| sprintf "Use of unbound variable %A." a
         }
     | App (f, x) -> infer {
         let! tv = fresh()
@@ -220,12 +220,20 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
             return (compose s1 s2, t2)
         | PTuple x ->
             match t1 with
-            | TCtor (KProduct _, es) when List.length x = List.length es ->
+            | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
                 let nts = List.map (generalize nenv) es 
                 let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
                 let! s2, t2 = inferExpr nenv e2
                 return (compose s1 s2, t2)
-            | _ -> return! failure "Inference failure, failed to pattern match"
+            | TVar a -> // type variable, try to infer and surface information about the kind
+                let! tvs = mapM (fun _ -> fresh()) x
+                let nts = List.map (fun tv -> [], tv) tvs
+                let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
+                let! s2, t2 = inferExpr nenv e2
+                let surf = (TCtor (KProduct (List.length x), tvs))
+                let substf = extend (compose s1 s2) a surf
+                return (substf, t2)
+            | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
         }
     | If (cond, tr, fl) -> infer {
         let! s1, t1 = inferExpr env cond
