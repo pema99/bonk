@@ -17,6 +17,10 @@ let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
 let whitespacedP p = between whitespaceP p whitespaceP
 let parens p = between (one '(') p (one ')')
 
+let sepBy2 (p: Com<'T, 'S>) (sep: Com<'U, 'S>) : Com<'T list, 'S> =
+  p <+> (sep *> p) <+> many (sep *> p)
+  |>> fun ((a, b), c) -> a :: b :: c
+
 // Operators
 let operatorP = com {
   let! l = item
@@ -50,6 +54,18 @@ let identP =
 let keywordP target = 
   guard ((=) target) identP
   |> attempt
+
+let reserved = Set.ofList [
+    "in"; "let"; "true"; "false"
+    "if"; "then"; "else"; "fn"
+    "rec"; "sum"; "match"; "with"
+    "int"; "bool"; "float"; "string";
+    "void"; "unit"
+    ]
+
+let notKeywordP : Com<string, char> =
+    identP
+    |> guard (fun x -> not <| Set.contains x reserved)
 
 // Literals
 let floatP = 
@@ -90,15 +106,8 @@ let literalP =
 let exprP, exprPImpl = declParser()
 let groupP = parens exprP
 
-let reserved = Set.ofList [
-    "in"; "let"; "true"; "false"
-    "if"; "then"; "else"; "fn"
-    "rec"
-    ]
-
 let varP =
-    identP
-    |> guard (fun x -> not <| Set.contains x reserved)
+    notKeywordP
     |> attempt
     |>> Var
 
@@ -161,12 +170,44 @@ let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Les
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
 let tupleP =
-  sepBy1 boolOpP (one ',')
-  |> guard (fun s -> List.length s > 1)
+  sepBy2 boolOpP (one ',')
   |>> Tup
   |> attempt
 
-exprPImpl := whitespacedP (tupleP <|> boolOpP)
+// User types
+let typeP, typePImpl = declParser()
+
+let typeVarP = 
+    one ''' *> notKeywordP
+
+let primTypeP =
+    (typeVarP |>> TVar)
+    <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TCon)
+
+let typeTermP =
+  (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+  <|> primTypeP
+  <|> parens typeP
+  |> whitespacedP
+
+let productP =
+    sepBy2 typeTermP (one '*')
+    |>> fun lst -> TCtor (KProduct (List.length lst), lst)
+    |> attempt
+
+let arrowP =
+    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArr))
+
+typePImpl := whitespacedP arrowP
+
+let sumDeclP =
+  (keywordP "sum" *> notKeywordP
+  <+> (many typeVarP) <* one '=')
+  <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
+  <* keywordP "in" <+> exprP
+  |>> (fun (((a,b),c),d) -> Sum (a,b,c,d))
+
+exprPImpl := whitespacedP (sumDeclP <|> tupleP <|> boolOpP)
 
 let parseProgram txt =
     mkMultiLineParser txt
