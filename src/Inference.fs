@@ -119,6 +119,25 @@ let applyEnv =
         Map.map (fun _ v -> applyScheme s v) t
     fixedPoint applyEnvFP
 
+// Handling for user types
+type KindEnv = Map<string, int>
+
+let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
+    match t with
+    | TVar _ | TCon _ -> Set.empty
+    | TArr (l, r) -> Set.union (gatherUserTypesUsages l) (gatherUserTypesUsages r)
+    | TCtor (kind, lts) ->
+        let inner = List.map gatherUserTypesUsages lts
+        let inner = List.fold Set.union Set.empty inner
+        match kind with
+        | KSum name -> Set.add (name, List.length lts) inner
+        | _ -> inner
+
+let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
+    match lookup usr name with
+    | Some v when v = arity -> true
+    | _ -> false
+
 // Unification
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
@@ -134,15 +153,12 @@ let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
         let! s2 = unify (applyType s1 r1) (applyType s1 r2)
         return compose s2 s1
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        match kind1 with
-        | KProduct arity when arity = List.length lts ->
-            let! s1 =
-                scanM
-                    (fun s (l, r) -> unify (applyType s l) (applyType s r))
-                    Map.empty
-                    (List.zip lts rts)
-            return List.fold compose Map.empty s1
-        | _ -> return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
+        let! s1 =
+            scanM
+                (fun s (l, r) -> unify (applyType s l) (applyType s r))
+                Map.empty
+                (List.zip lts rts)
+        return List.fold compose Map.empty s1
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
 }
@@ -175,7 +191,7 @@ let ops = Map.ofList [
     ]
 
 // Inference
-let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
+let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
     match e with
     | Lit (LInt _) -> just (Map.empty, tInt) 
     | Lit (LBool _) -> just (Map.empty, tBool) 
@@ -191,8 +207,8 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         }
     | App (f, x) -> infer {
         let! tv = fresh()
-        let! s1, t1 = inferExpr env f
-        let! s2, t2 = inferExpr (applyEnv s1 env) x
+        let! s1, t1 = inferExpr env usr f
+        let! s2, t2 = inferExpr (applyEnv s1 env) usr x
         let! s3 = unify (applyType s2 t1) (TArr (t2, tv))
         return (compose s3 (compose s2 s1), applyType s3 tv)
         }
@@ -201,46 +217,46 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         | PName x ->
             let! tv = fresh()
             let nenv = extend env x ([], tv)
-            let! s1, t1 = inferExpr nenv e
+            let! s1, t1 = inferExpr nenv usr e
             return (s1, TArr (applyType s1 tv, t1))
         | PTuple x -> 
             let! tvs = mapM (fun _ -> fresh()) x
             let nenv = List.fold (fun acc (s, tv) -> extend acc s ([], tv)) env (List.zip x tvs)
-            let! s1, t1 = inferExpr nenv e
+            let! s1, t1 = inferExpr nenv usr e
             let tvs = List.map (applyType s1) tvs
             return (s1, TArr (TCtor (KProduct (List.length tvs), tvs), t1))
         }
     | Let (x, e1, e2) -> infer {
-        let! s1, t1 = inferExpr env e1
+        let! s1, t1 = inferExpr env usr e1
         let nenv = applyEnv s1 env
         match x with
         | PName x ->
             let nt = generalize nenv t1
-            let! s2, t2 = inferExpr (extend nenv x nt) e2
+            let! s2, t2 = inferExpr (extend nenv x nt) usr e2
             return (compose s1 s2, t2)
         | PTuple x ->
             match t1 with
             | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
                 let nts = List.map (generalize nenv) es 
                 let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-                let! s2, t2 = inferExpr nenv e2
+                let! s2, t2 = inferExpr nenv usr e2
                 return (compose s1 s2, t2)
             | TVar a -> // type variable, try to infer and surface information about the kind
                 let! tvs = mapM (fun _ -> fresh()) x
                 let nts = List.map (fun tv -> [], tv) tvs
                 let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-                let! s2, t2 = inferExpr nenv e2
+                let! s2, t2 = inferExpr nenv usr e2
                 let surf = (TCtor (KProduct (List.length x), tvs))
                 let substf = extend (compose s1 s2) a surf
                 return (substf, t2)
             | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
         }
     | If (cond, tr, fl) -> infer {
-        let! s1, t1 = inferExpr env cond
+        let! s1, t1 = inferExpr env usr cond
         let env = applyEnv s1 env
-        let! s2, t2 = inferExpr env tr
+        let! s2, t2 = inferExpr env usr tr
         let env = applyEnv s1 env
-        let! s3, t3 = inferExpr env fl
+        let! s3, t3 = inferExpr env usr fl
         let substi = compose s3 (compose s2 s1)
         let t1 = applyType substi t1
         let t2 = applyType substi t2
@@ -251,8 +267,8 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         return (substf, applyType substf t2)
         }
     | Op (l, op, r) -> infer {
-        let! s1, t1 = inferExpr env l
-        let! s2, t2 = inferExpr env r
+        let! s1, t1 = inferExpr env usr l
+        let! s2, t2 = inferExpr env usr r
         let! tv = fresh()
         let scheme = Map.find op ops
         let! inst = instantiate scheme
@@ -260,14 +276,36 @@ let rec inferExpr (env: TypeEnv) (e: Expr) : InferM<Substitution * Type> =
         return (compose s1 (compose s2 s3), applyType s3 tv)
         }
     | Tup es -> infer {
-        let! s1 = scanM (fun (s, _) x -> inferExpr (applyEnv s env) x) (Map.empty, tVoid) es
+        let! s1 = scanM (fun (s, _) x -> inferExpr (applyEnv s env) usr x) (Map.empty, tVoid) es
         let subs, typs = s1 |> List.unzip
         let substf = List.fold compose Map.empty subs
         let typs = List.map (applyType substf) typs
         return (substf, TCtor (KProduct (List.length es), typs))
         }
+    | Sum (name, typs, cases, body) -> infer {
+        let nusr = extend usr name (List.length typs)
+        let usages = List.map gatherUserTypesUsages (List.map snd cases)
+        let usages = List.fold Set.union Set.empty usages
+        if not <| Set.forall (checkUserTypeUsage nusr) usages then
+            let bad =
+                Set.filter (checkUserTypeUsage nusr >> not) usages
+                |> Set.map fst
+                |> String.concat ", "
+            return! failure <| sprintf "Use of undeclared type constructors: %s." bad
+        let ftvs = List.map (snd >> ftvType) cases
+        let ftvs = List.fold Set.union Set.empty ftvs
+        let udecl = Set.filter (fun s -> not <| List.contains s typs) ftvs
+        if not <| Set.isEmpty udecl then
+            let fmt = udecl |> Set.map ((+) "'" ) |> String.concat ", "
+            return! failure <| sprintf "Use of undeclared type variables: %s." fmt
+        let ret = TCtor (KSum name, List.map TVar typs)
+        let nenv = List.fold (fun acc (case, typ) ->
+            extend acc case (generalize acc (TArr (typ, ret)))) env cases 
+        let! s1, t1 = inferExpr nenv usr body
+        return (s1, t1)
+        }
     | Rec e -> infer {
-        let! _, t1 = inferExpr env e
+        let! _, t1 = inferExpr env usr e
         let! tv = fresh()
         let! s2 = unify (TArr (tv, tv)) t1
         return (s2, applyType s2 tv)
@@ -299,7 +337,9 @@ let renameFresh (t: Type) : Type =
                 |> List.scan (fun (_, subst, count) x -> cont x subst count) (tVoid, subst, count)
                 |> List.tail
             let args, substs, counts = List.unzip3 lst
-            TCtor (kind, args), List.last substs, List.last counts
+            TCtor (kind, args),
+            List.tryLast substs |> Option.defaultValue subst,
+            List.tryLast counts |> Option.defaultValue count
 
     let (res, _, _) = cont t Map.empty 0
     res
@@ -317,9 +357,17 @@ let rec prettyType (t: Type) : string =
             |> List.toArray
             |> String.concat " * "
             |> sprintf "(%s)"
+        | KSum name ->
+            let fmt =
+                args
+                |> List.map prettyType
+                |> List.toArray
+                |> String.concat ", "
+            if fmt = "" then name
+            else sprintf "%s<%s>" name fmt
         | _ -> "<Invalid>"
 
 let inferProgram e =
-    inferExpr Map.empty e 0
+    inferExpr Map.empty Map.empty e 0
     |> fst
     |> Result.map (snd >> renameFresh)

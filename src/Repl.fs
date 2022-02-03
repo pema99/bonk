@@ -171,7 +171,7 @@ while true do
     let ast = parseRepl input
     match ast with
     | Success (names, expr) -> 
-        let typed, i = inferExpr typeEnv expr freshCount
+        let typed, i = inferExpr typeEnv Map.empty expr freshCount // TODO: KindEnv
         freshCount <- i
         let prettyName = String.concat ", " names
         match typed with
