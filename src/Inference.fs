@@ -22,28 +22,29 @@ type Substitution = Map<string, Type>
 let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
 
 // Inference monad is a RWS monad mixed with result monad
-type InferM<'t> = (TypeEnv * Constraint list * int) -> Result<'t, string> * (TypeEnv * Constraint list * int)
+type StateM<'s, 't> = 's -> Result<'t, string> * 's
+type InferM<'t> = StateM<TypeEnv * Constraint list * int, 't>
 
-type InferenceBuilder() =
-    member this.Return (v: 't) : InferM<'t> =
+type StateBuilder() =
+    member this.Return (v: 't) : StateM<'s, 't> =
         fun s -> Ok v, s
-    member this.ReturnFrom (m: InferM<'t>) : InferM<'t> =
+    member this.ReturnFrom (m: StateM<'s, 't>) : StateM<'s, 't> =
         m
-    member this.Zero () : InferM<unit> =
+    member this.Zero () : StateM<'s, unit> =
         this.Return ()
-    member this.Bind (m: InferM<'t>, f: 't -> InferM<'u>) : InferM<'u> =
+    member this.Bind (m: StateM<'s, 't>, f: 't -> StateM<'s, 'u>) : StateM<'s, 'u> =
         fun s ->
         let a, n = m s
         match a with
         | Ok v -> (f v) n
         | Error err -> Error err, n
-    member this.Combine (m1: InferM<'t>, m2: InferM<'u>) : InferM<'u> =
+    member this.Combine (m1: StateM<'s, 't>, m2: StateM<'s, 'u>) : StateM<'s, 'u> =
         fun s ->
         let a, n = m1 s
         match a with
         | Ok _ -> m2 n
         | Error err -> Error err, n
-    member this.Delay (f: unit -> InferM<'t>) : InferM<'t> =
+    member this.Delay (f: unit -> StateM<'s, 't>) : StateM<'s, 't> =
         this.Bind (this.Return (), f)
     member this.FreshTypeVar() : InferM<Type> =
         fun (a,b,c) -> Ok (TVar (sprintf "_t%A" c)), (a, b, c + 1)
@@ -56,15 +57,17 @@ type InferenceBuilder() =
     member this.Local(f: TypeEnv -> TypeEnv, m: InferM<'a>) : InferM<'a> =
         fun (a,b,c) -> m (f a, b, c)
 
-let infer = InferenceBuilder()
-let just = infer.Return
-let fresh = infer.FreshTypeVar
-let freshName = infer.FreshName
-let tell = infer.Tell
-let ask = infer.Ask
-let local f m = infer.Local (f, m)
+let state = StateBuilder()
+let infer = state
+let solve = state
+let just = state.Return
+let fresh = state.FreshTypeVar
+let freshName = state.FreshName
+let tell = state.Tell
+let ask = state.Ask
+let local f m = state.Local (f, m)
 let failure err = fun s -> Error err, s
-let rec mapM (f: 'a -> InferM<'b>) (t: 'a list) : InferM<'b list> = infer {
+let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> = state {
     match t with
     | h :: t ->
         let! v = f h
@@ -72,14 +75,14 @@ let rec mapM (f: 'a -> InferM<'b>) (t: 'a list) : InferM<'b list> = infer {
         return v :: next
     | _ -> return []
 }
-let rec foldM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a> = infer {
+let rec foldM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a> = state {
     match t with
     | h :: t ->
         let! v = f acc h 
         return! foldM f v t
     | _ -> return acc
 }
-let rec scanM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a list> = infer {
+let rec scanM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a list> = state {
     match t with
     | h :: t ->
         let! v = f acc h 
@@ -352,32 +355,8 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         return tv
         }
 
-// Constraint solving
-type SolveM<'t> = Substitution -> Result<'t, string> * Substitution
-
-type SolveBuilder() =
-    member this.Return (v: 't) : SolveM<'t> =
-        fun s -> Ok v, s
-    member this.ReturnFrom (m: SolveM<'t>) : SolveM<'t> =
-        m
-    member this.Zero () : SolveM<unit> =
-        this.Return ()
-    member this.Bind (m: SolveM<'t>, f: 't -> SolveM<'u>) : SolveM<'u> =
-        fun s ->
-        let a, n = m s
-        match a with
-        | Ok v -> (f v) n
-        | Error err -> Error err, n
-    member this.Combine (m1: SolveM<'t>, m2: SolveM<'u>) : SolveM<'u> =
-        fun s ->
-        let a, n = m1 s
-        match a with
-        | Ok _ -> m2 n
-        | Error err -> Error err, n
-    member this.Delay (f: unit -> SolveM<'t>) : SolveM<'t> =
-        this.Bind (this.Return (), f)
-
-let solve = SolveBuilder()
+// Constraint solving, solver monad is just a state monad over gathered substitutions
+type SolveM<'t> = StateM<Substitution, 't>
 
 let rec unifyList (t1 : Type list) (t2 : Type list) : SolveM<Substitution> = solve {
     match t1, t2 with
