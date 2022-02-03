@@ -19,15 +19,14 @@ type Pat =
     | PName of string
     | PTuple of string list
     | PUnion of string * string
-    // TODO: Sum types
-    // TODO: Nested tuple patterns
+    // TODO: Nested patterns
 
 type Lit =
     | LFloat of float
     | LString of string
     | LInt of int
     | LBool of bool
-    // TODO: Unit
+    | LUnit
 
 and Expr =
     | Var of string
@@ -39,6 +38,7 @@ and Expr =
     | Op of Expr * BinOp * Expr
     | Tup of Expr list
     | Sum of string * string list * (string * Type) list * Expr
+    | Match of Expr * (Pat * Expr) list
     | Rec of Expr
 
 and Kind =

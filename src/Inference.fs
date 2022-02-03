@@ -105,7 +105,7 @@ let ftvScheme (sc: Scheme) : string Set =
 let applyScheme =
     let rec applySchemeFP (s: Substitution) (sc: Scheme) : Scheme =
         let a, t = sc
-        let s' = List.fold (fun acc k -> Map.remove k acc) s a // TODO: Is this right?
+        let s' = List.fold (fun acc k -> Map.remove k acc) s a
         (a, applyType s' t)
     fixedPoint applySchemeFP
 
@@ -121,7 +121,10 @@ let applyEnv =
 
 // Handling for user types
 type KindEnv = Map<string, int>
+// TODO: I need actual type information here, not just arity
+// for pattern matching usage.
 
+// Gather all usages of user types in a type
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
     match t with
     | TVar _ | TCon _ -> Set.empty
@@ -133,6 +136,7 @@ let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
         | KSum name -> Set.add (name, List.length lts) inner
         | _ -> inner
 
+// Check if a usage of a user type is valid (correct arity)
 let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
     match lookup usr name with
     | Some v when v = arity -> true
@@ -190,9 +194,56 @@ let ops = Map.ofList [
     Or, ([], TArr (tBool, TArr (tBool, tBool)))
     ]
 
+// Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
+// infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
+// expressions `match e1 with pat -> e2`.
+let rec patternMatch (nenv: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Type> = infer {
+    let! s1, t1 = inferExpr nenv usr e1
+    let nenv = applyEnv s1 nenv
+    match pat with
+    | PName x ->
+        let nt = generalize nenv t1
+        let! s2, t2 = inferExpr (extend nenv x nt) usr e2
+        return (compose s1 s2, t2)
+    | PTuple x ->
+        match t1 with
+        | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
+            let nts = List.map (generalize nenv) es 
+            let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
+            let! s2, t2 = inferExpr nenv usr e2
+            return (compose s1 s2, t2)
+        | TVar a -> // type variable, try to infer and surface information about the kind
+            let! tvs = mapM (fun _ -> fresh()) x
+            let nts = List.map (fun tv -> [], tv) tvs
+            let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
+            let! s2, t2 = inferExpr nenv usr e2
+            let surf = (TCtor (KProduct (List.length x), tvs))
+            let substf = extend (compose s1 s2) a surf
+            return (substf, t2)
+        | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
+    | PUnion (case, x) -> // union destructuring
+        match t1 with
+        | TCtor (KSum _, es) ->
+            match lookup nenv case with
+            | Some (_, TArr (inp, _)) ->
+                let! ss = mapM (fun s -> unify s inp) es
+                let ss = List.fold compose Map.empty ss
+                let nt = generalize nenv (applyType ss inp)
+                let! s2, t2 = inferExpr (extend nenv x nt) usr e2
+                return (compose s1 s2, t2)
+            | _ ->
+                return! failure <| sprintf "Invalid sum type variant %s." case
+        | TVar _ ->
+            let nt = generalize nenv t1
+            let! s2, t2 = inferExpr (extend nenv x nt) usr e2
+            return (compose s1 s2, t2)
+        | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
+    }
+
 // Inference
-let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
+and inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
     match e with
+    | Lit (LUnit _) -> just (Map.empty, tUnit) 
     | Lit (LInt _) -> just (Map.empty, tInt) 
     | Lit (LBool _) -> just (Map.empty, tBool) 
     | Lit (LFloat _) -> just (Map.empty, tFloat) 
@@ -230,48 +281,8 @@ let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution 
             | Some (_, TArr (_, union)) -> return! failure "Unimplemented match"
             | _ -> return! failure <| sprintf "Couldn't find sum type variant %s" case
         }
-    | Let (x, e1, e2) -> infer {
-        let! s1, t1 = inferExpr env usr e1
-        let nenv = applyEnv s1 env
-        match x with
-        | PName x ->
-            let nt = generalize nenv t1
-            let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-            return (compose s1 s2, t2)
-        | PTuple x ->
-            match t1 with
-            | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
-                let nts = List.map (generalize nenv) es 
-                let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-                let! s2, t2 = inferExpr nenv usr e2
-                return (compose s1 s2, t2)
-            | TVar a -> // type variable, try to infer and surface information about the kind
-                let! tvs = mapM (fun _ -> fresh()) x
-                let nts = List.map (fun tv -> [], tv) tvs
-                let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-                let! s2, t2 = inferExpr nenv usr e2
-                let surf = (TCtor (KProduct (List.length x), tvs))
-                let substf = extend (compose s1 s2) a surf
-                return (substf, t2)
-            | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
-        | PUnion (case, x) -> // union destructuring
-            match t1 with
-            | TCtor (KSum _, es) ->
-                match lookup env case with
-                | Some (_, TArr (inp, _)) ->
-                    let! ss = mapM (fun s -> unify s inp) es
-                    let ss = List.fold compose Map.empty ss
-                    let nt = generalize nenv (applyType ss inp)
-                    let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-                    return (compose s1 s2, t2)
-                | _ ->
-                    return! failure <| sprintf "Invalid sum type variant %s." case
-            | TVar _ ->
-                let nt = generalize nenv t1
-                let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-                return (compose s1 s2, t2)
-            | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
-        }
+    | Let (x, e1, e2) ->
+        patternMatch env usr x e1 e2
     | If (cond, tr, fl) -> infer {
         let! s1, t1 = inferExpr env usr cond
         let env = applyEnv s1 env
@@ -304,26 +315,50 @@ let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution 
         return (substf, TCtor (KProduct (List.length es), typs))
         }
     | Sum (name, typs, cases, body) -> infer {
+        // Sum types are special since they create types, first extend the user env with the new type
         let nusr = extend usr name (List.length typs)
+        // Gather all user type usages
         let usages = List.map gatherUserTypesUsages (List.map snd cases)
         let usages = List.fold Set.union Set.empty usages
+        // If any user type usages are not to types in the user environment, error
         if not <| Set.forall (checkUserTypeUsage nusr) usages then
             let bad =
                 Set.filter (checkUserTypeUsage nusr >> not) usages
                 |> Set.map fst
                 |> String.concat ", "
             return! failure <| sprintf "Use of undeclared type constructors: %s." bad
+        // Gather all free type vars in each union variant
         let ftvs = List.map (snd >> ftvType) cases
         let ftvs = List.fold Set.union Set.empty ftvs
         let udecl = Set.filter (fun s -> not <| List.contains s typs) ftvs
+        // If any of them are not explicitly declared, error
         if not <| Set.isEmpty udecl then
             let fmt = udecl |> Set.map ((+) "'" ) |> String.concat ", "
             return! failure <| sprintf "Use of undeclared type variables: %s." fmt
+        // Guess an inferred type
         let ret = TCtor (KSum name, List.map TVar typs)
+        // Put placeholder constructors for each variant in the environment
         let nenv = List.fold (fun acc (case, typ) ->
             extend acc case (generalize acc (TArr (typ, ret)))) env cases 
+        // Finally, infer the resulting type in the new environment
         let! s1, t1 = inferExpr nenv usr body
         return (s1, t1)
+        }
+    | Match (e, bs) -> infer {
+        // Scan over all match branches gathering constraints from pattern matching along the way
+        let! s1, _ = inferExpr env usr e
+        let nenv = applyEnv s1 env
+        let! s2 = scanM (fun (s, _) (pat, expr) -> patternMatch (applyEnv s nenv) usr pat e expr) (s1, tVoid) bs
+        let subs, typs = s2 |> List.unzip
+        // Compose all gathered constraints
+        let subst = List.fold compose Map.empty subs
+        let typs = List.map (applyType subst) typs
+        // Unify every match branch
+        let uni = List.pairwise typs
+        let! uni = mapM (fun (l, r) -> unify l r) uni
+        // Compose all intermediate constraints
+        let substf = List.fold compose Map.empty uni
+        return (compose subst substf, applyType substf (List.head typs))
         }
     | Rec e -> infer {
         let! _, t1 = inferExpr env usr e

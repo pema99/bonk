@@ -5,6 +5,7 @@ open Inference
 
 // Eval
 type Value =
+    | VUnit
     | VInt of int
     | VBool of bool
     | VFloat of float
@@ -56,6 +57,7 @@ let rec binop l op r =
 
 and eval tenv e =
     match e with
+    | Lit LUnit -> Some VUnit
     | Lit (LInt v) -> Some (VInt v)
     | Lit (LBool v) -> Some (VBool v)
     | Lit (LFloat v) -> Some (VFloat v)
@@ -107,6 +109,7 @@ and eval tenv e =
 // Printing
 let rec prettyValue v =
     match v with
+    | VUnit -> "()"
     | VInt v -> string v
     | VBool v -> string v
     | VFloat v -> string v
