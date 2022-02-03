@@ -7,39 +7,62 @@ module Inference
 
 open Repr
 
-// Inference monad is a state monad mixed with result monad
-type InferM<'t> = int -> Result<'t, string> * int
+// Schemes, constraints and environments
+type Constraint = Type * Type
+
+type Scheme = string list * Type
+
+type TypeEnv = Map<string, Scheme>
+let extend env x s = Map.add x s env
+let lookup env x = Map.tryFind x env
+let remove env x = Map.remove x env
+
+// Substitution
+type Substitution = Map<string, Type>
+let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
+
+// Inference monad is a RWS monad mixed with result monad
+type InferM<'t> = (TypeEnv * Constraint list * int) -> Result<'t, string> * (TypeEnv * Constraint list * int)
 
 type InferenceBuilder() =
-  member this.Return (v: 't) : InferM<'t> =
-    fun s -> Ok v, s
-  member this.ReturnFrom (m: InferM<'t>) : InferM<'t> =
-    m
-  member this.Zero () : InferM<unit> =
-    this.Return ()
-  member this.Bind (m: InferM<'t>, f: 't -> InferM<'u>) : InferM<'u> =
-    fun s ->
-      let a, n = m s
-      match a with
-      | Ok v -> (f v) n
-      | Error err -> Error err, n
-  member this.Combine (m1: InferM<'t>, m2: InferM<'u>) : InferM<'u> =
-    fun s ->
-      let a, n = m1 s
-      match a with
-      | Ok _ -> m2 n
-      | Error err -> Error err, n
-  member this.Delay (f: unit -> InferM<'t>) : InferM<'t> =
-    this.Bind (this.Return (), f)
-  member this.FreshTypeVar() : InferM<Type> =
-    fun s -> Ok (TVar (sprintf "_t%A" s)), s + 1
-  member this.FreshName() : InferM<string> =
-    fun s -> Ok (sprintf "_t%A" s), s + 1
+    member this.Return (v: 't) : InferM<'t> =
+        fun s -> Ok v, s
+    member this.ReturnFrom (m: InferM<'t>) : InferM<'t> =
+        m
+    member this.Zero () : InferM<unit> =
+        this.Return ()
+    member this.Bind (m: InferM<'t>, f: 't -> InferM<'u>) : InferM<'u> =
+        fun s ->
+        let a, n = m s
+        match a with
+        | Ok v -> (f v) n
+        | Error err -> Error err, n
+    member this.Combine (m1: InferM<'t>, m2: InferM<'u>) : InferM<'u> =
+        fun s ->
+        let a, n = m1 s
+        match a with
+        | Ok _ -> m2 n
+        | Error err -> Error err, n
+    member this.Delay (f: unit -> InferM<'t>) : InferM<'t> =
+        this.Bind (this.Return (), f)
+    member this.FreshTypeVar() : InferM<Type> =
+        fun (a,b,c) -> Ok (TVar (sprintf "_t%A" c)), (a, b, c + 1)
+    member this.FreshName() : InferM<string> =
+        fun (a,b,c) -> Ok (sprintf "_t%A" c), (a, b, c + 1)
+    member this.Tell(con: Constraint) : InferM<unit> =
+        fun (a,b,c) -> Ok (), (a, con :: b, c)
+    member this.Ask() : InferM<TypeEnv> =
+        fun (a,b,c) -> Ok a, (a, b, c) 
+    member this.Local(f: TypeEnv -> TypeEnv, m: InferM<'a>) : InferM<'a> =
+        fun (a,b,c) -> m (f a, b, c)
 
 let infer = InferenceBuilder()
 let just = infer.Return
 let fresh = infer.FreshTypeVar
 let freshName = infer.FreshName
+let tell = infer.Tell
+let ask = infer.Ask
+let local f m = infer.Local (f, m)
 let failure err = fun s -> Error err, s
 let rec mapM (f: 'a -> InferM<'b>) (t: 'a list) : InferM<'b list> = infer {
     match t with
@@ -65,18 +88,7 @@ let rec scanM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a lis
     | _ -> return []
 }
 
-// Schemes and environments
-type Scheme = string list * Type
-
-type TypeEnv = Map<string, Scheme>
-let extend env x s = Map.add x s env
-let lookup env x = Map.tryFind x env
-let remove env x = Map.remove x env
-
-// Substitution
-type Substitution = Map<string, Type>
-let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
-
+// Substitution application
 let rec fixedPoint f s t =
     let subst = f s t
     if subst = t then subst
@@ -119,6 +131,14 @@ let applyEnv =
         Map.map (fun _ v -> applyScheme s v) t
     fixedPoint applyEnvFP
 
+let ftvConstraint (t1: Type, t2: Type) : Set<string> =
+    Set.union (ftvType t1) (ftvType t2)
+
+let applyConstraint =
+    let applyConstraintFP (s: Substitution) (t1: Type, t2: Type) : Constraint =
+        applyType s t1, applyType s t2
+    fixedPoint applyConstraintFP
+
 // Handling for user types
 type KindEnv = Map<string, int>
 // TODO: I need actual type information here, not just arity
@@ -146,25 +166,11 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
 
-let rec unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
-    match t1, t2 with
-    | TVar a, TVar b when a = b -> return Map.empty
-    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
-    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TCon a, TCon b when a = b -> return Map.empty
-    | TArr (l1, r1), TArr (l2, r2) ->
-        let! s1 = unify l1 l2
-        let! s2 = unify (applyType s1 r1) (applyType s1 r2)
-        return compose s2 s1
-    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        let! s1 =
-            scanM
-                (fun s (l, r) -> unify (applyType s l) (applyType s r))
-                Map.empty
-                (List.zip lts rts)
-        return List.fold compose Map.empty s1
-    | _ ->
-        return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
+let rec unify (t1: Type) (t2: Type) : InferM<unit> = tell (t1, t2)
+
+let rec inEnv (n: string) (sc: Scheme) (m: InferM<'a>) : InferM<'a> = infer {
+    let scopeTo e = extend (Map.remove n e) n sc
+    return! local scopeTo m
 }
 
 // Instantiation and generalization
@@ -197,122 +203,110 @@ let ops = Map.ofList [
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`.
-let rec patternMatch (nenv: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Type> = infer {
-    let! s1, t1 = inferExpr nenv usr e1
-    let nenv = applyEnv s1 nenv
+let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
+    let! t1 = inferExpr usr e1
     match pat with
     | PName x ->
+        let! nenv = ask()
         let nt = generalize nenv t1
-        let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-        return (compose s1 s2, t2)
+        return! inEnv x nt (inferExpr usr e2)
     | PTuple x ->
         match t1 with
         | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
+            let! nenv = ask()
             let nts = List.map (generalize nenv) es 
-            let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-            let! s2, t2 = inferExpr nenv usr e2
-            return (compose s1 s2, t2)
+            let nenv env = List.fold (fun acc (name, ty) -> extend acc name ty) env (List.zip x nts)
+            return! local nenv (inferExpr usr e2)
         | TVar a -> // type variable, try to infer and surface information about the kind
             let! tvs = mapM (fun _ -> fresh()) x
             let nts = List.map (fun tv -> [], tv) tvs
-            let nenv = List.fold (fun acc (name, ty) -> extend acc name ty) nenv (List.zip x nts)
-            let! s2, t2 = inferExpr nenv usr e2
+            let nenv env = List.fold (fun acc (name, ty) -> extend acc name ty) env (List.zip x nts)
+            let! t2 = local nenv (inferExpr usr e2)
             let surf = (TCtor (KProduct (List.length x), tvs))
-            let substf = extend (compose s1 s2) a surf
-            return (substf, t2)
+            do! unify (TVar a) surf
+            return t2
         | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
     | PUnion (case, x) -> // union destructuring
         match t1 with
         | TCtor (KSum _, es) ->
+            let! nenv = ask()
             match lookup nenv case with
             | Some (_, TArr (inp, _)) ->
-                let! ss = mapM (fun s -> unify s inp) es
-                let ss = List.fold compose Map.empty ss
-                let nt = generalize nenv (applyType ss inp)
-                let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-                return (compose s1 s2, t2)
+                let! _ = mapM (fun s -> unify s inp) es
+                let nt = generalize nenv inp
+                return! inEnv x nt (inferExpr usr e2)
             | _ ->
                 return! failure <| sprintf "Invalid sum type variant %s." case
         | TVar _ ->
+            let! nenv = ask()
             let nt = generalize nenv t1
-            let! s2, t2 = inferExpr (extend nenv x nt) usr e2
-            return (compose s1 s2, t2)
+            return! inEnv x nt (inferExpr usr e2)
         | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
     }
 
-// Inference
-and inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
+// Constraint gathering
+and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
     match e with
-    | Lit (LUnit _) -> just (Map.empty, tUnit) 
-    | Lit (LInt _) -> just (Map.empty, tInt) 
-    | Lit (LBool _) -> just (Map.empty, tBool) 
-    | Lit (LFloat _) -> just (Map.empty, tFloat) 
-    | Lit (LString _) -> just (Map.empty, tString)
+    | Lit (LUnit _) -> just tUnit
+    | Lit (LInt _) -> just tInt
+    | Lit (LBool _) -> just tBool 
+    | Lit (LFloat _) -> just tFloat 
+    | Lit (LString _) -> just tString
     | Var a -> infer {
+        let! env = ask()
         match lookup env a with
         | Some s ->
             let! inst = instantiate s
-            return (Map.empty, inst)
+            return inst
         | None ->
             return! failure <| sprintf "Use of unbound variable %A." a
         }
     | App (f, x) -> infer {
         let! tv = fresh()
-        let! s1, t1 = inferExpr env usr f
-        let! s2, t2 = inferExpr (applyEnv s1 env) usr x
-        let! s3 = unify (applyType s2 t1) (TArr (t2, tv))
-        return (compose s3 (compose s2 s1), applyType s3 tv)
+        let! t1 = inferExpr usr f
+        let! t2 = inferExpr usr x
+        do! unify t1 (TArr (t2, tv))
+        return tv
         }
     | Lam (x, e) -> infer {
         match x with
         | PName x ->
             let! tv = fresh()
-            let nenv = extend env x ([], tv)
-            let! s1, t1 = inferExpr nenv usr e
-            return (s1, TArr (applyType s1 tv, t1))
+            let! t = inEnv x ([], tv) (inferExpr usr e)
+            return (TArr (tv, t))
         | PTuple x -> 
             let! tvs = mapM (fun _ -> fresh()) x
-            let nenv = List.fold (fun acc (s, tv) -> extend acc s ([], tv)) env (List.zip x tvs)
-            let! s1, t1 = inferExpr nenv usr e
-            let tvs = List.map (applyType s1) tvs
-            return (s1, TArr (TCtor (KProduct (List.length tvs), tvs), t1))
+            let nenv env = List.fold (fun acc (s, tv) -> extend acc s ([], tv)) env (List.zip x tvs)
+            let! t1 = local nenv (inferExpr usr e)
+            return TArr (TCtor (KProduct (List.length tvs), tvs), t1)
         | PUnion (case, x) ->
+            let! env = ask()
             match lookup env case with
             | Some (_, TArr (_, union)) -> return! failure "Unimplemented match"
             | _ -> return! failure <| sprintf "Couldn't find sum type variant %s" case
         }
     | Let (x, e1, e2) ->
-        patternMatch env usr x e1 e2
+        patternMatch usr x e1 e2
     | If (cond, tr, fl) -> infer {
-        let! s1, t1 = inferExpr env usr cond
-        let env = applyEnv s1 env
-        let! s2, t2 = inferExpr env usr tr
-        let env = applyEnv s1 env
-        let! s3, t3 = inferExpr env usr fl
-        let substi = compose s3 (compose s2 s1)
-        let t1 = applyType substi t1
-        let t2 = applyType substi t2
-        let t3 = applyType substi t3
-        let! s4 = unify t1 tBool
-        let! s5 = unify t2 t3
-        let substf = compose s5 (compose s4 substi)
-        return (substf, applyType substf t2)
+        let! t1 = inferExpr usr cond
+        let! t2 = inferExpr usr tr
+        let! t3 = inferExpr usr fl
+        do! unify t1 tBool
+        do! unify t2 t3
+        return t2
         }
     | Op (l, op, r) -> infer {
-        let! s1, t1 = inferExpr env usr l
-        let! s2, t2 = inferExpr env usr r
+        let! t1 = inferExpr usr l
+        let! t2 = inferExpr usr r
         let! tv = fresh()
         let scheme = Map.find op ops
         let! inst = instantiate scheme
-        let! s3 = unify (TArr (t1, TArr (t2, tv))) inst
-        return (compose s1 (compose s2 s3), applyType s3 tv)
+        do! unify (TArr (t1, TArr (t2, tv))) inst
+        return tv
         }
     | Tup es -> infer {
-        let! s1 = scanM (fun (s, _) x -> inferExpr (applyEnv s env) usr x) (Map.empty, tVoid) es
-        let subs, typs = s1 |> List.unzip
-        let substf = List.fold compose Map.empty subs
-        let typs = List.map (applyType substf) typs
-        return (substf, TCtor (KProduct (List.length es), typs))
+        let! typs = mapM (fun x -> inferExpr usr x) es
+        return TCtor (KProduct (List.length es), typs)
         }
     | Sum (name, typs, cases, body) -> infer {
         // Sum types are special since they create types, first extend the user env with the new type
@@ -338,34 +332,82 @@ and inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         // Guess an inferred type
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
-        let nenv = List.fold (fun acc (case, typ) ->
+        let nenv env = List.fold (fun acc (case, typ) ->
             extend acc case (generalize acc (TArr (typ, ret)))) env cases 
         // Finally, infer the resulting type in the new environment
-        let! s1, t1 = inferExpr nenv usr body
-        return (s1, t1)
+        return! local nenv (inferExpr usr body)
         }
     | Match (e, bs) -> infer {
         // Scan over all match branches gathering constraints from pattern matching along the way
-        let! s1, _ = inferExpr env usr e
-        let nenv = applyEnv s1 env
-        let! s2 = scanM (fun (s, _) (pat, expr) -> patternMatch (applyEnv s nenv) usr pat e expr) (s1, tVoid) bs
-        let subs, typs = s2 |> List.unzip
-        // Compose all gathered constraints
-        let subst = List.fold compose Map.empty subs
-        let typs = List.map (applyType subst) typs
+        let! typs = scanM (fun _ (pat, expr) -> patternMatch usr pat e expr) tVoid bs
         // Unify every match branch
         let uni = List.pairwise typs
-        let! uni = mapM (fun (l, r) -> unify l r) uni
-        // Compose all intermediate constraints
-        let substf = List.fold compose Map.empty uni
-        return (compose subst substf, applyType substf (List.head typs))
+        let! _ = mapM (fun (l, r) -> unify l r) uni
+        return List.head typs
         }
     | Rec e -> infer {
-        let! _, t1 = inferExpr env usr e
+        let! t1 = inferExpr usr e
         let! tv = fresh()
-        let! s2 = unify (TArr (tv, tv)) t1
-        return (s2, applyType s2 tv)
+        do! unify (TArr (tv, tv)) t1
+        return tv
         }
+
+// Constraint solving
+type SolveM<'t> = Substitution -> Result<'t, string> * Substitution
+
+type SolveBuilder() =
+    member this.Return (v: 't) : SolveM<'t> =
+        fun s -> Ok v, s
+    member this.ReturnFrom (m: SolveM<'t>) : SolveM<'t> =
+        m
+    member this.Zero () : SolveM<unit> =
+        this.Return ()
+    member this.Bind (m: SolveM<'t>, f: 't -> SolveM<'u>) : SolveM<'u> =
+        fun s ->
+        let a, n = m s
+        match a with
+        | Ok v -> (f v) n
+        | Error err -> Error err, n
+    member this.Combine (m1: SolveM<'t>, m2: SolveM<'u>) : SolveM<'u> =
+        fun s ->
+        let a, n = m1 s
+        match a with
+        | Ok _ -> m2 n
+        | Error err -> Error err, n
+    member this.Delay (f: unit -> SolveM<'t>) : SolveM<'t> =
+        this.Bind (this.Return (), f)
+
+let solve = SolveBuilder()
+
+let rec unifiesMany (t1 : Type list) (t2 : Type list) : SolveM<Substitution> = solve {
+    match t1, t2 with
+    | [], [] -> return Map.empty
+    | h1::ta1, h2::ta2 -> 
+        let! s1 = unifies h1 h2
+        let! s2 = unifiesMany (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
+        return compose s2 s1
+    | _ -> return! failure "Unification failure"
+    }
+
+and unifies (t1: Type) (t2: Type) : SolveM<Substitution> = solve {
+    match t1, t2 with
+    | a, b when a = b -> return Map.empty
+    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
+    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
+    | TArr (l1, r1), TArr (l2, r2) -> return! unifiesMany [l1; r1] [l2; r2]
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        return! unifiesMany lts rts
+    | _ ->
+        return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
+    }
+
+let rec solver (su: Substitution, cs: Constraint list) : SolveM<Substitution> = solve {
+    match cs with
+    | [] -> return su
+    | (t1, t2) :: ta ->
+        let! s1 = unifies t1 t2
+        return! solver (compose s1 su, List.map (applyConstraint s1) ta)
+}
 
 // Pretty naming
 let prettyTypeName (i: int) : string =
@@ -396,7 +438,6 @@ let renameFresh (t: Type) : Type =
             TCtor (kind, args),
             List.tryLast substs |> Option.defaultValue subst,
             List.tryLast counts |> Option.defaultValue count
-
     let (res, _, _) = cont t Map.empty 0
     res
 
@@ -421,9 +462,17 @@ let rec prettyType (t: Type) : string =
                 |> String.concat ", "
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
-        | _ -> "<Invalid>"
+        | _ -> "<Invalid>"    
 
-let inferProgram e =
-    inferExpr Map.empty Map.empty e 0
-    |> fst
-    |> Result.map (snd >> renameFresh)
+// Helpers to run
+let inferProgramRepl typeEnv count e =
+    inferExpr Map.empty e (typeEnv, [], count)
+    |> fun (ty, (_, cs, i)) ->
+        let subst = fst <| (solver (Map.empty, cs)) Map.empty
+        match ty, subst with
+        | Ok ty, Ok subst -> Ok (renameFresh (applyType subst ty)), i
+        | Error a, Error b -> Error (sprintf "%s %s" a b), i
+        | Error a, _ | _, Error a -> Error a, i
+
+let inferProgram =
+    inferProgramRepl Map.empty 0 >> fst
