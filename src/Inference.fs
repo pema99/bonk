@@ -46,12 +46,15 @@ type StateBuilder() =
         | Error err -> Error err, n
     member this.Delay (f: unit -> StateM<'s, 't>) : StateM<'s, 't> =
         this.Bind (this.Return (), f)
+    // Freshname monad
     member this.FreshTypeVar() : InferM<Type> =
         fun (a,b,c) -> Ok (TVar (sprintf "_t%A" c)), (a, b, c + 1)
     member this.FreshName() : InferM<string> =
         fun (a,b,c) -> Ok (sprintf "_t%A" c), (a, b, c + 1)
+    // Writer monad
     member this.Tell(con: Constraint) : InferM<unit> =
         fun (a,b,c) -> Ok (), (a, con :: b, c)
+    // Reader monad
     member this.Ask() : InferM<TypeEnv> =
         fun (a,b,c) -> Ok a, (a, b, c) 
     member this.Local(f: TypeEnv -> TypeEnv, m: InferM<'a>) : InferM<'a> =
