@@ -166,7 +166,7 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
 
-let rec unify (t1: Type) (t2: Type) : InferM<unit> = tell (t1, t2)
+let rec constrain (t1: Type) (t2: Type) : InferM<unit> = tell (t1, t2)
 
 let rec inEnv (n: string) (sc: Scheme) (m: InferM<'a>) : InferM<'a> = infer {
     let scopeTo e = extend (Map.remove n e) n sc
@@ -223,7 +223,7 @@ let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Ty
             let nenv env = List.fold (fun acc (name, ty) -> extend acc name ty) env (List.zip x nts)
             let! t2 = local nenv (inferExpr usr e2)
             let surf = (TCtor (KProduct (List.length x), tvs))
-            do! unify (TVar a) surf
+            do! constrain (TVar a) surf
             return t2
         | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
     | PUnion (case, x) -> // union destructuring
@@ -232,7 +232,7 @@ let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Ty
             let! nenv = ask()
             match lookup nenv case with
             | Some (_, TArr (inp, _)) ->
-                let! _ = mapM (fun s -> unify s inp) es
+                let! _ = mapM (fun s -> constrain s inp) es
                 let nt = generalize nenv inp
                 return! inEnv x nt (inferExpr usr e2)
             | _ ->
@@ -265,7 +265,7 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         let! tv = fresh()
         let! t1 = inferExpr usr f
         let! t2 = inferExpr usr x
-        do! unify t1 (TArr (t2, tv))
+        do! constrain t1 (TArr (t2, tv))
         return tv
         }
     | Lam (x, e) -> infer {
@@ -291,8 +291,8 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         let! t1 = inferExpr usr cond
         let! t2 = inferExpr usr tr
         let! t3 = inferExpr usr fl
-        do! unify t1 tBool
-        do! unify t2 t3
+        do! constrain t1 tBool
+        do! constrain t2 t3
         return t2
         }
     | Op (l, op, r) -> infer {
@@ -301,7 +301,7 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         let! tv = fresh()
         let scheme = Map.find op ops
         let! inst = instantiate scheme
-        do! unify (TArr (t1, TArr (t2, tv))) inst
+        do! constrain (TArr (t1, TArr (t2, tv))) inst
         return tv
         }
     | Tup es -> infer {
@@ -342,13 +342,13 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         let! typs = scanM (fun _ (pat, expr) -> patternMatch usr pat e expr) tVoid bs
         // Unify every match branch
         let uni = List.pairwise typs
-        let! _ = mapM (fun (l, r) -> unify l r) uni
+        let! _ = mapM (fun (l, r) -> constrain l r) uni
         return List.head typs
         }
     | Rec e -> infer {
         let! t1 = inferExpr usr e
         let! tv = fresh()
-        do! unify (TArr (tv, tv)) t1
+        do! constrain (TArr (tv, tv)) t1
         return tv
         }
 
@@ -379,24 +379,24 @@ type SolveBuilder() =
 
 let solve = SolveBuilder()
 
-let rec unifiesMany (t1 : Type list) (t2 : Type list) : SolveM<Substitution> = solve {
+let rec unifyList (t1 : Type list) (t2 : Type list) : SolveM<Substitution> = solve {
     match t1, t2 with
     | [], [] -> return Map.empty
     | h1::ta1, h2::ta2 -> 
-        let! s1 = unifies h1 h2
-        let! s2 = unifiesMany (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
+        let! s1 = unify h1 h2
+        let! s2 = unifyList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
         return compose s2 s1
     | _ -> return! failure "Unification failure"
     }
 
-and unifies (t1: Type) (t2: Type) : SolveM<Substitution> = solve {
+and unify (t1: Type) (t2: Type) : SolveM<Substitution> = solve {
     match t1, t2 with
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArr (l1, r1), TArr (l2, r2) -> return! unifiesMany [l1; r1] [l2; r2]
+    | TArr (l1, r1), TArr (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        return! unifiesMany lts rts
+        return! unifyList lts rts
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
     }
@@ -405,7 +405,7 @@ let rec solver (su: Substitution, cs: Constraint list) : SolveM<Substitution> = 
     match cs with
     | [] -> return su
     | (t1, t2) :: ta ->
-        let! s1 = unifies t1 t2
+        let! s1 = unify t1 t2
         return! solver (compose s1 su, List.map (applyConstraint s1) ta)
 }
 
