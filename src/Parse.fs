@@ -112,10 +112,11 @@ let varP =
     |>> Var
 
 let patP =
-    sepBy1 identP (one ',')
+    (attempt (identP <+> identP |>> PUnion)) <|>
+    (sepBy1 identP (one ',')
     |>> fun s ->
         if List.length s > 1 then PTuple s
-        else PName (List.head s)
+        else PName (List.head s))
 
 let lamP : Com<Expr, char> =
     between (one '[') patP (one ']')
@@ -127,6 +128,11 @@ let letP =
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
     |>> (fun ((a, b), c) -> Let (a, b, c))
+
+let matchP =
+    keywordP "match" *> exprP <* keywordP "with"
+    <+> sepBy1 (patP <* one '.' <+> exprP) (one '|')
+    |>> Match
 
 let ifP =
     keywordP "if" *> exprP
@@ -144,6 +150,7 @@ let nonAppP =
     <|> literalP
     <|> lamP
     <|> letP
+    <|> matchP
     <|> recP
     <|> ifP
     <|> varP
