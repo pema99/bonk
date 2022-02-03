@@ -105,6 +105,7 @@ and eval tenv e =
     | Rec e ->
         lazy (eval tenv (App (e, (Rec e))) |> Option.get)
         |> fun x -> Some (VLazy x)
+    | _ -> None //TODO: Match and Sum
 
 // Printing
 let rec prettyValue v =
@@ -169,8 +170,8 @@ let extendTermMany names v =
 
 while true do
     printf "> "
-    //let input = System.IO.File.ReadAllText "examples/map.bonk"
     let input = System.Console.ReadLine()
+    //let input = System.IO.File.ReadAllText "examples/sum.bonk"
     let ast = parseRepl input
     match ast with
     | Success (names, expr) -> 
@@ -192,4 +193,6 @@ while true do
             | None ->
                 printfn "Evaluation error"
         | Error err -> printfn "Typing error: %s" err
-    | _ -> printfn "Parsing error"
+    | FailureWith err -> printfn "Parsing error: %A" err
+    | CompoundFailure err -> printfn "Parsing error: %A" err
+    | Failure -> printfn "Parsing error: Unknown."

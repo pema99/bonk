@@ -343,9 +343,9 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         // Finally, infer the resulting type in the new environment
         return! local nenv (inferExpr usr body)
         }
-    | Match (e, bs) -> infer {
+    | Match (e, bs) -> infer { // TODO: This is definitely wrong
         // Scan over all match branches gathering constraints from pattern matching along the way
-        let! typs = scanM (fun _ (pat, expr) -> patternMatch usr pat e expr) tVoid bs
+        let! typs = mapM (fun (pat, expr) -> patternMatch usr pat e expr) bs
         // Unify every match branch
         let uni = List.pairwise typs
         let! _ = mapM (fun (l, r) -> constrain l r) uni

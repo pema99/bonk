@@ -96,7 +96,8 @@ let stringP =
     |>> Lit
 
 let literalP =
-    stringP
+    (attempt (one '(' *> one ')' *> just (Lit LUnit)))
+    <|> stringP
     <|> boolP
     <|> attempt floatP
     <|> intP
@@ -146,8 +147,8 @@ let recP =
     |>> Rec
 
 let nonAppP =
-    groupP
-    <|> literalP
+    literalP
+    <|> groupP
     <|> lamP
     <|> letP
     <|> matchP
