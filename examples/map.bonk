@@ -1,6 +1,0 @@
-let map = [map] [f] [lst]
-    let h, t = lst in
-    if h < 0 then 1
-    else 0
-in
-map
