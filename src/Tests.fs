@@ -48,3 +48,18 @@ let prog3 =
 printfn "%A" (inferProgram prog1 |> Result.map prettyType)
 printfn "Cons :: %A" (inferProgram prog2 |> Result.map prettyType)
 printfn "Nil :: %A" (inferProgram prog3 |> Result.map prettyType)
+
+(*let prog1 = 
+    Sum ("Option", ["a"], [("None", tUnit); ("Some", TVar "a")],
+        Let (PUnion ("Some", "x"), App (Var "Some", Lit (LBool true)), Var "x")
+    )
+let prog1 = 
+    Sum ("Option", ["a"], [("None", tUnit); ("Some", TVar "a")],
+        Lam (PName "x", Let (PUnion ("Some", "y"), Var "x", Lit (LInt 3)))
+    ) 
+let prog1 = 
+    Sum ("Option", ["a"], [("None", tUnit); ("Some", TVar "a")],
+        Lam (PUnion ("Some", "x"), Var "x")
+    )
+
+printfn "%A" (inferProgram prog1 |> Result.map prettyType)*)

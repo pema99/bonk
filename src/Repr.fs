@@ -18,6 +18,7 @@ type BinOp =
 type Pat =
     | PName of string
     | PTuple of string list
+    | PUnion of string * string
     // TODO: Sum types
     // TODO: Nested tuple patterns
 
@@ -26,6 +27,7 @@ type Lit =
     | LString of string
     | LInt of int
     | LBool of bool
+    // TODO: Unit
 
 and Expr =
     | Var of string

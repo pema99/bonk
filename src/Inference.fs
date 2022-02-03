@@ -225,6 +225,10 @@ let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution 
             let! s1, t1 = inferExpr nenv usr e
             let tvs = List.map (applyType s1) tvs
             return (s1, TArr (TCtor (KProduct (List.length tvs), tvs), t1))
+        | PUnion (case, x) ->
+            match lookup env case with
+            | Some (_, TArr (_, union)) -> return! failure "Unimplemented match"
+            | _ -> return! failure <| sprintf "Couldn't find sum type variant %s" case
         }
     | Let (x, e1, e2) -> infer {
         let! s1, t1 = inferExpr env usr e1
@@ -250,6 +254,23 @@ let rec inferExpr (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution 
                 let substf = extend (compose s1 s2) a surf
                 return (substf, t2)
             | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
+        | PUnion (case, x) -> // union destructuring
+            match t1 with
+            | TCtor (KSum _, es) ->
+                match lookup env case with
+                | Some (_, TArr (inp, _)) ->
+                    let! ss = mapM (fun s -> unify s inp) es
+                    let ss = List.fold compose Map.empty ss
+                    let nt = generalize nenv (applyType ss inp)
+                    let! s2, t2 = inferExpr (extend nenv x nt) usr e2
+                    return (compose s1 s2, t2)
+                | _ ->
+                    return! failure <| sprintf "Invalid sum type variant %s." case
+            | TVar _ ->
+                let nt = generalize nenv t1
+                let! s2, t2 = inferExpr (extend nenv x nt) usr e2
+                return (compose s1 s2, t2)
+            | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
         }
     | If (cond, tr, fl) -> infer {
         let! s1, t1 = inferExpr env usr cond
