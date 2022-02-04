@@ -1,0 +1,7 @@
+sum List 'a
+    = Cons 'a * List 'a
+    | Nil unit
+in
+
+[x]
+let Cons a = x in a

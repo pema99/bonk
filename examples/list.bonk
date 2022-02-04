@@ -1,0 +1,21 @@
+sum List 'a
+    = Cons 'a * List 'a
+    | Nil unit
+in
+
+let head = [lst]
+    match lst with
+      Cons ht . let h, t = ht in h
+    | Nil _ . 0
+in
+
+let map = rec [map] [f] [lst]
+    match lst with
+      Cons ht .
+        let h, t = ht in
+        Cons (f h, map f t)
+    | Nil _ . Nil () 
+in
+
+[x]
+let Cons a = x in a
