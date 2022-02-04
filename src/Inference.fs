@@ -151,6 +151,43 @@ let ops = Map.ofList [
     Or, ([], TArr (tBool, TArr (tBool, tBool)))
     ]
 
+// Instantiation and generalization
+let instantiate (sc: Scheme) : InferM<Type> = infer {
+    let (s, t) = sc
+    let! ss = mapM (fun _ -> fresh()) s
+    let v = List.zip s ss |> Map.ofList
+    return applyType v t
+}
+
+let generalize (env: TypeEnv) (t: Type) : Scheme =
+    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
+
+// Unification
+let occurs (s: string) (t: Type) : bool =
+    Set.exists ((=) s) (ftvType t)
+
+let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = solve {
+    match t1, t2 with
+    | [], [] -> return Map.empty
+    | h1::ta1, h2::ta2 -> 
+        let! s1 = unify h1 h2
+        let! s2 = unifyList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
+        return compose s2 s1
+    | _ -> return! failure "Unification failure"
+    }
+
+and unify (t1: Type) (t2: Type) : InferM<Substitution> = solve {
+    match t1, t2 with
+    | a, b when a = b -> return Map.empty
+    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
+    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
+    | TArr (l1, r1), TArr (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        return! unifyList lts rts
+    | _ ->
+        return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
+    }
+
 // Handling for user types
 type KindEnv = Map<string, int>
 // TODO: I need actual type information here, not just arity for pattern matching.
@@ -193,54 +230,16 @@ let rec rename (p: string -> bool) (t: string) (typ: Type) : InferM<Type> = infe
 // Given the name of a union variant, and the name of a type variable, make a concrete
 // constructor for the right type of union. For example, given "Ok" and "a", return
 // the type `a -> Result<a, b>`
-let makeUnion (env: TypeEnv) (case: string) (tv: string) : InferM<Type option> = infer { 
+let makeUnion (env: TypeEnv) (case: string) (tv: string) : InferM<(Substitution * Type) option> = infer { 
     match lookup env case with
-    | Some (_, TArr (TVar a, TCtor (KSum b, c))) ->
-        let! res = rename ((=) a) tv (TCtor (KSum b, c))
-        return Some res
-    | Some (_, TArr (_, TCtor (KSum b, c))) ->
+    | Some (_, TArr (a, TCtor (KSum b, c))) ->
         let! res = rename (fun _ -> false) tv (TCtor (KSum b, c))
-        return Some res
+        // In the general case, unify the entire variant constructor. TODO: Is this right?
+        let! uni = unify (TArr (a, TCtor (KSum b, c))) (TArr (TVar tv, res))
+        return Some (uni, res)
     | _ ->
         return None
 }
-
-// Instantiation and generalization
-let instantiate (sc: Scheme) : InferM<Type> = infer {
-    let (s, t) = sc
-    let! ss = mapM (fun _ -> fresh()) s
-    let v = List.zip s ss |> Map.ofList
-    return applyType v t
-}
-
-let generalize (env: TypeEnv) (t: Type) : Scheme =
-    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
-
-// Unification
-let occurs (s: string) (t: Type) : bool =
-    Set.exists ((=) s) (ftvType t)
-
-let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = solve {
-    match t1, t2 with
-    | [], [] -> return Map.empty
-    | h1::ta1, h2::ta2 -> 
-        let! s1 = unify h1 h2
-        let! s2 = unifyList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
-        return compose s2 s1
-    | _ -> return! failure "Unification failure"
-    }
-
-and unify (t1: Type) (t2: Type) : InferM<Substitution> = solve {
-    match t1, t2 with
-    | a, b when a = b -> return Map.empty
-    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
-    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArr (l1, r1), TArr (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
-    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        return! unifyList lts rts
-    | _ ->
-        return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
-    }
 
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
@@ -276,9 +275,10 @@ let rec patternMatch (env: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Ex
         let nt = ([], TVar tv)
         // Try to make a concrete type constructor
         match! makeUnion env case tv with
-        | Some ctor ->
+        | Some (uni1, ctor) ->
             // Constrain the type variable on rhs to the type constructor
-            let! uni = unify t1 ctor
+            let! uni2 = unify t1 ctor
+            let uni = compose uni1 uni2
             let env = applyEnv uni env
             // Infer the expression body with the pattern-bound variable bound
             let env = extend env x nt
