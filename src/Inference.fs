@@ -278,12 +278,12 @@ let rec patternMatch (env: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Ex
         match! makeUnion env case tv with
         | Some ctor ->
             // Constrain the type variable on rhs to the type constructor
-            let! s2 = unify t1 ctor
-            let env = applyEnv s2 env
+            let! uni = unify t1 ctor
+            let env = applyEnv uni env
             // Infer the expression body with the pattern-bound variable bound
             let env = extend env x nt
             let! s2, t2 = inferExpr env usr e2
-            let substf = compose s1 s2
+            let substf = composeAll [s1; s2; uni]
             return substf, applyType substf t2
         | _ ->
             return! failure <| sprintf "Invalid sum type variant %s." case
