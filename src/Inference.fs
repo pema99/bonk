@@ -242,9 +242,9 @@ let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Ty
     let! t1 = inferExpr usr e1
     match pat with
     | PName x ->
-        let! nenv = ask()
-        let nt = generalize nenv t1
-        return! inEnv x nt (inferExpr usr e2)
+        let nt = ([], t1) // TODO: This is mega sus
+        let! res = inEnv x nt (inferExpr usr e2)
+        return res
     | PTuple x ->
         match t1 with
         | TCtor (KProduct _, es) when List.length x = List.length es -> // known tuple, we can infer directly
@@ -369,7 +369,7 @@ and inferExpr (usr: KindEnv) (e: Expr) : InferM<Type> =
         // Finally, infer the resulting type in the new environment
         return! local nenv (inferExpr usr body)
         }
-    | Match (e, bs) -> infer { // TODO: This is definitely wrong
+    | Match (e, bs) -> infer {
         // Scan over all match branches gathering constraints from pattern matching along the way
         let! typs = mapM (fun (pat, expr) -> patternMatch usr pat e expr) bs
         // Unify every match branch
