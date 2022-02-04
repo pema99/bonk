@@ -19,7 +19,9 @@ and TermEnv = Map<string, Value>
 let extendPat env pat v =
     match pat, v with
     | PName n, v -> extend env n v
-    | PTuple n, VTuple v -> List.fold (fun acc (x, ve) -> extend acc x ve) env (List.zip n v)
+    | PTuple n, VTuple v -> env
+        // TODO: FIx
+        //List.fold (fun acc (x, ve) -> extend acc x ve) env (List.zip n v)
     | _ -> env
 
 let rec binop l op r =
@@ -171,11 +173,12 @@ let extendTermMany names v =
 while true do
     printf "> "
     let input = System.Console.ReadLine()
-    //let input = System.IO.File.ReadAllText "examples/sum.bonk"
+    //let input = System.IO.File.ReadAllText "examples/bug0.bonk"
     let ast = parseRepl input
     match ast with
     | Success (names, expr) -> 
         let typed, i = inferProgramRepl typeEnv freshCount expr // TODO: KindEnv
+        printfn "%A" (Result.map prettyType typed)
         freshCount <- i
         let prettyName = String.concat ", " names
         match typed with

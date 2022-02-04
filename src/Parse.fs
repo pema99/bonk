@@ -112,11 +112,12 @@ let varP =
     |> attempt
     |>> Var
 
-let patP =
-    (attempt (identP <+> identP |>> PUnion)) <|>
+let patP, patPImpl = declParser()
+patPImpl :=
+    (attempt (identP <+> patP |>> PUnion)) <|>
     (sepBy1 identP (one ',')
     |>> fun s ->
-        if List.length s > 1 then PTuple s
+        if List.length s > 1 then PTuple (List.map PName s) // TODO: Nested patterns
         else PName (List.head s))
 
 let lamP : Com<Expr, char> =
