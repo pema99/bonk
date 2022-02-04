@@ -34,16 +34,16 @@ type StateBuilder() =
         this.Return ()
     member this.Bind (m: StateM<'s, 't>, f: 't -> StateM<'s, 'u>) : StateM<'s, 'u> =
         fun s ->
-        let a, n = m s
-        match a with
-        | Ok v -> (f v) n
-        | Error err -> Error err, n
+            let a, n = m s
+            match a with
+            | Ok v -> (f v) n
+            | Error err -> Error err, n
     member this.Combine (m1: StateM<'s, 't>, m2: StateM<'s, 'u>) : StateM<'s, 'u> =
         fun s ->
-        let a, n = m1 s
-        match a with
-        | Ok _ -> m2 n
-        | Error err -> Error err, n
+            let a, n = m1 s
+            match a with
+            | Ok _ -> m2 n
+            | Error err -> Error err, n
     member this.Delay (f: unit -> StateM<'s, 't>) : StateM<'s, 't> =
         this.Bind (this.Return (), f)
     // Freshname monad
@@ -145,6 +145,22 @@ let applyConstraint =
         applyType s t1, applyType s t2
     fixedPoint applyConstraintFP
 
+// Type schemes for built in operators
+let ops = Map.ofList [
+    Plus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
+    Minus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
+    Star, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
+    Slash, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
+    Equal, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    NotEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    GreaterEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    LessEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    Greater, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    Less, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
+    And, ([], TArr (tBool, TArr (tBool, tBool)))
+    Or, ([], TArr (tBool, TArr (tBool, tBool)))
+    ]
+
 // Handling for user types
 type KindEnv = Map<string, int>
 // TODO: I need actual type information here, not just arity
@@ -190,21 +206,35 @@ let instantiate (sc: Scheme) : InferM<Type> = infer {
 let generalize (env: TypeEnv) (t: Type) : Scheme =
     (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
 
-// Type schemes for built in operators
-let ops = Map.ofList [
-    Plus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Minus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Star, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Slash, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Equal, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    NotEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    GreaterEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    LessEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    Greater, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    Less, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    And, ([], TArr (tBool, TArr (tBool, tBool)))
-    Or, ([], TArr (tBool, TArr (tBool, tBool)))
-    ]
+// Rename all type variables 'f' in a concrete type to 't'. Rename all others to fresh variables.
+let rec rename (f: string) (t: string) (typ: Type) : InferM<Type> = infer {
+    match typ with
+    | TVar s when f = s -> return TVar t
+    | TVar s when f <> s ->
+        let! tv = fresh()
+        return tv
+    | TArr (l, r) ->
+        let! l = rename f t l
+        let! r = rename f t r
+        return TArr (l, r)
+    | TCtor (kind, typs) ->
+        let! r = mapM (rename f t) typs
+        return TCtor (kind, r)
+    | _ -> return typ
+}
+
+// Given the name of a union variant, and the name of a type variable, make a concrete
+// constructor for the right type of union. For example, given "Ok" and "a", return
+// the type `a -> Result<a, b>`
+let makeUnion (case: string) (tv: string) : InferM<Type option> = infer { 
+    let! nenv = ask()
+    match lookup nenv case with
+    | Some (_, TArr (TVar a, TCtor (KSum b, c))) ->
+        let! res = rename a tv (TCtor (KSum b, c))
+        return Some res
+    | _ ->
+        return None
+}
 
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
@@ -237,16 +267,26 @@ let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Ty
         | TCtor (KSum _, es) ->
             let! nenv = ask()
             match lookup nenv case with
-            | Some (_, TArr (inp, _)) ->
+            | Some (_, TArr (inp, oup)) ->
                 let! _ = mapM (fun s -> constrain s inp) es
                 let nt = generalize nenv inp
+                // TODO: Constrain e1 to be the type of the union
                 return! inEnv x nt (inferExpr usr e2)
             | _ ->
                 return! failure <| sprintf "Invalid sum type variant %s." case
-        | TVar _ ->
-            let! nenv = ask()
-            let nt = generalize nenv t1
-            return! inEnv x nt (inferExpr usr e2)
+        | TVar o ->
+            // Make a fresh name for the pattern-bound variable
+            let! tv = freshName()
+            let nt = ([], TVar tv)
+            // Try to make a concrete type constructor
+            match! makeUnion case tv with
+            | Some ctor ->
+                // Constrain the type variable on rhs to the type constructor
+                do! constrain (TVar o) ctor
+                // Infer the expression body with the pattern-bound variable bound
+                return! inEnv x nt (inferExpr usr e2)
+            | _ ->
+                return! failure <| sprintf "Invalid sum type variant %s." case
         | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
     }
 
