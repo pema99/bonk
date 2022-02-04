@@ -173,19 +173,19 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
     | Some v when v = arity -> true
     | _ -> false
 
-// Rename all type variables 'f' in a concrete type to 't'. Rename all others to fresh variables.
-let rec rename (f: string) (t: string) (typ: Type) : InferM<Type> = infer {
+// Rename all type variables matching 'p' in a concrete type to 't'. Rename all others to fresh variables.
+let rec rename (p: string -> bool) (t: string) (typ: Type) : InferM<Type> = infer {
     match typ with
-    | TVar s when f = s -> return TVar t
-    | TVar s when f <> s ->
+    | TVar s when p s -> return TVar t
+    | TVar s when not (p s) ->
         let! tv = fresh()
         return tv
     | TArr (l, r) ->
-        let! l = rename f t l
-        let! r = rename f t r
+        let! l = rename p t l
+        let! r = rename p t r
         return TArr (l, r)
     | TCtor (kind, typs) ->
-        let! r = mapM (rename f t) typs
+        let! r = mapM (rename p t) typs
         return TCtor (kind, r)
     | _ -> return typ
 }
@@ -196,7 +196,10 @@ let rec rename (f: string) (t: string) (typ: Type) : InferM<Type> = infer {
 let makeUnion (env: TypeEnv) (case: string) (tv: string) : InferM<Type option> = infer { 
     match lookup env case with
     | Some (_, TArr (TVar a, TCtor (KSum b, c))) ->
-        let! res = rename a tv (TCtor (KSum b, c))
+        let! res = rename ((=) a) tv (TCtor (KSum b, c))
+        return Some res
+    | Some (_, TArr (_, TCtor (KSum b, c))) ->
+        let! res = rename (fun _ -> false) tv (TCtor (KSum b, c))
         return Some res
     | _ ->
         return None
