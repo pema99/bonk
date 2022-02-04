@@ -11,18 +11,30 @@ type Value =
     | VFloat of float
     | VString of string
     | VTuple of Value list
+    | VUnionCtor of string
+    | VUnionCase of string * Value
     | VClosure of Pat * Expr * TermEnv
     | VLazy of Value Lazy
 
 and TermEnv = Map<string, Value>
 
-let rec extendPat env pat v =
+let rec matchPattern tenv pat v =
     match pat, v with
-    | PName n, v -> extend env n v
-    | PTuple n, VTuple v -> List.fold (fun acc (x, ve) -> extendPat acc x ve) env (List.zip n v)
-    | _ -> env
+    | PName a, v ->
+        Some (extend tenv a v)
+    | PConstant a, v ->
+        if (eval tenv (Lit a)) = Some v then Some tenv
+        else None
+    | PTuple pats, VTuple vs ->
+        List.fold (fun env (pat, va) -> 
+            Option.bind (fun env -> matchPattern env pat va) env)
+                (Some tenv) (List.zip pats vs)
+    | PUnion (case, pat), VUnionCase (s, v) ->
+        if case = s then matchPattern tenv pat v
+        else None
+    | _ -> None
 
-let rec binop l op r =
+and binop l op r =
     match l, op, r with
     | VInt l, Plus, VInt r -> Some <| VInt (l + r)
     | VInt l, Minus, VInt r -> Some <| VInt (l - r)
@@ -73,22 +85,21 @@ and eval tenv e =
         let clos = eval tenv f
         let arg = eval tenv x
         match clos, arg with
+        | Some (VUnionCtor a), Some v ->
+            Some (VUnionCase (a, v))
         | Some (VClosure (a, body, env)), Some v ->
-            let nenv = extendPat env a v 
-            eval nenv body
+            Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
         | Some (VLazy e), Some v -> // deferred application
             match e.Value with
             | VClosure (a, body, env) ->
-                let nenv = extendPat env a v 
-                eval nenv body
+                Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
             | _ -> None
         | _ -> None
     | Lam (x, t) -> Some (VClosure (x, t, tenv))
     | Let (x, v, t) ->
         match eval tenv v with
         | Some ve ->
-            let nenv = extendPat tenv x ve
-            eval nenv t
+            Option.bind (fun nenv -> eval nenv t) (matchPattern tenv x ve)
         | _ -> None
     | If (c, tr, fl) ->
         match eval tenv c with
@@ -105,7 +116,18 @@ and eval tenv e =
     | Rec e ->
         lazy (eval tenv (App (e, (Rec e))) |> Option.get)
         |> fun x -> Some (VLazy x)
-    | _ -> None //TODO: Match and Sum
+    | Sum (_, _, cases, body) ->
+        let ctors = List.map fst cases
+        let nenv = List.fold (fun acc s -> extend acc s (VUnionCtor s)) tenv ctors
+        eval nenv body
+    | Match (e, xs) ->
+        match eval tenv e with
+        | Some ev ->
+            xs
+            |> List.map (fun (pat, res) -> Option.map (fun a -> a, res) (matchPattern tenv pat ev))
+            |> List.tryPick id
+            |> Option.bind (fun (env, hit) -> eval env hit)
+        | _ -> None
 
 // Printing
 let rec prettyValue v =
@@ -116,8 +138,8 @@ let rec prettyValue v =
     | VFloat v -> string v
     | VString v -> sprintf "%A" v
     | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
-    | VClosure (a, _, _) -> "Closure"
-    | VLazy _ -> "Lazy"
+    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
+    | VClosure _ | VUnionCtor _ | VLazy _ -> "Closure"
 
 let printColor str =
     let rec cont str =
@@ -174,7 +196,7 @@ while true do
     //let input = System.IO.File.ReadAllText "examples/bug0.bonk"
     let ast = parseRepl input
     match ast with
-    | Success (names, expr) -> 
+    | Success (names, expr) -> // TODO: general patterns
         let typed, i = inferProgramRepl typeEnv freshCount expr // TODO: KindEnv
         freshCount <- i
         let prettyName = String.concat ", " names
