@@ -1,0 +1,24 @@
+sum Option 'a
+    = Some 'a
+    | None unit
+in
+
+let map = [o] [f]
+    match o with
+      Some a . Some (f a)
+    | None _ . None ()
+in
+
+let bind = [o] [f]
+    match o with
+      Some a . f a
+    | None _ . None ()
+in
+
+let isSome = [o]
+    match o with
+      Some _ . true
+    | None _ . false
+in
+
+bind, map, isSome
