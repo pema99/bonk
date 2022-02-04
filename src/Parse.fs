@@ -15,7 +15,8 @@ let isAlphaNumeric c = isAlpha c || isNumeric c || (c = '_')
 let mkString = List.toArray >> String
 let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
 let whitespacedP p = between whitespaceP p whitespaceP
-let parens p = between (one '(') p (one ')')
+let parens p = whitespacedP (between (one '(') p (one ')'))
+let optParens p = parens p <|> whitespacedP p
 
 let sepBy2 (p: Com<'T, 'S>) (sep: Com<'U, 'S>) : Com<'T list, 'S> =
   p <+> (sep *> p) <+> many (sep *> p)
@@ -107,18 +108,29 @@ let literalP =
 let exprP, exprPImpl = declParser()
 let groupP = parens exprP
 
+// Patterns
+let patP, patPImpl = declParser()
+
+let patUnionP =
+    attempt (identP <+> patP |>> PUnion)
+
+let patNameP =
+    identP |>> PName
+
+let patNonTupleP =
+    patUnionP <|> patNameP
+
+let patTupleP =
+    parens (sepBy2 patP (one ','))
+    |>> PTuple
+
+patPImpl :=
+    patTupleP <|> patNonTupleP
+
 let varP =
     notKeywordP
     |> attempt
     |>> Var
-
-let patP, patPImpl = declParser()
-patPImpl :=
-    (attempt (identP <+> patP |>> PUnion)) <|>
-    (sepBy1 identP (one ',')
-    |>> fun s ->
-        if List.length s > 1 then PTuple (List.map PName s) // TODO: Nested patterns
-        else PName (List.head s))
 
 let lamP : Com<Expr, char> =
     between (one '[') patP (one ']')

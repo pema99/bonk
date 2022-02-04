@@ -16,12 +16,10 @@ type Value =
 
 and TermEnv = Map<string, Value>
 
-let extendPat env pat v =
+let rec extendPat env pat v =
     match pat, v with
     | PName n, v -> extend env n v
-    | PTuple n, VTuple v -> env
-        // TODO: FIx
-        //List.fold (fun acc (x, ve) -> extend acc x ve) env (List.zip n v)
+    | PTuple n, VTuple v -> List.fold (fun acc (x, ve) -> extendPat acc x ve) env (List.zip n v)
     | _ -> env
 
 let rec binop l op r =
@@ -178,7 +176,6 @@ while true do
     match ast with
     | Success (names, expr) -> 
         let typed, i = inferProgramRepl typeEnv freshCount expr // TODO: KindEnv
-        printfn "%A" (Result.map prettyType typed)
         freshCount <- i
         let prettyName = String.concat ", " names
         match typed with
