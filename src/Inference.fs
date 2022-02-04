@@ -163,8 +163,7 @@ let ops = Map.ofList [
 
 // Handling for user types
 type KindEnv = Map<string, int>
-// TODO: I need actual type information here, not just arity
-// for pattern matching usage.
+// TODO: I need actual type information here, not just arity for pattern matching.
 
 // Gather all usages of user types in a type
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
@@ -183,28 +182,6 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
     match lookup usr name with
     | Some v when v = arity -> true
     | _ -> false
-
-// Unification
-let occurs (s: string) (t: Type) : bool =
-    Set.exists ((=) s) (ftvType t)
-
-let rec constrain (t1: Type) (t2: Type) : InferM<unit> = tell (t1, t2)
-
-let rec inEnv (n: string) (sc: Scheme) (m: InferM<'a>) : InferM<'a> = infer {
-    let scopeTo e = extend (Map.remove n e) n sc
-    return! local scopeTo m
-}
-
-// Instantiation and generalization
-let instantiate (sc: Scheme) : InferM<Type> = infer {
-    let (s, t) = sc
-    let! ss = mapM (fun _ -> fresh()) s
-    let v = List.zip s ss |> Map.ofList
-    return applyType v t
-}
-
-let generalize (env: TypeEnv) (t: Type) : Scheme =
-    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
 
 // Rename all type variables 'f' in a concrete type to 't'. Rename all others to fresh variables.
 let rec rename (f: string) (t: string) (typ: Type) : InferM<Type> = infer {
@@ -236,6 +213,28 @@ let makeUnion (case: string) (tv: string) : InferM<Type option> = infer {
         return None
 }
 
+// Unification
+let occurs (s: string) (t: Type) : bool =
+    Set.exists ((=) s) (ftvType t)
+
+let rec constrain (t1: Type) (t2: Type) : InferM<unit> = tell (t1, t2)
+
+let rec inEnv (n: string) (sc: Scheme) (m: InferM<'a>) : InferM<'a> = infer {
+    let scopeTo e = extend (Map.remove n e) n sc
+    return! local scopeTo m
+}
+
+// Instantiation and generalization
+let instantiate (sc: Scheme) : InferM<Type> = infer {
+    let (s, t) = sc
+    let! ss = mapM (fun _ -> fresh()) s
+    let v = List.zip s ss |> Map.ofList
+    return applyType v t
+}
+
+let generalize (env: TypeEnv) (t: Type) : Scheme =
+    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
+
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`.
@@ -263,31 +262,18 @@ let rec patternMatch (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Ty
             return t2
         | _ -> return! failure "Attempted to destructure a non-tuple with a tuple pattern."
     | PUnion (case, x) -> // union destructuring
-        match t1 with
-        | TCtor (KSum _, es) ->
-            let! nenv = ask()
-            match lookup nenv case with
-            | Some (_, TArr (inp, oup)) ->
-                let! _ = mapM (fun s -> constrain s inp) es
-                let nt = generalize nenv inp
-                // TODO: Constrain e1 to be the type of the union
-                return! inEnv x nt (inferExpr usr e2)
-            | _ ->
-                return! failure <| sprintf "Invalid sum type variant %s." case
-        | TVar o ->
-            // Make a fresh name for the pattern-bound variable
-            let! tv = freshName()
-            let nt = ([], TVar tv)
-            // Try to make a concrete type constructor
-            match! makeUnion case tv with
-            | Some ctor ->
-                // Constrain the type variable on rhs to the type constructor
-                do! constrain (TVar o) ctor
-                // Infer the expression body with the pattern-bound variable bound
-                return! inEnv x nt (inferExpr usr e2)
-            | _ ->
-                return! failure <| sprintf "Invalid sum type variant %s." case
-        | _ -> return! failure "Attempted to destructure a non-sum-type with a sum-type pattern."
+        // Make a fresh name for the pattern-bound variable
+        let! tv = freshName()
+        let nt = ([], TVar tv)
+        // Try to make a concrete type constructor
+        match! makeUnion case tv with
+        | Some ctor ->
+            // Constrain the type variable on rhs to the type constructor
+            do! constrain (t1) ctor
+            // Infer the expression body with the pattern-bound variable bound
+            return! inEnv x nt (inferExpr usr e2)
+        | _ ->
+            return! failure <| sprintf "Invalid sum type variant %s." case
     }
 
 // Constraint gathering
