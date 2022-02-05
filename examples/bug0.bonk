@@ -3,5 +3,10 @@ sum List 'a
     | Nil unit
 in
 
-[x]
-let Cons a = x in a
+let head = [lst]
+    match lst with
+      Cons (h, t) . h
+    | Nil _ . 0
+in
+
+head

@@ -3,22 +3,20 @@ sum Option 'a
     | None unit
 in
 
-let map = [o] [f]
+let map = [f] [o]
     match o with
       Some a . Some (f a)
     | None _ . None ()
 in
 
-let bind = [o] [f]
+let bind = [f] [o]
     match o with
       Some a . f a
     | None _ . None ()
 in
 
-let isSome = [o]
-    match o with
-      Some _ . true
-    | None _ . false
-in
+let op1 = Some 3 in
+let op2 = map ([x] x + 2) op1 in
+let op3 = bind ([x] Some (x * 2)) op2 in
 
-bind, map, isSome
+op3
