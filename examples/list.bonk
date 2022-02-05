@@ -23,5 +23,4 @@ let myList = Cons (1, Cons (2, Cons (3, Nil ()))) in
 
 let r1 = map ([x] x * 5) myList in
 let r2 = fold ([x] [y] x + y) 0 r1 in
-
-fold
+r2
