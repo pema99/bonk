@@ -3,19 +3,25 @@ sum List 'a
     | Nil unit
 in
 
-let head = [lst]
-    match lst with
-      Cons ht . let h, t = ht in h
-    | Nil _ . 0
-in
-
 let map = rec [map] [f] [lst]
     match lst with
       Cons ht .
-        let h, t = ht in
-        Cons (f h, map f t)
+          let (h, t) = ht in
+          Cons (f h, map f t)
     | Nil _ . Nil () 
 in
 
-[x]
-let Cons a = x in a
+let fold = rec [fold] [f] [z] [lst]
+    match lst with
+      Cons ht .
+          let (h, t) = ht in
+          f (h) (fold f z t)
+    | Nil _ . z
+in
+
+let myList = Cons (1, Cons (2, Cons (3, Nil ()))) in
+
+let r1 = map ([x] x * 5) myList in
+let r2 = fold ([x] [y] x + y) 0 r1 in
+
+fold
