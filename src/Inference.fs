@@ -211,37 +211,6 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
     | Some v when v = arity -> true
     | _ -> false
 
-// Rename all type variables matching 'p' in a concrete type to 't'. Rename all others to fresh variables.
-let rec rename (p: string -> bool) (t: string) (typ: Type) : InferM<Type> = infer {
-    match typ with
-    | TVar s when p s -> return TVar t
-    | TVar s when not (p s) ->
-        let! tv = fresh()
-        return tv
-    | TArr (l, r) ->
-        let! l = rename p t l
-        let! r = rename p t r
-        return TArr (l, r)
-    | TCtor (kind, typs) ->
-        let! r = mapM (rename p t) typs
-        return TCtor (kind, r)
-    | _ -> return typ
-}
-
-// Given the name of a union variant, and the name of a type variable, make a concrete
-// constructor for the right type of union. For example, given "Ok" and "a", return
-// the type `a -> Result<a, b>`
-let makeUnion (env: TypeEnv) (case: string) (tv: string) : InferM<(Substitution * Type) option> = infer { 
-    match lookup env case with
-    | Some (_, TArr (a, TCtor (KSum b, c))) ->
-        let! res = rename (fun _ -> false) tv (TCtor (KSum b, c))
-        // In the general case, unify the entire variant constructor. TODO: Is this right?
-        let! uni = unify (TArr (a, TCtor (KSum b, c))) (TArr (TVar tv, res))
-        return Some (uni, res)
-    | _ ->
-        return None
-}
-
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
@@ -277,21 +246,25 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
         return compose subs surf, env
     // Union patterns match with existant unions
     | PUnion (case, pat), ty ->
+        // Check if the variant constructor exists
         match lookup env case with
-        | Some (_, TArr (b, TCtor (KSum c, d))) ->
-            // Make a fresh type variable for variable being bound
-            let! tv = freshName()
-            let! res = rename (fun _ -> false) tv (TCtor (KSum c, d))
-            // Unify the entire variant constructor with differing inputs // TODO: Is this right?
-            let! uni1 = unify (TArr (b, TCtor (KSum c, d))) (TArr (TVar tv, res))
-            // Unify the type being bound from (rhs) with the union type
-            let! uni2 = unify ty res
-            let uni = compose uni1 uni2
-            // Apply all substitutions so far, and gather constraints in the inner pattern
-            let env = applyEnv uni env
-            let! s1, env  = gatherPatternConstraints env usr pat (TVar tv) poly
-            let subs = compose s1 uni
-            return subs, env
+        | Some sc ->
+            // Instantiate it with new fresh variables
+            match! instantiate sc with
+            | TArr (inp, TCtor (KSum name, oup)) ->
+                // Make a fresh type variable for the pattern being bound
+                let! tv = freshName()
+                // Gather constrains from the inner pattern matched with the fresh type variable
+                let! s1, env = gatherPatternConstraints env usr pat (TVar tv) poly
+                let env = applyEnv s1 env
+                // Apply gathered constraints to the type variable to a get more concrete inner type
+                let tv = applyType s1 (TVar tv)
+                // Unify the variant constructor with an arrow type from the inner type to the type being matched on
+                // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
+                let! uni1 = unify (TArr (inp, TCtor (KSum name, oup))) (TArr (tv, ty))
+                // Compose intermediate substitutions and return the new environment
+                return compose s1 uni1, env
+            | _ -> return! failure <| sprintf "Invalid union variant %s." case
         | _ -> return! failure <| sprintf "Invalid union variant %s." case
     | a, b -> return! failure <| sprintf "Could not match pattern %A with type %A" a b
     }
