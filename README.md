@@ -3,7 +3,13 @@ Bonk, son of [Gunk](https://github.com/pema99/gunk), cousin of [Plonk](https://g
 Yet another shitty toy language I started working on, mainly to play with Hindley-Milner type inference.
 
 # How to build
-`dotnet run`
+Requires dotnet core:
+```sh
+git clone https://github.com/pema99/bonk
+cd bonk
+git submodule update --init --recursive
+dotnet run
+```
 
 # Example code (syntax subject to change)
 This currently typechecks and runs:
