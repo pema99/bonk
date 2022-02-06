@@ -150,7 +150,7 @@ let letP =
 
 let matchP =
     keywordP "match" *> exprP <* keywordP "with" <* opt (one '|')
-    <+> sepBy1 (patP <* one '.' <+> exprP) (one '|')
+    <+> sepBy1 (patP <* one '-' <* one '>' <+> exprP) (one '|')
     |>> EMatch
 
 let ifP =

@@ -5,14 +5,14 @@ in
 
 let map = [f] [o]
     match o with
-    | Some a . Some (f a)
-    | None _ . None ()
+    | Some a -> Some (f a)
+    | None _ -> None ()
 in
 
 let bind = [f] [o]
     match o with
-    | Some a . f a
-    | None _ . None ()
+    | Some a -> f a
+    | None _ -> None ()
 in
 
 let op1 = Some 3 in
