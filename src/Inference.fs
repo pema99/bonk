@@ -189,9 +189,8 @@ and unify (t1: Type) (t2: Type) : InferM<Substitution> = solve {
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
     }
 
-// Handling for user types
-type KindEnv = Map<string, int>
-// TODO: I need actual type information here, not just arity for pattern matching.
+// Handling for user types. Map of string to type-arity of union
+type UserEnv = Map<string, int>
 
 // Gather all usages of user types in a type
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
@@ -206,7 +205,7 @@ let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
         | _ -> inner
 
 // Check if a usage of a user type is valid (correct arity)
-let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
+let rec checkUserTypeUsage (usr: UserEnv) (name: string, arity: int) : bool =
     match lookup usr name with
     | Some v when v = arity -> true
     | _ -> false
@@ -214,7 +213,7 @@ let rec checkUserTypeUsage (usr: KindEnv) (name: string, arity: int) : bool =
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
-let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: Type) (poly: bool) : InferM<Substitution * TypeEnv> = infer {
+let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (pat: Pat) (ty: Type) (poly: bool) : InferM<Substitution * TypeEnv> = infer {
     match pat, ty with
     // Name patterns match with anything
     | PName a, ty ->
@@ -273,7 +272,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`.
-and patternMatch (env: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Type> = infer {
+and patternMatch (env: TypeEnv) (usr: UserEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Type> = infer {
     // Infer the type of the value being bound
     let! s1, t1 = inferType env usr e1
     let env = applyEnv s1 env
@@ -291,7 +290,7 @@ and patternMatch (env: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) 
     }
 
 // Constraint gathering
-and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
+and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Type> =
     match e with
     | ELit (LUnit _) -> just (Map.empty, tUnit)
     | ELit (LInt _) -> just (Map.empty, tInt)
