@@ -55,7 +55,6 @@ type StateBuilder() =
 
 let state = StateBuilder()
 let infer = state
-let solve = state
 let just = state.Return
 let fresh = state.FreshTypeVar
 let freshName = state.FreshName
@@ -167,7 +166,7 @@ let generalize (env: TypeEnv) (t: Type) : Scheme =
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
 
-let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = solve {
+let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer {
     match t1, t2 with
     | [], [] -> return Map.empty
     | h1::ta1, h2::ta2 -> 
@@ -177,7 +176,7 @@ let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = sol
     | _ -> return! failure "Unification failure"
     }
 
-and unify (t1: Type) (t2: Type) : InferM<Substitution> = solve {
+and unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     match t1, t2 with
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
