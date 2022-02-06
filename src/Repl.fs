@@ -248,12 +248,15 @@ let runRepl : ReplM<unit> = repl {
                 | _ -> printfn "Invalid identifier!"
             | 'f' when ops.Length > 1 ->
                 do! runExpr (System.IO.File.ReadAllText ops.[1])
+            | 'q' ->
+                System.Environment.Exit 0
             | 'h' ->
                 printfn "Type an expression to evaluate it."
                 printfn "You can use the following commands:"
                 printfn ":t <identifier>      Print the type of a bound variable."
                 printfn ":f <path>            Load code from a path and evaluate it."
                 printfn ":h                   Print this help message."
+                printfn ":q                   Exit the REPL."
             | _ ->
                 printfn "Invalid command. Type ':h' for help."
         else do! runExpr input
