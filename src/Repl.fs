@@ -196,7 +196,7 @@ while true do
     //let input = System.IO.File.ReadAllText "examples/bug0.bonk"
     let ast = parseRepl input
     match ast with
-    | Success (names, expr) -> // TODO: general patterns
+    | Success (names, expr) ->
         let typed, i = inferProgramRepl typeEnv freshCount expr // TODO: KindEnv
         freshCount <- i
         let prettyName = String.concat ", " names
