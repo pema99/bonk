@@ -16,12 +16,12 @@ let checkTest i e a =
             printfn "\tActual: %A" v
 
 let cases = [
-    tInt,                                               Lit (LInt 5)
-    tBool,                                              Lit (LBool false)
-    tInt,                                               Op (Lit (LInt 5), Plus, Lit (LInt 6))
-    tInt,                                               Let (PName "c", Lit (LInt 5), Op (Var "c", Star, Var "c"))
-    TArr (TVar "a", TArr (TVar "a", TVar "a")),         Let (PName "add", Lam (PName "a", Lam (PName "b", Op (Var "a", Slash, Var "b"))), Var ("add"))
-    TArr (TCon "bool", TArr (TCon "int", TCon "int")),  Lam (PName "a", Lam(PName "b", If (Var "a", Lit (LInt 5), Var "b")))
+    tInt,                                               ELit (LInt 5)
+    tBool,                                              ELit (LBool false)
+    tInt,                                               EOp (ELit (LInt 5), Plus, ELit (LInt 6))
+    tInt,                                               ELet (PName "c", ELit (LInt 5), EOp (EVar "c", Star, EVar "c"))
+    TArrow (TVar "a", TArrow (TVar "a", TVar "a")),         ELet (PName "add", ELam (PName "a", ELam (PName "b", EOp (EVar "a", Slash, EVar "b"))), EVar ("add"))
+    TArrow (TConst "bool", TArrow (TConst "int", TConst "int")),  ELam (PName "a", ELam(PName "b", EIf (EVar "a", ELit (LInt 5), EVar "b")))
     ]
 
 let runTests() =
@@ -30,20 +30,20 @@ let runTests() =
     |> List.iteri (fun i (t, e) -> checkTest i t (inferProgram e))
 
 let prog1 = 
-    Sum ("Option", ["a"], [("None", tUnit); ("Some", TVar "a")],
-        App (Var "Some", Lit (LInt 3)))
+    EUnion ("Option", ["a"], [("None", tUnit); ("Some", TVar "a")],
+        EApp (EVar "Some", ELit (LInt 3)))
 
 let prog2 =
-    Sum ("List", ["a"],
+    EUnion ("List", ["a"],
             [("Cons", TCtor (KProduct 2, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
             ("Nil", tUnit)],
-            Var "Cons")
+            EVar "Cons")
 
 let prog3 =
-    Sum ("List", ["a"],
+    EUnion ("List", ["a"],
             [("Cons", TCtor (KProduct 2, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
             ("Nil", tUnit)],
-            Var "Nil")
+            EVar "Nil")
 
 printfn "%A" (inferProgram prog1 |> Result.map prettyType)
 printfn "Cons :: %A" (inferProgram prog2 |> Result.map prettyType)

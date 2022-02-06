@@ -29,39 +29,38 @@ and Lit =
     | LUnit
 
 and Expr =
-    | Var of string
-    | App of Expr * Expr
-    | Lam of Pat * Expr
-    | Let of Pat * Expr * Expr
-    | Lit of Lit
-    | If of Expr * Expr * Expr
-    | Op of Expr * BinOp * Expr
-    | Tup of Expr list
-    | Sum of string * string list * (string * Type) list * Expr
-    | Match of Expr * (Pat * Expr) list
-    | Rec of Expr
+    | EVar of string
+    | EApp of Expr * Expr
+    | ELam of Pat * Expr
+    | ELet of Pat * Expr * Expr
+    | ELit of Lit
+    | EIf of Expr * Expr * Expr
+    | EOp of Expr * BinOp * Expr
+    | ETuple of Expr list
+    | EUnion of string * string list * (string * Type) list * Expr
+    | EMatch of Expr * (Pat * Expr) list
+    | ERec of Expr
 
 and Kind =
     | KSum of string
     | KProduct of int
-    | KConstant of string 
-    // TODO: Sum types
+    | KConst of string 
 
 and Type =
     | TVar of string
-    | TCon of string
-    | TArr of Type * Type
+    | TConst of string
+    | TArrow of Type * Type
     | TCtor of Kind * Type list
 
-let tInt = TCon "int"
-let tBool = TCon "bool"
-let tFloat = TCon "float"
-let tString = TCon "string"
-let tVoid = TCon "void"
-let tUnit = TCon "unit"
+let tInt = TConst "int"
+let tBool = TConst "bool"
+let tFloat = TConst "float"
+let tString = TConst "string"
+let tVoid = TConst "void"
+let tUnit = TConst "unit"
 let sInt = ([], tInt)
 let sBool = ([], tBool)
 let sFloat = ([], tFloat)
-let sString = ([], TCon "string")
-let sVoid = ([], TCon "void")
-let sUnit = ([], TCon "unit")
+let sString = ([], TConst "string")
+let sVoid = ([], TConst "void")
+let sUnit = ([], TConst "unit")

@@ -92,17 +92,17 @@ let rec fixedPoint f s t =
 
 let rec ftvType (t: Type) : string Set =
     match t with
-    | TCon _ -> Set.empty
+    | TConst _ -> Set.empty
     | TVar a -> Set.singleton a
-    | TArr (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
+    | TArrow (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
     | TCtor (_, args) -> args |> List.map ftvType |> List.fold Set.union Set.empty
 
 let applyType =
     let rec applyTypeFP (s: Substitution) (t: Type) : Type =
         match t with
-        | TCon _ -> t
+        | TConst _ -> t
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
-        | TArr (t1, t2) -> TArr (applyTypeFP s t1 , applyTypeFP s t2)
+        | TArrow (t1, t2) -> TArrow (applyTypeFP s t1 , applyTypeFP s t2)
         | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
     fixedPoint applyTypeFP
 
@@ -137,18 +137,18 @@ let applyConstraint =
 
 // Type schemes for built in operators
 let ops = Map.ofList [
-    Plus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Minus, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Star, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Slash, (["a"], TArr (TVar "a", TArr (TVar "a", TVar "a")))
-    Equal, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    NotEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    GreaterEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    LessEq, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    Greater, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    Less, (["a"], TArr (TVar "a", TArr (TVar "a", tBool)))
-    And, ([], TArr (tBool, TArr (tBool, tBool)))
-    Or, ([], TArr (tBool, TArr (tBool, tBool)))
+    Plus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Minus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Star, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Slash, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Equal, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    NotEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    GreaterEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    LessEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    Greater, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    Less, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    And, ([], TArrow (tBool, TArrow (tBool, tBool)))
+    Or, ([], TArrow (tBool, TArrow (tBool, tBool)))
     ]
 
 // Instantiate a monotype from a polytype
@@ -182,7 +182,7 @@ and unify (t1: Type) (t2: Type) : InferM<Substitution> = solve {
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArr (l1, r1), TArr (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
+    | TArrow (l1, r1), TArrow (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
         return! unifyList lts rts
     | _ ->
@@ -196,8 +196,8 @@ type KindEnv = Map<string, int>
 // Gather all usages of user types in a type
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
     match t with
-    | TVar _ | TCon _ -> Set.empty
-    | TArr (l, r) -> Set.union (gatherUserTypesUsages l) (gatherUserTypesUsages r)
+    | TVar _ | TConst _ -> Set.empty
+    | TArrow (l, r) -> Set.union (gatherUserTypesUsages l) (gatherUserTypesUsages r)
     | TCtor (kind, lts) ->
         let inner = List.map gatherUserTypesUsages lts
         let inner = List.fold Set.union Set.empty inner
@@ -223,7 +223,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
         return Map.empty, env
     // Constants match with anything that matches the type
     | PConstant v, ty ->
-        let! s1, t1 = inferType env usr (Lit v)
+        let! s1, t1 = inferType env usr (ELit v)
         let! surf = unify ty t1
         return compose s1 surf, env
     // Tuple patterns match with same-sized tuples
@@ -251,7 +251,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
         | Some sc ->
             // Instantiate it with new fresh variables
             match! instantiate sc with
-            | TArr (inp, TCtor (KSum name, oup)) ->
+            | TArrow (inp, TCtor (KSum name, oup)) ->
                 // Make a fresh type variable for the pattern being bound
                 let! tv = freshName()
                 // Gather constrains from the inner pattern matched with the fresh type variable
@@ -261,7 +261,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
                 let tv = applyType s1 (TVar tv)
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
-                let! uni1 = unify (TArr (inp, TCtor (KSum name, oup))) (TArr (tv, ty))
+                let! uni1 = unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
                 // Compose intermediate substitutions and return the new environment
                 return compose s1 uni1, env
             | _ -> return! failure <| sprintf "Invalid union variant %s." case
@@ -293,12 +293,12 @@ and patternMatch (env: TypeEnv) (usr: KindEnv) (pat: Pat) (e1: Expr) (e2: Expr) 
 // Constraint gathering
 and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Type> =
     match e with
-    | Lit (LUnit _) -> just (Map.empty, tUnit)
-    | Lit (LInt _) -> just (Map.empty, tInt)
-    | Lit (LBool _) -> just (Map.empty, tBool)
-    | Lit (LFloat _) -> just (Map.empty, tFloat)
-    | Lit (LString _) -> just (Map.empty, tString)
-    | Var a -> infer {
+    | ELit (LUnit _) -> just (Map.empty, tUnit)
+    | ELit (LInt _) -> just (Map.empty, tInt)
+    | ELit (LBool _) -> just (Map.empty, tBool)
+    | ELit (LFloat _) -> just (Map.empty, tFloat)
+    | ELit (LString _) -> just (Map.empty, tString)
+    | EVar a -> infer {
         match lookup env a with
         | Some s ->
             let! inst = instantiate s
@@ -306,22 +306,22 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         | None ->
             return! failure <| sprintf "Use of unbound variable %A." a
         }
-    | App (f, x) -> infer {
+    | EApp (f, x) -> infer {
         let! tv = fresh()
         let! s1, t1 = inferType env usr f
         let env = applyEnv s1 env
         let! s2, t2 = inferType env usr x
-        let! s3 = unify t1 (TArr (t2, tv))
+        let! s3 = unify t1 (TArrow (t2, tv))
         let substf = composeAll [s1; s2; s3]
         return substf, applyType substf tv
         }
-    | Lam (x, e) -> infer {
+    | ELam (x, e) -> infer {
         match x with
         | PName x ->
             let! tv = fresh()
             let env = extend env x ([], tv)
             let! s1, t1 = inferType env usr e
-            return (s1, TArr (applyType s1 tv, t1))
+            return (s1, TArrow (applyType s1 tv, t1))
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh()) x
             let! s1, env = gatherPatternConstraints env usr (PTuple x) (TCtor (KProduct (List.length tvs), tvs)) false
@@ -329,13 +329,13 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
             let! s2, t1 = inferType env usr e
             let subs = compose s1 s2
             let tvs = List.map (applyType subs) tvs
-            return subs, TArr (TCtor (KProduct (List.length tvs), tvs), t1)
+            return subs, TArrow (TCtor (KProduct (List.length tvs), tvs), t1)
         | _->
             return! failure "Unimplemented match"
         }
-    | Let (x, e1, e2) ->
+    | ELet (x, e1, e2) ->
         patternMatch env usr x e1 e2
-    | If (cond, tr, fl) -> infer {
+    | EIf (cond, tr, fl) -> infer {
         let! s1, t1 = inferType env usr cond
         let env = applyEnv s1 env
         let! s2, t2 = inferType env usr tr
@@ -350,23 +350,23 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         let substf = composeAll [s4; s5; substi]
         return substf, applyType substf t2
         }
-    | Op (l, op, r) -> infer {
+    | EOp (l, op, r) -> infer {
         let! s1, t1 = inferType env usr l
         let! s2, t2 = inferType env usr r
         let! tv = fresh()
         let scheme = Map.find op ops
         let! inst = instantiate scheme
-        let! s3 = unify (TArr (t1, TArr (t2, tv))) inst
+        let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
         return composeAll [s1; s2; s3], applyType s3 tv
         }
-    | Tup es -> infer {
+    | ETuple es -> infer {
         let! res = scanM (fun (s, _) x -> inferType (applyEnv s env) usr x) (Map.empty, tVoid) es
         let subs, typs = List.unzip res
         let substf = composeAll subs
         let typs = List.map (applyType substf) typs
         return substf, TCtor (KProduct (List.length es), typs)
         }
-    | Sum (name, typs, cases, body) -> infer {
+    | EUnion (name, typs, cases, body) -> infer {
         // Sum types are special since they create types, first extend the user env with the new type
         let nusr = extend usr name (List.length typs)
         // Gather all user type usages
@@ -391,11 +391,11 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
         let nenv = List.fold (fun acc (case, typ) ->
-            extend acc case (generalize acc (TArr (typ, ret)))) env cases 
+            extend acc case (generalize acc (TArrow (typ, ret)))) env cases 
         // Finally, infer the resulting type in the new environment
         return! inferType nenv usr body
         }
-    | Match (e, bs) -> infer {
+    | EMatch (e, bs) -> infer {
         let! s1, _ = inferType env usr e
         let env = applyEnv s1 env
         // Scan over all match branches gathering constraints from pattern matching along the way
@@ -414,10 +414,10 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         let substf = composeAll (substi :: uni)
         return substf, applyType substf (List.head typs)
         }
-    | Rec e -> infer {
+    | ERec e -> infer {
         let! _, t1 = inferType env usr e
         let! tv = fresh()
-        let! s2 = unify (TArr (tv, tv)) t1
+        let! s2 = unify (TArrow (tv, tv)) t1
         return s2, applyType s2 tv
         }
 
@@ -429,11 +429,11 @@ let prettyTypeName (i: int) : string =
 let renameFresh (t: Type) : Type =
     let rec cont t subst count =
         match t with
-        | TCon _ -> t, subst, count
-        | TArr (l, r) ->
+        | TConst _ -> t, subst, count
+        | TArrow (l, r) ->
             let (r1, subst1, count1) = cont l subst count
             let (r2, subst2, count2) = cont r subst1 count1
-            TArr (r1, r2), subst2, count2
+            TArrow (r1, r2), subst2, count2
         | TVar a ->
             match lookup subst a with
             | Some v -> TVar v, subst, count
@@ -455,9 +455,9 @@ let renameFresh (t: Type) : Type =
 
 let rec prettyType (t: Type) : string =
     match t with
-    | TCon v -> v
+    | TConst v -> v
     | TVar v -> sprintf "'%s" v
-    | TArr (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
+    | TArrow (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
     | TCtor (kind, args) ->
         match kind with
         | KProduct _ ->
