@@ -23,7 +23,7 @@ let rec matchPattern tenv pat v =
     | PName a, v ->
         Some (extend tenv a v)
     | PConstant a, v ->
-        if (eval tenv (Lit a)) = Some v then Some tenv
+        if (eval tenv (ELit a)) = Some v then Some tenv
         else None
     | PTuple pats, VTuple vs ->
         List.fold (fun env (pat, va) -> 
@@ -69,19 +69,19 @@ and binop l op r =
 
 and eval tenv e =
     match e with
-    | Lit LUnit -> Some VUnit
-    | Lit (LInt v) -> Some (VInt v)
-    | Lit (LBool v) -> Some (VBool v)
-    | Lit (LFloat v) -> Some (VFloat v)
-    | Lit (LString v) -> Some (VString v)
-    | Op (l, op, r) ->
+    | ELit LUnit -> Some VUnit
+    | ELit (LInt v) -> Some (VInt v)
+    | ELit (LBool v) -> Some (VBool v)
+    | ELit (LFloat v) -> Some (VFloat v)
+    | ELit (LString v) -> Some (VString v)
+    | EOp (l, op, r) ->
         let v1 = eval tenv l
         let v2 = eval tenv r
         match v1, v2 with
         | Some v1, Some v2 -> binop v1 op v2
         | _ -> None
-    | Var a -> lookup tenv a
-    | App (f, x) ->
+    | EVar a -> lookup tenv a
+    | EApp (f, x) ->
         let clos = eval tenv f
         let arg = eval tenv x
         match clos, arg with
@@ -95,32 +95,32 @@ and eval tenv e =
                 Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
             | _ -> None
         | _ -> None
-    | Lam (x, t) -> Some (VClosure (x, t, tenv))
-    | Let (x, v, t) ->
+    | ELam (x, t) -> Some (VClosure (x, t, tenv))
+    | ELet (x, v, t) ->
         match eval tenv v with
         | Some ve ->
             Option.bind (fun nenv -> eval nenv t) (matchPattern tenv x ve)
         | _ -> None
-    | If (c, tr, fl) ->
+    | EIf (c, tr, fl) ->
         match eval tenv c with
         | Some (VBool v) ->
             if v 
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
-    | Tup es ->
+    | ETuple es ->
         let ev = List.map (eval tenv) es
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | Rec e ->
-        lazy (eval tenv (App (e, (Rec e))) |> Option.get)
+    | ERec e ->
+        lazy (eval tenv (EApp (e, (ERec e))) |> Option.get)
         |> fun x -> Some (VLazy x)
-    | Sum (_, _, cases, body) ->
+    | EUnion (_, _, cases, body) ->
         let ctors = List.map fst cases
         let nenv = List.fold (fun acc s -> extend acc s (VUnionCtor s)) tenv ctors
         eval nenv body
-    | Match (e, xs) ->
+    | EMatch (e, xs) ->
         match eval tenv e with
         | Some ev ->
             xs

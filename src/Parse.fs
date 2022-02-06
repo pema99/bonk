@@ -75,7 +75,7 @@ let floatP =
   |> guard (fun x -> x.Contains ".")
   >>= fun s -> let (succ, num) =
                  Double.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-               if succ then num |> LFloat |> Lit |> just
+               if succ then num |> LFloat |> ELit |> just
                else fail()
 
 let intP = 
@@ -83,21 +83,21 @@ let intP =
   |>> mkString
   >>= fun s -> let (succ, num) =
                  Int32.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-               if succ then num |> LInt |> Lit |> just
+               if succ then num |> LInt |> ELit |> just
                else fail()
 
 let boolP =
-    keywordP "true" *> just (Lit (LBool true))
-    <|> keywordP "false" *> just (Lit (LBool false))
+    keywordP "true" *> just (ELit (LBool true))
+    <|> keywordP "false" *> just (ELit (LBool false))
 
 let stringP =
     within (one '"') (eatWhile ((<>) '"'))
     |>> mkString
     |>> LString
-    |>> Lit
+    |>> ELit
 
 let literalP =
-    (attempt (one '(' *> one ')' *> just (Lit LUnit)))
+    (attempt (one '(' *> one ')' *> just (ELit LUnit)))
     <|> stringP
     <|> boolP
     <|> attempt floatP
@@ -129,40 +129,40 @@ patPImpl :=
 let groupP =
     parens (sepBy1 exprP (one ','))
     |>> fun s ->
-        if List.length s > 1 then Tup s
+        if List.length s > 1 then ETuple s
         else List.head s
 
 let varP =
     notKeywordP
     |> attempt
-    |>> Var
+    |>> EVar
 
 let lamP : Com<Expr, char> =
     between (one '[') patP (one ']')
     <+> exprP
-    |>> Lam
+    |>> ELam
 
 let letP =
     keywordP "let" *> patP <* one '=' <* whitespaceP
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
-    |>> (fun ((a, b), c) -> Let (a, b, c))
+    |>> (fun ((a, b), c) -> ELet (a, b, c))
 
 let matchP =
     keywordP "match" *> exprP <* keywordP "with"
     <+> sepBy1 (patP <* one '.' <+> exprP) (one '|')
-    |>> Match
+    |>> EMatch
 
 let ifP =
     keywordP "if" *> exprP
     <+> keywordP "then" *> exprP
     <+> keywordP "else" *> exprP
-    |>> (fun ((a, b), c) -> If (a, b, c))
+    |>> (fun ((a, b), c) -> EIf (a, b, c))
 
 let recP =
     keywordP "rec" *>
     exprP
-    |>> Rec
+    |>> ERec
 
 let nonAppP =
     literalP
@@ -176,7 +176,7 @@ let nonAppP =
     |> whitespacedP
 
 let appP = 
-    chainL1 nonAppP (just (curry App))
+    chainL1 nonAppP (just (curry EApp))
 
 // TODO: Unop
 (*let unOpP = 
@@ -186,7 +186,7 @@ let appP =
 
 let specificBinOpP op =
   specificOperatorP op
-  *> just (curry <| fun (l, r) -> Op (l, op, r))
+  *> just (curry <| fun (l, r) -> EOp (l, op, r))
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
 let termP = appP
@@ -203,7 +203,7 @@ let typeVarP =
 
 let primTypeP =
     (typeVarP |>> TVar)
-    <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TCon)
+    <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TConst)
 
 let typeTermP =
   (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
@@ -217,7 +217,7 @@ let productP =
     |> attempt
 
 let arrowP =
-    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArr))
+    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
 
 typePImpl := whitespacedP arrowP
 
@@ -226,7 +226,7 @@ let sumDeclP =
   <+> (many typeVarP) <* one '=')
   <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
   <* keywordP "in" <+> exprP
-  |>> (fun (((a,b),c),d) -> Sum (a,b,c,d))
+  |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
 
 exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
 
