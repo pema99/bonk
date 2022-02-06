@@ -2,6 +2,8 @@
 // Resources:
 // - https://course.ccs.neu.edu/cs4410sp19/lec_type-inference_notes.html
 // - http://dev.stephendiehl.com/fun/006_hindley_milner.html#inference-monad
+// - https://jgbm.github.io/eecs662f17/Notes-on-HM.html
+// - Types and Programming Languages by Benjamin C. Pierce
 
 module Inference
 
