@@ -30,9 +30,9 @@ let operatorP = com {
     | '!', '=' -> return! item *> just NotEq
     | '>', '=' -> return! item *> just GreaterEq
     | '<', '=' -> return! item *> just LessEq
-    | '=', '=' -> return! item *> just Equal
     | '&', '&' -> return! item *> just And
     | '|', '|' -> return! item *> just Or
+    | '=', _ -> return Equal
     | '>', _ -> return Greater
     | '<', _ -> return Less
     | '+', _ -> return Plus
