@@ -35,13 +35,13 @@ let prog1 =
 
 let prog2 =
     EUnion ("List", ["a"],
-            [("Cons", TCtor (KProduct 2, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
+            [("Cons", TCtor (KProduct, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
             ("Nil", tUnit)],
             EVar "Cons")
 
 let prog3 =
     EUnion ("List", ["a"],
-            [("Cons", TCtor (KProduct 2, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
+            [("Cons", TCtor (KProduct, [TVar "a"; TCtor (KSum "List", [TVar "a"])]));
             ("Nil", tUnit)],
             EVar "Nil")
 

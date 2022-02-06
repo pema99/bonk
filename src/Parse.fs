@@ -213,7 +213,7 @@ let typeTermP =
 
 let productP =
     sepBy2 typeTermP (one '*')
-    |>> fun lst -> TCtor (KProduct (List.length lst), lst)
+    |>> fun lst -> TCtor (KProduct, lst)
     |> attempt
 
 let arrowP =

@@ -43,7 +43,7 @@ and Expr =
 
 and Kind =
     | KSum of string
-    | KProduct of int
+    | KProduct
     | KConst of string 
 
 and Type =

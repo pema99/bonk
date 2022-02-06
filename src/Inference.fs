@@ -227,7 +227,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
         let! surf = unify ty t1
         return compose s1 surf, env
     // Tuple patterns match with same-sized tuples
-    | PTuple pats, TCtor (KProduct arity, typs) when List.length pats = List.length typs ->
+    | PTuple pats, TCtor (KProduct, typs) when List.length pats = List.length typs ->
         let! env =
             foldM (fun (sub, env) (p, ty) -> infer {
                 let! ns, env = gatherPatternConstraints env usr p ty poly
@@ -242,7 +242,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: KindEnv) (pat: Pat) (ty: T
                 let! ns, env = gatherPatternConstraints env usr p ty poly
                 return compose sub ns, env
             }) (Map.empty, env) (List.zip pats tvs)
-        let surf = Map.ofList [b, (TCtor (KProduct (List.length pats), tvs))]
+        let surf = Map.ofList [b, (TCtor (KProduct, tvs))]
         return compose subs surf, env
     // Union patterns match with existant unions
     | PUnion (case, pat), ty ->
@@ -324,12 +324,12 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
             return (s1, TArrow (applyType s1 tv, t1))
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh()) x
-            let! s1, env = gatherPatternConstraints env usr (PTuple x) (TCtor (KProduct (List.length tvs), tvs)) false
+            let! s1, env = gatherPatternConstraints env usr (PTuple x) (TCtor (KProduct, tvs)) false
             let env = applyEnv s1 env
             let! s2, t1 = inferType env usr e
             let subs = compose s1 s2
             let tvs = List.map (applyType subs) tvs
-            return subs, TArrow (TCtor (KProduct (List.length tvs), tvs), t1)
+            return subs, TArrow (TCtor (KProduct, tvs), t1)
         | _->
             return! failure "Unimplemented match"
         }
@@ -364,7 +364,7 @@ and inferType (env: TypeEnv) (usr: KindEnv) (e: Expr) : InferM<Substitution * Ty
         let subs, typs = List.unzip res
         let substf = composeAll subs
         let typs = List.map (applyType substf) typs
-        return substf, TCtor (KProduct (List.length es), typs)
+        return substf, TCtor (KProduct, typs)
         }
     | EUnion (name, typs, cases, body) -> infer {
         // Sum types are special since they create types, first extend the user env with the new type
