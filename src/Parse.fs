@@ -149,7 +149,7 @@ let letP =
     |>> (fun ((a, b), c) -> ELet (a, b, c))
 
 let matchP =
-    keywordP "match" *> exprP <* keywordP "with"
+    keywordP "match" *> exprP <* keywordP "with" <* opt (one '|')
     <+> sepBy1 (patP <* one '.' <+> exprP) (one '|')
     |>> EMatch
 
