@@ -23,14 +23,14 @@ in
 
 let map = rec [map] [f] [lst]
     match lst with
-      Cons (h, t) . Cons (f h, map f t)
-    | Nil _       . Nil () 
+    | Cons (h, t) -> Cons (f h, map f t)
+    | Nil _       -> Nil () 
 in
 
 let fold = rec [fold] [f] [z] [lst]
     match lst with
-      Cons (h, t) . f (h) (fold f z t)
-    | Nil _       . z
+    | Cons (h, t) -> f (h) (fold f z t)
+    | Nil _       -> z
 in
 
 let myList = Cons (1, Cons (2, Cons (3, Nil ()))) in
