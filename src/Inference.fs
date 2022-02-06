@@ -6,6 +6,8 @@
 module Inference
 
 open Repr
+open Monad
+open Pretty
 
 // Schemes, constraints and environments
 type Constraint = Type * Type
@@ -22,66 +24,11 @@ type Substitution = Map<string, Type>
 let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
 let composeAll lst = List.fold compose Map.empty lst
 
-// Inference monad is a RWS monad mixed with result monad
-type StateM<'s, 't> = 's -> Result<'t, string> * 's
+// Inference monad is a state monad mixed with result monad
 type InferM<'t> = StateM<int, 't>
-
-type StateBuilder() =
-    member this.Return (v: 't) : StateM<'s, 't> =
-        fun s -> Ok v, s
-    member this.ReturnFrom (m: StateM<'s, 't>) : StateM<'s, 't> =
-        m
-    member this.Zero () : StateM<'s, unit> =
-        this.Return ()
-    member this.Bind (m: StateM<'s, 't>, f: 't -> StateM<'s, 'u>) : StateM<'s, 'u> =
-        fun s ->
-            let a, n = m s
-            match a with
-            | Ok v -> (f v) n
-            | Error err -> Error err, n
-    member this.Combine (m1: StateM<'s, 't>, m2: StateM<'s, 'u>) : StateM<'s, 'u> =
-        fun s ->
-            let a, n = m1 s
-            match a with
-            | Ok _ -> m2 n
-            | Error err -> Error err, n
-    member this.Delay (f: unit -> StateM<'s, 't>) : StateM<'s, 't> =
-        this.Bind (this.Return (), f)
-    // Freshname monad
-    member this.FreshTypeVar() : InferM<Type> =
-        fun c -> Ok (TVar (sprintf "_t%A" c)), c + 1
-    member this.FreshName() : InferM<string> =
-        fun c -> Ok (sprintf "_t%A" c), c + 1
-
-let state = StateBuilder()
 let infer = state
-let just = state.Return
-let fresh = state.FreshTypeVar
-let freshName = state.FreshName
-let failure err = fun s -> Error err, s
-let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> = state {
-    match t with
-    | h :: t ->
-        let! v = f h
-        let! next = mapM f t
-        return v :: next
-    | _ -> return []
-}
-let rec foldM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a> = state {
-    match t with
-    | h :: t ->
-        let! v = f acc h 
-        return! foldM f v t
-    | _ -> return acc
-}
-let rec scanM (f: 'a -> 'b -> InferM<'a>) (acc: 'a) (t: 'b list) : InferM<'a list> = state {
-    match t with
-    | h :: t ->
-        let! v = f acc h 
-        let! next = scanM f v t
-        return v :: next 
-    | _ -> return []
-}
+let fresh : InferM<Type> = fun c -> Ok (TVar (sprintf "_t%A" c)), c + 1
+let freshName : InferM<string> = fun c -> Ok (sprintf "_t%A" c), c + 1
 
 // Substitution application
 let rec fixedPoint f s t =
@@ -153,7 +100,7 @@ let ops = Map.ofList [
 // Instantiate a monotype from a polytype
 let instantiate (sc: Scheme) : InferM<Type> = infer {
     let (s, t) = sc
-    let! ss = mapM (fun _ -> fresh()) s
+    let! ss = mapM (fun _ -> fresh) s
     let v = List.zip s ss |> Map.ofList
     return applyType v t
 }
@@ -234,7 +181,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (pat: Pat) (ty: T
         return env
     // Tuple patterns match with type variables if types match
     | PTuple pats, TVar b ->
-        let! tvs = mapM (fun _ -> fresh()) pats
+        let! tvs = mapM (fun _ -> fresh) pats
         let! subs, env = 
             foldM (fun (sub, env) (p, ty) -> infer {
                 let! ns, env = gatherPatternConstraints env usr p ty poly
@@ -251,7 +198,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (pat: Pat) (ty: T
             match! instantiate sc with
             | TArrow (inp, TCtor (KSum name, oup)) ->
                 // Make a fresh type variable for the pattern being bound
-                let! tv = freshName()
+                let! tv = freshName
                 // Gather constrains from the inner pattern matched with the fresh type variable
                 let! s1, env = gatherPatternConstraints env usr pat (TVar tv) poly
                 let env = applyEnv s1 env
@@ -305,7 +252,7 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
             return! failure <| sprintf "Use of unbound variable %A." a
         }
     | EApp (f, x) -> infer {
-        let! tv = fresh()
+        let! tv = fresh
         let! s1, t1 = inferType env usr f
         let env = applyEnv s1 env
         let! s2, t2 = inferType env usr x
@@ -316,12 +263,12 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
     | ELam (x, e) -> infer {
         match x with
         | PName x ->
-            let! tv = fresh()
+            let! tv = fresh
             let env = extend env x ([], tv)
             let! s1, t1 = inferType env usr e
             return (s1, TArrow (applyType s1 tv, t1))
         | PTuple x ->
-            let! tvs = mapM (fun _ -> fresh()) x
+            let! tvs = mapM (fun _ -> fresh) x
             let! s1, env = gatherPatternConstraints env usr (PTuple x) (TCtor (KProduct, tvs)) false
             let env = applyEnv s1 env
             let! s2, t1 = inferType env usr e
@@ -351,7 +298,7 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
     | EOp (l, op, r) -> infer {
         let! s1, t1 = inferType env usr l
         let! s2, t2 = inferType env usr r
-        let! tv = fresh()
+        let! tv = fresh
         let scheme = Map.find op ops
         let! inst = instantiate scheme
         let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
@@ -414,65 +361,10 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
         }
     | ERec e -> infer {
         let! _, t1 = inferType env usr e
-        let! tv = fresh()
+        let! tv = fresh
         let! s2 = unify (TArrow (tv, tv)) t1
         return s2, applyType s2 tv
         }
-
-// Pretty naming
-let prettyTypeName (i: int) : string =
-    if i < 26 then string <| 'a' + char i
-    else sprintf "t%A" i
-
-let renameFresh (t: Type) : Type =
-    let rec cont t subst count =
-        match t with
-        | TConst _ -> t, subst, count
-        | TArrow (l, r) ->
-            let (r1, subst1, count1) = cont l subst count
-            let (r2, subst2, count2) = cont r subst1 count1
-            TArrow (r1, r2), subst2, count2
-        | TVar a ->
-            match lookup subst a with
-            | Some v -> TVar v, subst, count
-            | None ->
-                let name = prettyTypeName count
-                let nt = TVar name
-                nt, extend subst a name, count + 1
-        | TCtor (kind, args) ->
-            let lst =
-                args
-                |> List.scan (fun (_, subst, count) x -> cont x subst count) (tVoid, subst, count)
-                |> List.tail
-            let args, substs, counts = List.unzip3 lst
-            TCtor (kind, args),
-            List.tryLast substs |> Option.defaultValue subst,
-            List.tryLast counts |> Option.defaultValue count
-    let (res, _, _) = cont t Map.empty 0
-    res
-
-let rec prettyType (t: Type) : string =
-    match t with
-    | TConst v -> v
-    | TVar v -> sprintf "'%s" v
-    | TArrow (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
-    | TCtor (kind, args) ->
-        match kind with
-        | KProduct _ ->
-            args
-            |> List.map prettyType
-            |> List.toArray
-            |> String.concat " * "
-            |> sprintf "(%s)"
-        | KSum name ->
-            let fmt =
-                args
-                |> List.map prettyType
-                |> List.toArray
-                |> String.concat ", "
-            if fmt = "" then name
-            else sprintf "%s<%s>" name fmt
-        | _ -> "<Invalid>"    
 
 // Helpers to run
 let inferProgramRepl typeEnv count e =

@@ -2,6 +2,7 @@ module Tests
 
 open Repr
 open Inference
+open Pretty
 
 // Tests
 let checkTest i e a =

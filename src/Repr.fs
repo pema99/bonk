@@ -58,3 +58,9 @@ let tFloat = TConst "float"
 let tString = TConst "string"
 let tVoid = TConst "void"
 let tUnit = TConst "unit"
+
+// Just for REPL
+type Decl =
+    | DExpr of Expr
+    | DLet of Pat * Expr
+    | DUnion of string * string list * (string * Type) list 

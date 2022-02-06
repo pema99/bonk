@@ -2,8 +2,12 @@ module Repl
 
 open Repr
 open Inference
+open Monad
+open Pretty
+open Combinator
+open Parse
 
-// Eval
+// Repr
 type Value =
     | VUnit
     | VInt of int
@@ -18,6 +22,19 @@ type Value =
 
 and TermEnv = Map<string, Value>
 
+// Printing
+let rec prettyValue v =
+    match v with
+    | VUnit -> "()"
+    | VInt v -> string v
+    | VBool v -> string v
+    | VFloat v -> string v
+    | VString v -> sprintf "%A" v
+    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
+    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
+    | VClosure _ | VUnionCtor _ | VLazy _ -> "Closure"
+
+// Evaluation
 let rec matchPattern tenv pat v =
     match pat, v with
     | PName a, v ->
@@ -129,92 +146,95 @@ and eval tenv e =
             |> Option.bind (fun (env, hit) -> eval env hit)
         | _ -> None
 
-// Printing
-let rec prettyValue v =
-    match v with
-    | VUnit -> "()"
-    | VInt v -> string v
-    | VBool v -> string v
-    | VFloat v -> string v
-    | VString v -> sprintf "%A" v
-    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
-    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
-    | VClosure _ | VUnionCtor _ | VLazy _ -> "Closure"
-
-let printColor str =
-    let rec cont str =
-        match str with
-        | h :: (t :: r) when h = '$' ->
-                match t with
-                | 'r' -> System.Console.ForegroundColor <- System.ConsoleColor.Red
-                | 'g' -> System.Console.ForegroundColor <- System.ConsoleColor.Green
-                | 'b' -> System.Console.ForegroundColor <- System.ConsoleColor.Blue
-                | 'y' -> System.Console.ForegroundColor <- System.ConsoleColor.Yellow
-                | _ -> System.Console.ForegroundColor <- System.ConsoleColor.White
-                cont r
-        | h :: t ->
-                printf "%c" h
-                cont t
-        | _ -> ()
-    cont (Seq.toList str)
-    printfn ""
-    System.Console.ForegroundColor <- System.ConsoleColor.White
-
 // Repl start
-open Combinator
-open Parse
+type ReplM<'t> = StateM<TypeEnv * TermEnv * UserEnv * int, 't>
+let repl = state
+let setEnv f = repl {
+    let! a = get
+    do! set (f a)
+}
+let setTypeEnv env  = setEnv (fun (_, b, c, d) -> (env, b, c, d)) 
+let setTermEnv env  = setEnv (fun (a, _, c, d) -> (a, env, c, d)) 
+let setUserEnv env  = setEnv (fun (a, b, _, d) -> (a, b, env, d)) 
+let setFreshCount i = setEnv (fun (a, b, c, _) -> (a, b, c, i)) 
 
-let mutable termEnv : TermEnv = Map.empty
-let mutable typeEnv : TypeEnv = Map.empty
-let mutable freshCount = 0
+let rec extendTypeEnv pat typ = repl {
+    let! (typeEnv, _, _, _) = get
+    match pat, typ with
+    | PName a, typ ->
+        do! setTypeEnv (extend typeEnv a (ftvType typ |> Set.toList, typ))
+        return true
+    | PTuple pats, TCtor (KProduct, typs) ->
+        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats typs)
+        return true
+    | _ ->
+        return false
+}
 
-let extendTypeMany names ty =
-    if not <| List.isEmpty names then
-        match names, ty with
-        | [name], ty ->
-            typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty)
-        | names, TCtor (KProduct _, args) when List.length args = List.length names ->
-            List.zip names args
-            |> List.iter (fun (name, ty) ->
-                typeEnv <- extend typeEnv name (ftvType ty |> Set.toList, ty))
-        | _ -> ()
+let rec extendTermEnv pat v = repl {
+    let! (typeEnv, termEnv, userEnv, freshCount) = get
+    match matchPattern termEnv pat v with
+    | Some nenv ->
+        do! setTermEnv nenv
+        return true
+    | _ ->
+        return false
+}
 
-let extendTermMany names v =
-    if not <| List.isEmpty names then
-        match names, v with
-        | [name], v ->
-            termEnv <- extend termEnv name v
-        | names, VTuple args when List.length args = List.length names ->
-            List.zip names args
-            |> List.iter (fun (name, ty) ->
-                termEnv <- extend termEnv name ty)
-        | _ -> ()
+let handleExpr expr = repl {
+    let! (typeEnv, termEnv, userEnv, freshCount) = get
+    let typed, i = inferProgramRepl typeEnv freshCount expr
+    do! setFreshCount i
+    match typed with
+    | Ok typ ->
+        let res = eval termEnv expr
+        match res with
+        | Some res -> return Ok (typ, res)
+        | None -> return Error "Evaluation error"
+    | Error err -> return Error err
+}
 
-while true do
-    printf "> "
-    let input = System.Console.ReadLine()
-    //let input = System.IO.File.ReadAllText "examples/bug0.bonk"
-    let ast = parseRepl input
-    match ast with
-    | Success (names, expr) ->
-        let typed, i = inferProgramRepl typeEnv freshCount expr // TODO: KindEnv
-        freshCount <- i
-        let prettyName = String.concat ", " names
-        match typed with
-        | Ok ty ->
-            let res = eval termEnv expr
-            extendTypeMany names ty
-            let typ = (ty |> renameFresh |> prettyType)
-            match res with
-            | Some res -> 
-                if not <| List.isEmpty names then
-                    extendTermMany names res
-                    printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName typ (prettyValue res) 
-                else
-                    printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
-            | None ->
-                printfn "Evaluation error"
-        | Error err -> printfn "Typing error: %s" err
-    | FailureWith err -> printfn "Parsing error: %A" err
-    | CompoundFailure err -> printfn "Parsing error: %A" err
-    | Failure -> printfn "Parsing error: Unknown."
+let rec handleDecl decl = repl {
+    match decl with
+    | DExpr expr ->
+        match! handleExpr expr with
+        | Ok (typ, res) ->
+            let typ = typ |> renameFresh |> prettyType
+            printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
+        | Error err -> printfn "%s" err
+    | DLet (pat, expr) ->
+        let prettyName = prettyPattern pat
+        match! handleExpr expr with
+        | Ok (typ, res) ->
+            let ptyp = typ |> renameFresh |> prettyType
+            let! s1 = extendTypeEnv pat typ
+            let! s2 = extendTermEnv pat res
+            if s1 && s2 then
+                printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName ptyp (prettyValue res) 
+            else
+                printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" (prettyPattern pat) ptyp
+        | Error err -> printfn "%s" err
+    | DUnion (name, tvs, cases) ->
+        let names, typs = List.unzip cases
+        let! _ =
+            mapM (fun case -> repl {
+                let decl = DLet (PName case, EUnion (name, tvs, cases, EVar case))
+                return! handleDecl decl }) names
+        ()
+}
+
+let runRepl : ReplM<unit> = repl {
+    while true do
+        printf "> "
+        let input = System.Console.ReadLine()
+        //let input = System.IO.File.ReadAllText "examples/test.bonk"
+        let ast = parseRepl input
+        match ast with
+        | Success (decl) -> do! handleDecl decl
+        | FailureWith err -> printfn "Parsing error: %A" err
+        | CompoundFailure err -> printfn "Parsing error: %A" err
+        | Failure -> printfn "Parsing error: Unknown."
+}
+
+runRepl (Map.empty, Map.empty, Map.empty, 0)
+|> ignore

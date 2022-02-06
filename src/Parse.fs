@@ -19,42 +19,42 @@ let parens p = whitespacedP (between (one '(') p (one ')'))
 let optParens p = parens p <|> whitespacedP p
 
 let sepBy2 (p: Com<'T, 'S>) (sep: Com<'U, 'S>) : Com<'T list, 'S> =
-  p <+> (sep *> p) <+> many (sep *> p)
-  |>> fun ((a, b), c) -> a :: b :: c
+    p <+> (sep *> p) <+> many (sep *> p)
+    |>> fun ((a, b), c) -> a :: b :: c
 
 // Operators
 let operatorP = com {
-  let! l = item
-  let! r = look
-  match l, r with
-  | '!', '=' -> return! item *> just NotEq
-  | '>', '=' -> return! item *> just GreaterEq
-  | '<', '=' -> return! item *> just LessEq
-  | '=', '=' -> return! item *> just Equal
-  | '&', '&' -> return! item *> just And
-  | '|', '|' -> return! item *> just Or
-  | '>', _ -> return Greater
-  | '<', _ -> return Less
-  | '+', _ -> return Plus
-  | '-', _ -> return Minus
-  | '*', _ -> return Star
-  | '/', _ -> return Slash
-  | _ -> return! fail()
+    let! l = item
+    let! r = look
+    match l, r with
+    | '!', '=' -> return! item *> just NotEq
+    | '>', '=' -> return! item *> just GreaterEq
+    | '<', '=' -> return! item *> just LessEq
+    | '=', '=' -> return! item *> just Equal
+    | '&', '&' -> return! item *> just And
+    | '|', '|' -> return! item *> just Or
+    | '>', _ -> return Greater
+    | '<', _ -> return Less
+    | '+', _ -> return Plus
+    | '-', _ -> return Minus
+    | '*', _ -> return Star
+    | '/', _ -> return Slash
+    | _ -> return! fail()
 }
 let specificOperatorP op =
-  guard ((=) op) operatorP
-  |> attempt
-  |> whitespacedP
+    guard ((=) op) operatorP
+    |> attempt
+    |> whitespacedP
 
 // Identifiers
 let identP = 
-  eatWhile1 isAlphaNumeric
-  |>> mkString
-  |> whitespacedP
+    eatWhile1 isAlphaNumeric
+    |>> mkString
+    |> whitespacedP
 
 let keywordP target = 
-  guard ((=) target) identP
-  |> attempt
+    guard ((=) target) identP
+    |> attempt
 
 let reserved = Set.ofList [
     "in"; "let"; "true"; "false"
@@ -70,21 +70,21 @@ let notKeywordP : Com<string, char> =
 
 // Literals
 let floatP = 
-  eatWhile (fun x -> isNumeric x || x = '.')
-  |>> mkString
-  |> guard (fun x -> x.Contains ".")
-  >>= fun s -> let (succ, num) =
-                 Double.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-               if succ then num |> LFloat |> ELit |> just
-               else fail()
+    eatWhile (fun x -> isNumeric x || x = '.')
+    |>> mkString
+    |> guard (fun x -> x.Contains ".")
+    >>= fun s -> let (succ, num) =
+                     Double.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
+                 if succ then num |> LFloat |> ELit |> just
+                 else fail()
 
 let intP = 
-  eatWhile (fun x -> isNumeric x)
-  |>> mkString
-  >>= fun s -> let (succ, num) =
-                 Int32.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-               if succ then num |> LInt |> ELit |> just
-               else fail()
+    eatWhile (fun x -> isNumeric x)
+    |>> mkString
+    >>= fun s -> let (succ, num) =
+                     Int32.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
+                 if succ then num |> LInt |> ELit |> just
+                 else fail()
 
 let boolP =
     keywordP "true" *> just (ELit (LBool true))
@@ -206,10 +206,10 @@ let primTypeP =
     <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TConst)
 
 let typeTermP =
-  (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
-  <|> primTypeP
-  <|> parens typeP
-  |> whitespacedP
+    (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+    <|> primTypeP
+    <|> parens typeP
+    |> whitespacedP
 
 let productP =
     sepBy2 typeTermP (one '*')
@@ -222,11 +222,11 @@ let arrowP =
 typePImpl := whitespacedP arrowP
 
 let sumDeclP =
-  (keywordP "sum" *> notKeywordP
-  <+> (many typeVarP) <* one '=')
-  <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-  <* keywordP "in" <+> exprP
-  |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
+    (keywordP "sum" *> notKeywordP
+    <+> (many typeVarP) <* one '=')
+    <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
+    <* keywordP "in" <+> exprP
+    |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
 
 exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
 
@@ -236,14 +236,24 @@ let parseProgram txt =
     |> fst
 
 // Incomplete declarations for REPL
-let declP =
+let declLetP =
     keywordP "let" *>
-    (sepBy1 identP (one ','))
+    (patP)
     <* one '=' <* whitespaceP
     <+> exprP
+    |>> DLet
+
+let declSumP =
+    (keywordP "sum" *> notKeywordP
+    <+> (many typeVarP) <* one '=')
+    <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
+    |>> (fun ((a,b),c) -> DUnion (a,b,c))
+
+let declExprP =
+    exprP |>> DExpr
 
 let replP =
-    attempt (just [] <+> exprP) <|> declP
+    (attempt declExprP) <|> declLetP <|> declSumP
 
 let parseRepl txt =
     mkMultiLineParser txt
