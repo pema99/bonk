@@ -1,0 +1,22 @@
+sum Option 'a
+    = Some 'a
+    | None unit
+in
+
+let map = [f] [o]
+    match o with
+      Some a . Some (f a)
+    | None _ . None ()
+in
+
+let bind = [f] [o]
+    match o with
+      Some a . f a
+    | None _ . None ()
+in
+
+let op1 = Some 3 in
+let op2 = map ([x] x + 2) op1 in
+let op3 = bind ([x] Some (x * 2)) op2 in
+
+op3

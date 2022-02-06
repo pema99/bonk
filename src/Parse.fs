@@ -15,7 +15,12 @@ let isAlphaNumeric c = isAlpha c || isNumeric c || (c = '_')
 let mkString = List.toArray >> String
 let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
 let whitespacedP p = between whitespaceP p whitespaceP
-let parens p = between (one '(') p (one ')')
+let parens p = whitespacedP (between (one '(') p (one ')'))
+let optParens p = parens p <|> whitespacedP p
+
+let sepBy2 (p: Com<'T, 'S>) (sep: Com<'U, 'S>) : Com<'T list, 'S> =
+  p <+> (sep *> p) <+> many (sep *> p)
+  |>> fun ((a, b), c) -> a :: b :: c
 
 // Operators
 let operatorP = com {
@@ -51,6 +56,18 @@ let keywordP target =
   guard ((=) target) identP
   |> attempt
 
+let reserved = Set.ofList [
+    "in"; "let"; "true"; "false"
+    "if"; "then"; "else"; "fn"
+    "rec"; "sum"; "match"; "with"
+    "int"; "bool"; "float"; "string";
+    "void"; "unit"
+    ]
+
+let notKeywordP : Com<string, char> =
+    identP
+    |> guard (fun x -> not <| Set.contains x reserved)
+
 // Literals
 let floatP = 
   eatWhile (fun x -> isNumeric x || x = '.')
@@ -80,7 +97,8 @@ let stringP =
     |>> Lit
 
 let literalP =
-    stringP
+    (attempt (one '(' *> one ')' *> just (Lit LUnit)))
+    <|> stringP
     <|> boolP
     <|> attempt floatP
     <|> intP
@@ -88,25 +106,36 @@ let literalP =
 
 // Expressions
 let exprP, exprPImpl = declParser()
-let groupP = parens exprP
 
-let reserved = Set.ofList [
-    "in"; "let"; "true"; "false"
-    "if"; "then"; "else"; "fn"
-    "rec"
-    ]
+// Patterns
+let patP, patPImpl = declParser()
+
+let patUnionP =
+    attempt (identP <+> patP |>> PUnion)
+
+let patNameP =
+    identP |>> PName
+
+let patNonTupleP =
+    patUnionP <|> patNameP
+
+let patTupleP =
+    parens (sepBy2 patP (one ','))
+    |>> PTuple
+
+patPImpl :=
+    patTupleP <|> patNonTupleP
+
+let groupP =
+    parens (sepBy1 exprP (one ','))
+    |>> fun s ->
+        if List.length s > 1 then Tup s
+        else List.head s
 
 let varP =
-    identP
-    |> guard (fun x -> not <| Set.contains x reserved)
+    notKeywordP
     |> attempt
     |>> Var
-
-let patP =
-    sepBy1 identP (one ',')
-    |>> fun s ->
-        if List.length s > 1 then PTuple s
-        else PName (List.head s)
 
 let lamP : Com<Expr, char> =
     between (one '[') patP (one ']')
@@ -118,6 +147,11 @@ let letP =
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
     |>> (fun ((a, b), c) -> Let (a, b, c))
+
+let matchP =
+    keywordP "match" *> exprP <* keywordP "with"
+    <+> sepBy1 (patP <* one '.' <+> exprP) (one '|')
+    |>> Match
 
 let ifP =
     keywordP "if" *> exprP
@@ -131,10 +165,11 @@ let recP =
     |>> Rec
 
 let nonAppP =
-    groupP
-    <|> literalP
+    literalP
+    <|> groupP
     <|> lamP
     <|> letP
+    <|> matchP
     <|> recP
     <|> ifP
     <|> varP
@@ -160,13 +195,40 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
-let tupleP =
-  sepBy1 boolOpP (one ',')
-  |> guard (fun s -> List.length s > 1)
-  |>> Tup
-  |> attempt
+// User types
+let typeP, typePImpl = declParser()
 
-exprPImpl := whitespacedP (tupleP <|> boolOpP)
+let typeVarP = 
+    one ''' *> notKeywordP
+
+let primTypeP =
+    (typeVarP |>> TVar)
+    <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TCon)
+
+let typeTermP =
+  (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+  <|> primTypeP
+  <|> parens typeP
+  |> whitespacedP
+
+let productP =
+    sepBy2 typeTermP (one '*')
+    |>> fun lst -> TCtor (KProduct (List.length lst), lst)
+    |> attempt
+
+let arrowP =
+    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArr))
+
+typePImpl := whitespacedP arrowP
+
+let sumDeclP =
+  (keywordP "sum" *> notKeywordP
+  <+> (many typeVarP) <* one '=')
+  <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
+  <* keywordP "in" <+> exprP
+  |>> (fun (((a,b),c),d) -> Sum (a,b,c,d))
+
+exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
 
 let parseProgram txt =
     mkMultiLineParser txt

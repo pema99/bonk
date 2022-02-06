@@ -17,11 +17,11 @@ type BinOp =
 
 type Pat =
     | PName of string
-    | PTuple of string list
-    | PUnion of string * string
-    // TODO: Nested patterns
+    | PTuple of Pat list
+    | PUnion of string * Pat
+    | PConstant of Lit
 
-type Lit =
+and Lit =
     | LFloat of float
     | LString of string
     | LInt of int
@@ -59,3 +59,9 @@ let tFloat = TCon "float"
 let tString = TCon "string"
 let tVoid = TCon "void"
 let tUnit = TCon "unit"
+let sInt = ([], tInt)
+let sBool = ([], tBool)
+let sFloat = ([], tFloat)
+let sString = ([], TCon "string")
+let sVoid = ([], TCon "void")
+let sUnit = ([], TCon "unit")
