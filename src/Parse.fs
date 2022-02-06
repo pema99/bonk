@@ -106,7 +106,6 @@ let literalP =
 
 // Expressions
 let exprP, exprPImpl = declParser()
-let groupP = parens exprP
 
 // Patterns
 let patP, patPImpl = declParser()
@@ -126,6 +125,12 @@ let patTupleP =
 
 patPImpl :=
     patTupleP <|> patNonTupleP
+
+let groupP =
+    parens (sepBy1 exprP (one ','))
+    |>> fun s ->
+        if List.length s > 1 then Tup s
+        else List.head s
 
 let varP =
     notKeywordP
@@ -190,11 +195,6 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
-let tupleP =
-  sepBy2 boolOpP (one ',')
-  |>> Tup
-  |> attempt
-
 // User types
 let typeP, typePImpl = declParser()
 
@@ -228,7 +228,7 @@ let sumDeclP =
   <* keywordP "in" <+> exprP
   |>> (fun (((a,b),c),d) -> Sum (a,b,c,d))
 
-exprPImpl := whitespacedP (sumDeclP <|> tupleP <|> boolOpP)
+exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
 
 let parseProgram txt =
     mkMultiLineParser txt
