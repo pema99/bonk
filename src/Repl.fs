@@ -223,17 +223,40 @@ let rec handleDecl decl = repl {
         ()
 }
 
+let runExpr input = repl {
+    let ast = parseRepl input
+    match ast with
+    | Success (decl) -> do! handleDecl decl
+    | FailureWith err -> printfn "Parsing error: %A" err
+    | CompoundFailure err -> printfn "Parsing error: %A" err
+    | Failure -> printfn "Parsing error: Unknown."
+}
+
 let runRepl : ReplM<unit> = repl {
+    printfn "Welcome to the Bonk REPL, type ':h' for help."
     while true do
         printf "> "
         let input = System.Console.ReadLine()
-        //let input = System.IO.File.ReadAllText "examples/test.bonk"
-        let ast = parseRepl input
-        match ast with
-        | Success (decl) -> do! handleDecl decl
-        | FailureWith err -> printfn "Parsing error: %A" err
-        | CompoundFailure err -> printfn "Parsing error: %A" err
-        | Failure -> printfn "Parsing error: Unknown."
+        let trimmed = input.Trim()
+        if trimmed.StartsWith(":") then
+            let ops = trimmed.Split(" ")
+            match trimmed.[1] with
+            | 't' when ops.Length > 1 -> 
+                let! (typeEnv, _, _, _) = get
+                match lookup typeEnv (ops.[1]) with
+                | Some (_, ty) -> printColor <| sprintf "$w%s : $b%s" (ops.[1]) (prettyType ty)
+                | _ -> printfn "Invalid identifier!"
+            | 'f' when ops.Length > 1 ->
+                do! runExpr (System.IO.File.ReadAllText ops.[1])
+            | 'h' ->
+                printfn "Type an expression to evaluate it."
+                printfn "You can use the following commands:"
+                printfn ":t <identifier>      Print the type of a bound variable."
+                printfn ":f <path>            Load code from a path and evaluate it."
+                printfn ":h                   Print this help message."
+            | _ ->
+                printfn "Invalid command. Type ':h' for help."
+        else do! runExpr input
 }
 
 runRepl (Map.empty, Map.empty, Map.empty, 0)
