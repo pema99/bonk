@@ -8,6 +8,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - ML-style match expressions
 - Pattern matching both in `let` and `match` constructs.
 - Polymorphism. Functions can be generic.
+- Recursion via a fixed-point combinator.
 - An working interpreter/REPL that also provides type information.
 
 # Example code
