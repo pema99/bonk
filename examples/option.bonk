@@ -1,5 +1,5 @@
-sum Option 'a
-    = Some 'a
+sum Option 'a =
+    | Some 'a
     | None unit
 in
 

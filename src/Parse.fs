@@ -75,7 +75,7 @@ let floatP =
     |> guard (fun x -> x.Contains ".")
     >>= fun s -> let (succ, num) =
                      Double.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-                 if succ then num |> LFloat |> ELit |> just
+                 if succ then num |> LFloat |> just
                  else fail()
 
 let intP = 
@@ -83,21 +83,20 @@ let intP =
     |>> mkString
     >>= fun s -> let (succ, num) =
                      Int32.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-                 if succ then num |> LInt |> ELit |> just
+                 if succ then num |> LInt |> just
                  else fail()
 
 let boolP =
-    keywordP "true" *> just (ELit (LBool true))
-    <|> keywordP "false" *> just (ELit (LBool false))
+    keywordP "true" *> just (LBool true)
+    <|> keywordP "false" *> just (LBool false)
 
 let stringP =
     within (one '"') (eatWhile ((<>) '"'))
     |>> mkString
     |>> LString
-    |>> ELit
 
 let literalP =
-    (attempt (one '(' *> one ')' *> just (ELit LUnit)))
+    (attempt (one '(' *> one ')' *> just LUnit))
     <|> stringP
     <|> boolP
     <|> attempt floatP
@@ -116,8 +115,11 @@ let patUnionP =
 let patNameP =
     identP |>> PName
 
+let patLiteralP =
+    literalP |>> PConstant
+
 let patNonTupleP =
-    patUnionP <|> patNameP
+    patUnionP <|> patLiteralP <|> patNameP
 
 let patTupleP =
     parens (sepBy2 patP (one ','))
@@ -165,7 +167,7 @@ let recP =
     |>> ERec
 
 let nonAppP =
-    literalP
+    (literalP |>> ELit)
     <|> groupP
     <|> lamP
     <|> letP
@@ -223,7 +225,7 @@ typePImpl := whitespacedP arrowP
 
 let sumDeclP =
     (keywordP "sum" *> notKeywordP
-    <+> (many typeVarP) <* one '=')
+    <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
     <* keywordP "in" <+> exprP
     |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
@@ -245,7 +247,7 @@ let declLetP =
 
 let declSumP =
     (keywordP "sum" *> notKeywordP
-    <+> (many typeVarP) <* one '=')
+    <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
     |>> (fun ((a,b),c) -> DUnion (a,b,c))
 

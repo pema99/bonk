@@ -1,5 +1,5 @@
-sum List 'a
-    = Cons 'a * List 'a
+sum List 'a =
+    | Cons 'a * List 'a
     | Nil unit
 in
 

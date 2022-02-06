@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src/Repr.fs" />
+    <Compile Include="src/Pretty.fs" />
+    <Compile Include="src/Monad.fs" />
     <Compile Include="src/Parse.fs" />
     <Compile Include="src/Inference.fs" />
     <Compile Include="src/Tests.fs" />
