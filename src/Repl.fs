@@ -232,6 +232,14 @@ let runExpr input = repl {
     | Failure -> printfn "Parsing error: Unknown."
 }
 
+let rec readUntilSemicolon (str: string) =
+    if str.Trim().EndsWith(";") then
+        str
+    else
+        printf "- "
+        let ns = System.Console.ReadLine()
+        str + readUntilSemicolon ns
+
 let runRepl : ReplM<unit> = repl {
     printfn "Welcome to the Bonk REPL, type ':h' for help."
     while true do
@@ -251,7 +259,7 @@ let runRepl : ReplM<unit> = repl {
             | 'q' ->
                 System.Environment.Exit 0
             | 'h' ->
-                printfn "Type an expression to evaluate it."
+                printfn "Type an expression followed by a semicolon to evaluate it."
                 printfn "You can use the following commands:"
                 printfn ":t <identifier>      Print the type of a bound variable."
                 printfn ":f <path>            Load code from a path and evaluate it."
@@ -259,7 +267,8 @@ let runRepl : ReplM<unit> = repl {
                 printfn ":q                   Exit the REPL."
             | _ ->
                 printfn "Invalid command. Type ':h' for help."
-        else do! runExpr input
+        else
+            do! runExpr (readUntilSemicolon input)
 }
 
 runRepl (Map.empty, Map.empty, Map.empty, 0)
