@@ -1,0 +1,18 @@
+sum Expr 'a =
+    | Lit 'a
+    | Add (Expr 'a) * (Expr 'a)
+    | Sub (Expr 'a) * (Expr 'a)
+    | Mul (Expr 'a) * (Expr 'a)
+    | Div (Expr 'a) * (Expr 'a)
+in
+
+let eval = rec [eval] [expr]
+    match expr with
+    | Lit v -> v
+    | Add (l, r) -> eval l + eval r
+    | Sub (l, r) -> eval l - eval r
+    | Mul (l, r) -> eval l * eval r
+    | Div (l, r) -> eval l / eval r
+in
+
+eval (Mul (Lit 5, Add (Lit 3, Lit 2)))

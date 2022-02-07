@@ -240,6 +240,21 @@ let rec readUntilSemicolon (str: string) =
         let ns = System.Console.ReadLine()
         str + readUntilSemicolon ns
 
+let rec extractDeclarations expr =
+    match expr with
+    | ELet (name, init, rest) -> DLet (name, init) :: extractDeclarations rest
+    | EUnion (name, typs, cases, rest) -> DUnion (name, typs, cases) :: extractDeclarations rest
+    | _ -> []
+
+let loadLibrary input = repl {
+    let ast = parseRepl input
+    match ast with
+    | Success (DExpr e) ->
+        let! _ = mapM (handleDecl) (extractDeclarations e)
+        ()
+    | _ -> printfn "Failed to load library."
+}
+
 let runRepl : ReplM<unit> = repl {
     printfn "Welcome to the Bonk REPL, type ':h' for help."
     while true do
@@ -256,6 +271,8 @@ let runRepl : ReplM<unit> = repl {
                 | _ -> printfn "Invalid identifier!"
             | 'f' when ops.Length > 1 ->
                 do! runExpr (System.IO.File.ReadAllText ops.[1])
+            | 'l' when ops.Length > 1 ->
+                do! loadLibrary (System.IO.File.ReadAllText ops.[1])
             | 'q' ->
                 System.Environment.Exit 0
             | 'h' ->
@@ -263,6 +280,7 @@ let runRepl : ReplM<unit> = repl {
                 printfn "You can use the following commands:"
                 printfn ":t <identifier>      Print the type of a bound variable."
                 printfn ":f <path>            Load code from a path and evaluate it."
+                printfn ":l <path>            Load code from a path as a library."
                 printfn ":h                   Print this help message."
                 printfn ":q                   Exit the REPL."
             | _ ->

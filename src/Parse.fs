@@ -232,8 +232,16 @@ let sumDeclP =
 
 exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
 
+let removeComments (txt: string) =
+    txt.Split('\n')
+    |> Array.map (fun s -> s.Trim())
+    |> Array.filter (fun s -> not <| s.StartsWith("//"))
+    |> String.concat "\n"
+
 let parseProgram txt =
-    mkMultiLineParser txt
+    txt
+    |> removeComments
+    |> mkMultiLineParser
     |> exprP
     |> fst
 
@@ -258,6 +266,8 @@ let replP =
     (attempt declExprP) <|> declLetP <|> declSumP
 
 let parseRepl txt =
-    mkMultiLineParser txt
+    txt
+    |> removeComments
+    |> mkMultiLineParser
     |> replP
     |> fst

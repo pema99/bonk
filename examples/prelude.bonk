@@ -1,0 +1,125 @@
+// --- Basics module ---
+let fst = [(a, b)] a in
+let snd = [(a, b)] b in
+let compose = [f] [g] [l] f (g l) in
+let flip = [(a, b)] (b, a) in
+let const = [k] [_] k in
+let curry = [f] [a] [b] f (a, b) in
+let uncurry = [f] [(a, b)] f a b in
+
+// --- List module ---
+sum List 'a =
+    | Cons 'a * List 'a
+    | Nil unit
+in
+
+let map = rec [map] [f] [lst]
+    match lst with
+    | Cons (h, t) -> Cons (f h, map f t)
+    | Nil _       -> Nil () 
+in
+
+let fold = rec [fold] [f] [z] [lst]
+    match lst with
+    | Cons (h, t) -> f (h) (fold f z t)
+    | Nil _       -> z
+in
+
+let filter = rec [filter] [f] [lst]
+    match lst with
+    | Cons (h, t) ->
+        if f h
+        then Cons (h, filter f t)
+        else filter f t
+    | Nil _       -> Nil _
+in
+
+let length = rec [length] [lst]
+    match lst with
+    | Cons (h, t) -> 1 + length t
+    | Nil _       -> 0
+in
+
+let iota = rec [iota] [n]
+    if n > 0 then Cons (n, iota (n - 1))
+    else Nil ()
+in
+
+let replicate = rec [replicate] [i] [n]
+    if n > 0 then Cons (i, replicate i (n - 1))
+    else Nil ()
+in
+
+// --- Option module ---
+sum Option 'a =
+    | Some 'a
+    | None unit
+in
+
+let mapOption = [f] [o]
+    match o with
+    | Some a -> Some (f a)
+    | None _ -> None ()
+in
+
+let bindOption = [f] [o]
+    match o with
+    | Some a -> f a
+    | None _ -> None ()
+in
+
+let isSome = [o]
+    match o with
+    | Some _ -> true
+    | None _ -> false
+in
+
+let isNone = [o]
+    match o with
+    | Some _ -> false
+    | None _ -> true
+in
+
+// --- Either module ---
+sum Either 'a 'b =
+    | Left 'a
+    | Right 'b
+in
+
+let mapLeft = [f] [o]
+    match o with
+    | Left a -> Left (f a)
+    | Right a -> Right a
+in
+
+let mapRight = [f] [o]
+    match o with
+    | Left a -> Left a
+    | Right a -> Right (f a)
+in
+
+let bindLeft = [f] [o]
+    match o with
+    | Left a -> f a
+    | Right a -> Right a
+in
+
+let bindRight = [f] [o]
+    match o with
+    | Left a -> Left a
+    | Right a -> f a
+in
+
+let isLeft = [o]
+    match o with
+    | Left _ -> true
+    | Right _ -> false
+in
+
+let isRight = [o]
+    match o with
+    | Left _ -> false
+    | Right _ -> true
+in
+
+()
