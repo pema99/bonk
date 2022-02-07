@@ -16,8 +16,8 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 # Example code
 The following program typechecks and runs. Syntax subject to change.
 ```fs
-sum List 'a
-    = Cons 'a * List 'a
+sum List 'a =
+    | Cons 'a * List 'a
     | Nil unit
 in
 
