@@ -51,6 +51,10 @@ git submodule update --init --recursive
 dotnet run
 ```
 
+# To do (maybe, stuff I'm looking at)
+- Exhaustiveness checking for pattern matching
+- Rust-style traits/typeclasses for ad-hoc polymorphism
+
 # Fluff
 - Dependencies are cringe.
 - Damn, I've really been getting a lot of use out my crappy parser combinator library lately. Wew lad.
