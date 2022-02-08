@@ -8,6 +8,24 @@ open Combinator
 open Parse
 open Prelude
 
+let tThis = TVar "this"
+let e1 = 
+    EClass ("Add", ["add", TArrow (tThis, TArrow (tThis, tThis))],
+        EMember (tInt, "Add", ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
+            EMember (tFloat, "Add", ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
+                ETuple ([
+                    EApp (EVar "add", ELit (LFloat 2.3))
+                    EVar "add"
+                ])
+            )
+        )
+    )
+
+e1
+|> inferProgram
+|> Result.map (prettyType)
+|> printfn "%A"
+
 // Printing
 let rec prettyValue v =
     match v with

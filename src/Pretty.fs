@@ -49,7 +49,8 @@ let rec prettyType (t: Type) : string =
                 |> String.concat ", "
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
-        | _ -> "<Invalid>"   
+    | TBounded (ks, ty) ->
+        sprintf "(%s) => %s" (String.concat "," ks) (prettyType ty)
 
 let prettyTypeName (i: int) : string =
     if i < 26 then string <| 'a' + char i
@@ -79,5 +80,8 @@ let renameFresh (t: Type) : Type =
             TCtor (kind, args),
             List.tryLast substs |> Option.defaultValue subst,
             List.tryLast counts |> Option.defaultValue count
+        | TBounded (ks, ty) ->
+            let (r1, subst1, count1) = cont ty subst count
+            TBounded (ks, r1), subst1, count1
     let (res, _, _) = cont t Map.empty 0
     res 

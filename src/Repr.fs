@@ -41,18 +41,20 @@ and Expr =
     | ETuple of Expr list
     | EUnion of string * string list * (string * Type) list * Expr
     | EMatch of Expr * (Pat * Expr) list
+    | EClass of string * (string * Type) list * Expr // name, (fname, ftype) // TODO: Bounds
+    | EMember of Type * string  * (string * Expr) list * Expr// mtype, name, impls // TODO: Blanket impls
     | ERec of Expr
 
 and Kind =
     | KSum of string
     | KProduct
-    | KConst of string 
 
 and Type =
     | TVar of string
     | TConst of string
     | TArrow of Type * Type
     | TCtor of Kind * Type list
+    | TBounded of string list * Type
 
 let tInt = TConst "int"
 let tBool = TConst "bool"
