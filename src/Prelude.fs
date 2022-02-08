@@ -34,16 +34,18 @@ let substring v =
     | [VString v; VInt f; VInt t] -> Some (VString (v.Substring(f, t)))
     | _ -> None
 
+// TODO: These should be able to return option. Need to include prelude (written in bonk).
+// Or be able to hide them with double underscore or something and write safe wrappers.
 let funSchemes: Map<string, (string list * Type)> = Map.ofList [
     "lengthString", ([], TArrow (tString, tInt))
-    "indexString", ([], TArrow (tInt, TArrow (tString, tChar)))
-    "substring", ([], TArrow (tInt, TArrow (tInt, TArrow (tString, tString))))
+    "indexString",  ([], TArrow (tString, TArrow (tInt, tChar)))
+    "substring",    ([], TArrow (tString, TArrow (tInt, TArrow (tInt, tString))))
 ]
 
 let funShims: Map<string, Value> = Map.ofList [
     "lengthString", VIntrinsic ("lengthString", [])
-    "indexString", VIntrinsic ("indexString", [])
-    "substring", VIntrinsic ("substring", [])
+    "indexString",  VIntrinsic ("indexString", [])
+    "substring",    VIntrinsic ("substring", [])
 ]
 
 // Name, (impl, arity)

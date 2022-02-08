@@ -50,6 +50,12 @@ let replicate = rec [replicate] [i] [n]
     else Nil ()
 in
 
+let stringToList = rec [stringToList] [str]
+    let len = lengthString str in
+    if len = 0 then Nil ()
+    else Cons (indexString str 0, stringToList (substring str 1 (len - 1)))
+in
+
 // --- Option module ---
 sum Option 'a =
     | Some 'a

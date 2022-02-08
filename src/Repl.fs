@@ -108,13 +108,13 @@ and eval tenv e =
         | Some (VLazy e), Some v -> // deferred application
             match e.Value with
             | VClosure (a, body, env) ->
-                Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
+                Option.bind (fun nenv -> eval nenv body) (matchPattern env a v)
             | _ -> None
         | Some (VIntrinsic (name, args)), Some v ->
             let applied = v :: args
             match lookup funImpls name with
             | Some (impl, arity) ->
-                if arity = List.length applied then impl applied
+                if arity = List.length applied then impl (List.rev applied)
                 else Some (VIntrinsic (name, applied))
             | None -> None
         | _ -> None
