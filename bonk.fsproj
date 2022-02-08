@@ -12,6 +12,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="src/Repr.fs" />
+    <Compile Include="src/Prelude.fs" />
     <Compile Include="src/Pretty.fs" />
     <Compile Include="src/Monad.fs" />
     <Compile Include="src/Parse.fs" />
