@@ -50,6 +50,7 @@ and binop l op r =
     | VInt l, LessEq, VInt r -> Some <| VBool (l <= r)
     | VInt l, Greater, VInt r -> Some <| VBool (l > r)
     | VInt l, Less, VInt r -> Some <| VBool (l < r)
+    | VInt l, Modulo, VInt r -> Some <| VInt (l % r)
 
     | VChar l, Plus, VChar r -> Some <| VChar (l + r)
     | VChar l, Equal, VChar r -> Some <| VBool (l = r)
@@ -69,6 +70,7 @@ and binop l op r =
     | VFloat l, LessEq, VFloat r -> Some <| VBool (l <= r)
     | VFloat l, Greater, VFloat r -> Some <| VBool (l > r)
     | VFloat l, Less, VFloat r -> Some <| VBool (l < r)
+    | VFloat l, Modulo, VFloat r -> Some <| VFloat (l % r)
 
     | VString l, Plus, VString r -> Some <| VString (l + r)
     | VString l, Equal, VString r -> Some <| VBool (l = r)
@@ -321,5 +323,5 @@ let runRepl : ReplM<unit> = repl {
             do! runExpr (readUntilSemicolon input)
 }
 
-runRepl (funSchemes, funShims, Map.empty, 0)
+runRepl (funSchemes, Map.map (fun k v -> VIntrinsic (k, [])) funSchemes, Map.empty, 0)
 |> ignore

@@ -39,6 +39,7 @@ let operatorP = com {
     | '-', _ -> return Minus
     | '*', _ -> return Star
     | '/', _ -> return Slash
+    | '%', _ -> return Modulo
     | _ -> return! fail()
 }
 let specificOperatorP op =
@@ -197,7 +198,7 @@ let specificBinOpP op =
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
 let termP = appP
-let mulDivP = chainL1 termP (chooseBinOpP [Star; Slash])
+let mulDivP = chainL1 termP (chooseBinOpP [Star; Slash; Modulo])
 let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])

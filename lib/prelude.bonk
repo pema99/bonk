@@ -4,8 +4,56 @@ let snd = [(a, b)] b in
 let compose = [f] [g] [l] f (g l) in
 let flip = [(a, b)] (b, a) in
 let const = [k] [_] k in
+let ignore = [k] () in
 let curry = [f] [a] [b] f (a, b) in
 let uncurry = [f] [(a, b)] f a b in
+let not = [b] if b then false else true in
+
+// --- Numbers module ---
+let negi = [i] 0 - i in
+let negf = [f] 0.0 - f in
+let absi = [i] if i < 0 then negi i else i in
+let absf = [f] if f < 0.0 then negf f else f in
+let signi = [i] if i = 0 then 0 else if i < 0 then (negi 1) else 1 in
+let signf = [f] if f = 0.0 then 0.0 else if f < 0.0 then (negf 1.0) else 1.0 in
+let max = [a] [b] if a > b then a else b in
+let min = [a] [b] if a < b then a else b in
+
+// --- Option module ---
+sum Option 'a =
+    | Some 'a
+    | None unit
+in
+
+let mapOption = [f] [o]
+    match o with
+    | Some a -> Some (f a)
+    | None _ -> None ()
+in
+
+let bindOption = [f] [o]
+    match o with
+    | Some a -> f a
+    | None _ -> None ()
+in
+
+let getOption = [def] [o]
+    match o with
+    | Some a -> a
+    | None _ -> def
+in
+
+let isSome = [o]
+    match o with
+    | Some _ -> true
+    | None _ -> false
+in
+
+let isNone = [o]
+    match o with
+    | Some _ -> false
+    | None _ -> true
+in
 
 // --- List module ---
 sum List 'a =
@@ -40,14 +88,58 @@ let length = rec [length] [lst]
     | Nil _       -> 0
 in
 
-let iota = rec [iota] [n]
-    if n > 0 then Cons (n, iota (n - 1))
-    else Nil ()
+let iota = [n]
+    let inner = rec [inner] [acc]
+        if acc >= n then Nil ()
+        else Cons (acc, inner (acc + 1))
+    in
+    inner 0
 in
 
 let replicate = rec [replicate] [i] [n]
     if n > 0 then Cons (i, replicate i (n - 1))
     else Nil ()
+in
+
+let append = rec [append] [a] [b]
+    match a with
+    | Cons (h, t) -> Cons (h, append t b)
+    | Nil _       -> b
+in
+
+let nth = rec [nth] [n] [lst]
+    match lst with
+    | Cons (h, t) ->
+        if n < 0 then None ()
+        else if n = 0 then Some h
+        else nth (n-1) t
+    | Nil _       -> None ()
+in
+
+let exists = [f] [lst]
+    length (filter f lst) > 0
+in
+
+let forall = rec [forall] [f] [lst]
+    match lst with
+    | Cons (h, t) -> (f h) && (forall f t)
+    | Nil _       -> true
+in
+
+let head = [lst]
+    match lst with
+    | Cons (h, _) -> Some h
+    | Nil _       -> None ()
+in
+
+let tail = [lst]
+    match lst with
+    | Cons (h, t) -> Some t
+    | Nil _       -> None ()
+in
+
+let find = [f] [lst]
+    head (filter f lst)
 in
 
 let stringToList = rec [stringToList] [str]
@@ -56,34 +148,10 @@ let stringToList = rec [stringToList] [str]
     else Cons (indexString str 0, stringToList (substring str 1 (len - 1)))
 in
 
-// --- Option module ---
-sum Option 'a =
-    | Some 'a
-    | None unit
-in
-
-let mapOption = [f] [o]
-    match o with
-    | Some a -> Some (f a)
-    | None _ -> None ()
-in
-
-let bindOption = [f] [o]
-    match o with
-    | Some a -> f a
-    | None _ -> None ()
-in
-
-let isSome = [o]
-    match o with
-    | Some _ -> true
-    | None _ -> false
-in
-
-let isNone = [o]
-    match o with
-    | Some _ -> false
-    | None _ -> true
+let listToString = rec [listToString] [lst]
+    match lst with
+    | Cons (h, t) -> (toString h) + listToString t
+    | Nil _       -> ""
 in
 
 // --- Either module ---
@@ -126,6 +194,18 @@ let isRight = [o]
     match o with
     | Left _ -> false
     | Right _ -> true
+in
+
+let getLeft = [def] [o]
+    match o with
+    | Left a -> a
+    | Right _ -> def
+in
+
+let getRight = [def] [o]
+    match o with
+    | Left _ -> def
+    | Right a -> a
 in
 
 ()

@@ -84,22 +84,6 @@ let applyConstraint =
         applyType s t1, applyType s t2
     fixedPoint applyConstraintFP
 
-// Type schemes for built in operators
-let ops = Map.ofList [
-    Plus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Minus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Star, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Slash, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Equal, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    NotEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    GreaterEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    LessEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Greater, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Less, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    And, ([], TArrow (tBool, TArrow (tBool, tBool)))
-    Or, ([], TArrow (tBool, TArrow (tBool, tBool)))
-    ]
-
 // Instantiate a monotype from a polytype
 let instantiate (sc: Scheme) : InferM<Type> = infer {
     let (s, t) = sc
@@ -303,7 +287,7 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
         let! s1, t1 = inferType env usr l
         let! s2, t2 = inferType env usr r
         let! tv = fresh
-        let scheme = Map.find op ops
+        let scheme = Map.find op opSchemes
         let! inst = instantiate scheme
         let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
         return composeAll [s1; s2; s3], applyType s3 tv

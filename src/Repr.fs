@@ -6,6 +6,7 @@ type BinOp =
     | Minus
     | Star
     | Slash
+    | Modulo
     | Equal
     | NotEq
     | GreaterEq
