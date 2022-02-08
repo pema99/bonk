@@ -95,12 +95,17 @@ let stringP =
     |>> mkString
     |>> LString
 
+let charP =
+    within (one ''') item
+    |>> LChar
+
 let literalP =
     (attempt (one '(' *> one ')' *> just LUnit))
     <|> stringP
     <|> boolP
     <|> attempt floatP
     <|> intP
+    <|> charP
     |> whitespacedP
 
 // Expressions

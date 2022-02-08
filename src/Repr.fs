@@ -26,6 +26,7 @@ and Lit =
     | LString of string
     | LInt of int
     | LBool of bool
+    | LChar of char
     | LUnit
 
 and Expr =
@@ -56,6 +57,7 @@ let tInt = TConst "int"
 let tBool = TConst "bool"
 let tFloat = TConst "float"
 let tString = TConst "string"
+let tChar = TConst "char"
 let tVoid = TConst "void"
 let tUnit = TConst "unit"
 
@@ -64,3 +66,19 @@ type Decl =
     | DExpr of Expr
     | DLet of Pat * Expr
     | DUnion of string * string list * (string * Type) list 
+
+type Value =
+    | VUnit
+    | VInt of int
+    | VBool of bool
+    | VFloat of float
+    | VString of string
+    | VChar of char
+    | VTuple of Value list
+    | VUnionCase of string * Value
+    | VUnionCtor of string
+    | VClosure of Pat * Expr * TermEnv
+    | VLazy of Value Lazy
+    | VIntrinsic of string * Value list
+
+and TermEnv = Map<string, Value>

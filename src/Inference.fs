@@ -10,6 +10,7 @@ module Inference
 open Repr
 open Monad
 open Pretty
+open Prelude
 
 // Schemes, constraints and environments
 type Constraint = Type * Type
@@ -245,6 +246,7 @@ and inferType (env: TypeEnv) (usr: UserEnv) (e: Expr) : InferM<Substitution * Ty
     | ELit (LBool _) -> just (Map.empty, tBool)
     | ELit (LFloat _) -> just (Map.empty, tFloat)
     | ELit (LString _) -> just (Map.empty, tString)
+    | ELit (LChar _) -> just (Map.empty, tChar)
     | EVar a -> infer {
         match lookup env a with
         | Some s ->
@@ -377,4 +379,4 @@ let inferProgramRepl typeEnv count e =
         | Error a -> Error (sprintf "%s" a), i
 
 let inferProgram =
-    inferProgramRepl Map.empty 0 >> fst
+    inferProgramRepl (funSchemes) 0 >> fst

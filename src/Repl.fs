@@ -6,21 +6,7 @@ open Monad
 open Pretty
 open Combinator
 open Parse
-
-// Repr
-type Value =
-    | VUnit
-    | VInt of int
-    | VBool of bool
-    | VFloat of float
-    | VString of string
-    | VTuple of Value list
-    | VUnionCtor of string
-    | VUnionCase of string * Value
-    | VClosure of Pat * Expr * TermEnv
-    | VLazy of Value Lazy
-
-and TermEnv = Map<string, Value>
+open Prelude
 
 // Printing
 let rec prettyValue v =
@@ -30,9 +16,10 @@ let rec prettyValue v =
     | VBool v -> string v
     | VFloat v -> string v
     | VString v -> sprintf "%A" v
+    | VChar v -> sprintf "'%c'" v
     | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
     | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
-    | VClosure _ | VUnionCtor _ | VLazy _ -> "Closure"
+    | VClosure _ | VUnionCtor _ | VLazy _ | VIntrinsic _ -> "Closure"
 
 // Evaluation
 let rec matchPattern tenv pat v =
@@ -63,6 +50,15 @@ and binop l op r =
     | VInt l, LessEq, VInt r -> Some <| VBool (l <= r)
     | VInt l, Greater, VInt r -> Some <| VBool (l > r)
     | VInt l, Less, VInt r -> Some <| VBool (l < r)
+
+    | VChar l, Plus, VChar r -> Some <| VChar (l + r)
+    | VChar l, Equal, VChar r -> Some <| VBool (l = r)
+    | VChar l, NotEq, VChar r -> Some <| VBool (l <> r)
+    | VChar l, GreaterEq, VChar r -> Some <| VBool (l >= r)
+    | VChar l, LessEq, VChar r -> Some <| VBool (l <= r)
+    | VChar l, Greater, VChar r -> Some <| VBool (l > r)
+    | VChar l, Less, VChar r -> Some <| VBool (l < r)
+
     | VFloat l, Plus, VFloat r -> Some <| VFloat (l + r)
     | VFloat l, Minus, VFloat r -> Some <| VFloat (l - r)
     | VFloat l, Star, VFloat r -> Some <| VFloat (l * r)
@@ -73,6 +69,7 @@ and binop l op r =
     | VFloat l, LessEq, VFloat r -> Some <| VBool (l <= r)
     | VFloat l, Greater, VFloat r -> Some <| VBool (l > r)
     | VFloat l, Less, VFloat r -> Some <| VBool (l < r)
+
     | VString l, Plus, VString r -> Some <| VString (l + r)
     | VString l, Equal, VString r -> Some <| VBool (l = r)
     | VString l, NotEq, VString r -> Some <| VBool (l <> r)
@@ -82,6 +79,7 @@ and binop l op r =
     | VString l, Less, VString r -> Some <| VBool (l.Length < r.Length)
     | VBool l, And, VBool r -> Some <| VBool (l && r)
     | VBool l, Or, VBool r -> Some <| VBool (l || r)
+    
     | _ -> None
 
 and eval tenv e =
@@ -91,6 +89,7 @@ and eval tenv e =
     | ELit (LBool v) -> Some (VBool v)
     | ELit (LFloat v) -> Some (VFloat v)
     | ELit (LString v) -> Some (VString v)
+    | ELit (LChar v) -> Some (VChar v)
     | EOp (l, op, r) ->
         let v1 = eval tenv l
         let v2 = eval tenv r
@@ -111,6 +110,13 @@ and eval tenv e =
             | VClosure (a, body, env) ->
                 Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
             | _ -> None
+        | Some (VIntrinsic (name, args)), Some v ->
+            let applied = v :: args
+            match lookup funImpls name with
+            | Some (impl, arity) ->
+                if arity = List.length applied then impl applied
+                else Some (VIntrinsic (name, applied))
+            | None -> None
         | _ -> None
     | ELam (x, t) -> Some (VClosure (x, t, tenv))
     | ELet (x, v, t) ->
@@ -273,14 +279,27 @@ let runRepl : ReplM<unit> = repl {
                 do! runExpr (System.IO.File.ReadAllText ops.[1])
             | 'l' when ops.Length > 1 ->
                 do! loadLibrary (System.IO.File.ReadAllText ops.[1])
+            | 's' ->
+                let! (typeEnv, termEnv, _, _) = get
+                let filter = if ops.Length > 1 then ops.[1] else ""
+                let names = Map.keys typeEnv
+                names
+                |> Seq.filter (fun name -> name.Contains filter)
+                |> Seq.map (fun name -> name, lookup typeEnv name, lookup termEnv name)
+                |> Seq.iter (fun (name, ty, te) ->
+                    match ty, te with
+                    | Some (_, ty), Some te ->
+                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyType ty) (prettyValue te)
+                    | _ -> ())
             | 'q' ->
                 System.Environment.Exit 0
             | 'h' ->
                 printfn "Type an expression followed by a semicolon to evaluate it."
                 printfn "You can use the following commands:"
-                printfn ":t <identifier>      Print the type of a bound variable."
                 printfn ":f <path>            Load code from a path and evaluate it."
                 printfn ":l <path>            Load code from a path as a library."
+                printfn ":t <identifier>      Print the type of a bound variable."
+                printfn ":s <filter>          Show all bindings optionally filtered to a string."
                 printfn ":h                   Print this help message."
                 printfn ":q                   Exit the REPL."
             | _ ->
@@ -289,5 +308,5 @@ let runRepl : ReplM<unit> = repl {
             do! runExpr (readUntilSemicolon input)
 }
 
-runRepl (Map.empty, Map.empty, Map.empty, 0)
+runRepl (funSchemes, funShims, Map.empty, 0)
 |> ignore
