@@ -12,6 +12,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - Recursion via a fixed-point combinator named `rec`.
 - _Everything_ is an expression. Thus, an entire program is a single expression.
 - An working interpreter/REPL that also provides type information.
+- A tiny standard library (see `lib/prelude.bonk`).
 
 # Example code
 The following program typechecks and runs. Syntax subject to change.
