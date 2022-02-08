@@ -200,13 +200,14 @@ let handleExpr expr = repl {
     | Error err -> return Error err
 }
 
-let rec handleDecl decl = repl {
+let rec handleDecl silent decl = repl {
     match decl with
     | DExpr expr ->
         match! handleExpr expr with
         | Ok (typ, res) ->
             let typ = typ |> renameFresh |> prettyType
-            printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
+            if not silent then
+                printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
         | Error err -> printfn "%s" err
     | DLet (pat, expr) ->
         let prettyName = prettyPattern pat
@@ -215,24 +216,25 @@ let rec handleDecl decl = repl {
             let ptyp = typ |> renameFresh |> prettyType
             let! s1 = extendTypeEnv pat typ
             let! s2 = extendTermEnv pat res
-            if s1 && s2 then
-                printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName ptyp (prettyValue res) 
-            else
-                printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" (prettyPattern pat) ptyp
+            if not silent then
+                if s1 && s2 then
+                    printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName ptyp (prettyValue res) 
+                else
+                    printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" (prettyPattern pat) ptyp
         | Error err -> printfn "%s" err
     | DUnion (name, tvs, cases) ->
         let names, typs = List.unzip cases
         let! _ =
             mapM (fun case -> repl {
                 let decl = DLet (PName case, EUnion (name, tvs, cases, EVar case))
-                return! handleDecl decl }) names
+                return! handleDecl silent decl }) names
         ()
 }
 
 let runExpr input = repl {
     let ast = parseRepl input
     match ast with
-    | Success (decl) -> do! handleDecl decl
+    | Success (decl) -> do! handleDecl false decl
     | FailureWith err -> printfn "Parsing error: %A" err
     | CompoundFailure err -> printfn "Parsing error: %A" err
     | Failure -> printfn "Parsing error: Unknown."
@@ -252,16 +254,27 @@ let rec extractDeclarations expr =
     | EUnion (name, typs, cases, rest) -> DUnion (name, typs, cases) :: extractDeclarations rest
     | _ -> []
 
-let loadLibrary input = repl {
+let loadLibrary silent input = repl {
     let ast = parseRepl input
     match ast with
     | Success (DExpr e) ->
-        let! _ = mapM (handleDecl) (extractDeclarations e)
+        let! _ = mapM (handleDecl silent) (extractDeclarations e)
         ()
     | _ -> printfn "Failed to load library."
 }
 
+// Attempt to load std lib
+let stdLib = 
+    use res =
+        System.Reflection.Assembly
+            .GetExecutingAssembly()
+            .GetManifestResourceStream("bonk.lib.prelude.bonk")
+    let out = Array.create (int res.Length) (byte 0)
+    res.Read(out, 0, int res.Length) |> ignore
+    System.Text.Encoding.Default.GetString(out)
+
 let runRepl : ReplM<unit> = repl {
+    do! loadLibrary true stdLib
     printfn "Welcome to the Bonk REPL, type ':h' for help."
     while true do
         printf "> "
@@ -278,7 +291,7 @@ let runRepl : ReplM<unit> = repl {
             | 'f' when ops.Length > 1 ->
                 do! runExpr (System.IO.File.ReadAllText ops.[1])
             | 'l' when ops.Length > 1 ->
-                do! loadLibrary (System.IO.File.ReadAllText ops.[1])
+                do! loadLibrary false (System.IO.File.ReadAllText ops.[1])
             | 's' ->
                 let! (typeEnv, termEnv, _, _) = get
                 let filter = if ops.Length > 1 then ops.[1] else ""
