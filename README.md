@@ -1,6 +1,6 @@
 # Bonk
 Bonk, son of [Gunk](https://github.com/pema99/gunk), cousin of [Plonk](https://github.com/pema99/plonk).
-Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable.
+Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently only interpreted, but I might implement a bytecode VM at some point.
 
 # Features
 - Basic expressions. IE. `if`, `let`, function application and abstraction, arithmetic
