@@ -23,7 +23,7 @@ let e1 =
 
 e1
 |> inferProgram
-|> Result.map (prettyType)
+//|> Result.map (prettyType)
 |> printfn "%A"
 
 // Printing
@@ -184,14 +184,14 @@ let setTermEnv env  = setEnv (fun (a, _, c, d) -> (a, env, c, d))
 let setUserEnv env  = setEnv (fun (a, b, _, d) -> (a, b, env, d)) 
 let setFreshCount i = setEnv (fun (a, b, c, _) -> (a, b, c, i)) 
 
-let rec extendTypeEnv pat typ = repl {
+let rec extendTypeEnv pat (typ: Scheme) = repl {
     let! (typeEnv, _, _, _) = get
     match pat, typ with
     | PName a, typ ->
-        do! setTypeEnv (extend typeEnv a (ftvType typ |> Set.toList, typ))
+        do! setTypeEnv (extend typeEnv a typ)
         return true
-    | PTuple pats, TCtor (KProduct, typs) ->
-        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats typs)
+    | PTuple pats, (ps, TCtor (KProduct, typs)) ->
+        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats (List.map (fun a -> ps, a) typs))
         return true
     | _ ->
         return false
@@ -225,7 +225,7 @@ let rec handleDecl silent decl = repl {
     | DExpr expr ->
         match! handleExpr expr with
         | Ok (typ, res) ->
-            let typ = typ |> renameFresh |> prettyType
+            let typ = typ |> renameFresh |> prettyScheme
             if not silent then
                 printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
         | Error err -> printfn "%s" err
@@ -233,7 +233,7 @@ let rec handleDecl silent decl = repl {
         let prettyName = prettyPattern pat
         match! handleExpr expr with
         | Ok (typ, res) ->
-            let ptyp = typ |> renameFresh |> prettyType
+            let ptyp = typ |> renameFresh |> prettyScheme
             let! s1 = extendTypeEnv pat typ
             let! s2 = extendTermEnv pat res
             if not silent then
@@ -315,9 +315,9 @@ let runRepl : ReplM<unit> = repl {
             | 's' ->
                 let! (typeEnv, termEnv, _, _) = get
                 let filter = if ops.Length > 1 then ops.[1] else ""
-                let names = Map.keys typeEnv
+                let names = Map.toList typeEnv |> List.map fst
                 names
-                |> Seq.filter (fun name -> name.Contains filter)
+                |> Seq.filter (fun (name: string) -> name.Contains filter)
                 |> Seq.map (fun name -> name, lookup typeEnv name, lookup termEnv name)
                 |> Seq.iter (fun (name, ty, te) ->
                     match ty, te with

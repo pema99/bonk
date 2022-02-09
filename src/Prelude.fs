@@ -3,18 +3,18 @@ module Prelude
 open Repr
 
 // Built in operators
-let opSchemes: Map<BinOp, (string list * Type)> = Map.ofList [
-    Plus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Minus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Star, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Slash, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Modulo, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Equal, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    NotEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    GreaterEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    LessEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Greater, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Less, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+let opSchemes: Map<BinOp, Scheme> = Map.ofList [
+    Plus, (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Minus, (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Star, (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Slash, (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Modulo, (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
+    Equal, (["Eq", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    NotEq, (["Eq", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    GreaterEq, (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    LessEq, (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    Greater, (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
+    Less, (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
     And, ([], TArrow (tBool, TArrow (tBool, tBool)))
     Or, ([], TArrow (tBool, TArrow (tBool, tBool)))
     ]
@@ -109,17 +109,17 @@ let mathOp2 f v =
     | _ -> None
 
 // TODO: Safe wrappers
-let funSchemes: Map<string, (string list * Type)> = Map.ofList [
+let funSchemes: Map<string, Scheme> = Map.ofList [
     "lengthString", ([], TArrow (tString, tInt))
     "indexString",  ([], TArrow (tString, TArrow (tInt, tChar)))
     "substring",    ([], TArrow (tString, TArrow (tInt, TArrow (tInt, tString))))
     "print",        ([], TArrow (tString, tUnit))
     "read",         ([], TArrow (tUnit, tString))
-    "toFloat",      (["a"], TArrow (TVar "a", tFloat)) 
-    "toString",     (["a"], TArrow (TVar "a", tString)) 
-    "toBool",       (["a"], TArrow (TVar "a", tBool)) 
-    "toChar",       (["a"], TArrow (TVar "a", tChar)) 
-    "toInt",        (["a"], TArrow (TVar "a", tInt))
+    "toFloat",      (["ToFloat", TVar "a"], TArrow (TVar "a", tFloat)) 
+    "toString",     (["ToString", TVar "a"], TArrow (TVar "a", tString)) 
+    "toBool",       (["ToBool", TVar "a"], TArrow (TVar "a", tBool)) 
+    "toChar",       (["ToChar", TVar "a"], TArrow (TVar "a", tChar)) 
+    "toInt",        (["ToInt", TVar "a"], TArrow (TVar "a", tInt))
     "sqrt",         ([], TArrow (tFloat, tFloat))
     "sin",          ([], TArrow (tFloat, tFloat))
     "cos",          ([], TArrow (tFloat, tFloat))

@@ -54,7 +54,15 @@ and Type =
     | TConst of string
     | TArrow of Type * Type
     | TCtor of Kind * Type list
-    | TBounded of string list * Type
+
+// Schemes, constraints and environments
+type Pred = (string * Type)
+type Qual<'t> = Pred list * 't
+type Inst = Pred Qual
+type Class = (string list * Inst list)
+type ClassEnv = Map<string, Class>
+
+type Scheme = Type Qual
 
 let tInt = TConst "int"
 let tBool = TConst "bool"
@@ -63,6 +71,13 @@ let tString = TConst "string"
 let tChar = TConst "char"
 let tVoid = TConst "void"
 let tUnit = TConst "unit"
+let sInt = ([], tInt)
+let sBool = ([], tBool)
+let sFloat = ([], tFloat)
+let sString = ([], tString)
+let sChar = ([], tChar)
+let sVoid = ([], tVoid)
+let sUnit = ([], tUnit)
 
 // Just for REPL
 type Decl =

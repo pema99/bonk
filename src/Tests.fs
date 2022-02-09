@@ -3,7 +3,7 @@ module Tests
 open Repr
 open Inference
 open Pretty
-
+(*
 // Tests
 let checkTest i e a =
     match a with
@@ -64,3 +64,4 @@ let prog1 =
     )
 
 printfn "%A" (inferProgram prog1 |> Result.map prettyType)*)
+*)

@@ -12,11 +12,6 @@ open Monad
 open Pretty
 open Prelude
 
-// Schemes, constraints and environments
-type Constraint = Type * Type
-
-type Scheme = string list * Type
-
 type TypeEnv = Map<string, Scheme>
 let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env
@@ -46,7 +41,6 @@ let rec ftvType (t: Type) : string Set =
     | TVar a -> Set.singleton a
     | TArrow (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
     | TCtor (_, args) -> args |> List.map ftvType |> List.fold Set.union Set.empty
-    | TBounded (_, ty) -> ftvType ty
 
 let applyType =
     let rec applyTypeFP (s: Substitution) (t: Type) : Type =
@@ -55,17 +49,39 @@ let applyType =
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
         | TArrow (t1, t2) -> TArrow (applyTypeFP s t1 , applyTypeFP s t2)
         | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
-        | TBounded (ks, ty) -> TBounded (ks, applyTypeFP s ty)
     fixedPoint applyTypeFP
+
+let rec ftvPred (p: Pred) : string Set =
+    p |> snd |> ftvType
+
+let rec applyPred (s: Substitution) (p: Pred) : Pred =
+    (fst p, applyType s (snd p))
+
+let rec ftvInst (q: Qual<Pred>) : string Set =
+    let a, b = q
+    List.map (ftvPred) a |> List.fold Set.union Set.empty |> Set.union (ftvPred b)
+
+let rec applyInst (s: Substitution) (q: Qual<Pred>) : Qual<Pred> =
+    let a, b = q
+    List.map (applyPred s) a, applyPred s b
+
+//let rec ftvQualType (q: Qual<Type>) : string Set =
+//    let a, b = q
+//    List.map (ftvPred) a |> List.fold Set.union Set.empty |> Set.union (ftvType b)
+
+//let rec applyQualType (s: Substitution) (q: Qual<Type>) : Qual<Type> =
+//    let a, b = q
+//    List.map (applyPred s) a, applyType s b
 
 let ftvScheme (sc: Scheme) : string Set =
     let a, t = sc
-    Set.difference (ftvType t) (Set.ofList a) 
+    Set.difference (ftvType t) (a |> List.map ftvPred |> List.fold Set.union Set.empty) 
 
 let applyScheme =
     let rec applySchemeFP (s: Substitution) (sc: Scheme) : Scheme =
         let a, t = sc
-        let s' = List.fold (fun acc k -> Map.remove k acc) s a
+        let r = a |> List.collect (ftvPred >> Set.toList)
+        let s' = List.fold (fun acc k -> Map.remove k acc) s r
         (a, applyType s' t)
     fixedPoint applySchemeFP
 
@@ -79,74 +95,98 @@ let applyEnv =
         Map.map (fun _ v -> applyScheme s v) t
     fixedPoint applyEnvFP
 
-let ftvConstraint (t1: Type, t2: Type) : Set<string> =
-    Set.union (ftvType t1) (ftvType t2)
-
-let applyConstraint =
-    let applyConstraintFP (s: Substitution) (t1: Type, t2: Type) : Constraint =
-        applyType s t1, applyType s t2
-    fixedPoint applyConstraintFP
-
 // Instantiate a monotype from a polytype
-let instantiate (sc: Scheme) : InferM<Type> = infer {
-    let (s, t) = sc
-    let! ss = mapM (fun _ -> fresh) s
-    let v = List.zip s ss |> Map.ofList
-    return applyType v t
+let instantiate (sc: Scheme) : InferM<Scheme> = infer {
+    let tvs = sc |> fst |> List.map ftvPred |> List.fold Set.union Set.empty |> Set.toList 
+    let! ntvs = mapM (fun _ -> fresh) tvs
+    let subs = List.zip tvs ntvs |> Map.ofList
+    return applyScheme subs sc // TODO: Is this right???
 }
 
 // Generalize a monotype to a polytype
 let generalize (env: TypeEnv) (t: Type) : Scheme =
-    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
-
-// Typeclasses
-type ClassEnv = Map<string, Type Set>
-let memberOf (cls: ClassEnv) (t: Type) (m: string) : bool =
-    match t, lookup cls m with
-    | TVar a, _ -> true
-    | _, Some typs -> Set.contains t typs // TODO: Alpha similarity
-    | _ -> false
+    let res = Set.toList <| Set.difference (ftvType t) (ftvEnv env)
+    (res |> List.map (fun s -> ("Top", TVar s)), t)
 
 // Unification
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
 
-let rec unifyList (cls: ClassEnv) (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer {
+let rec unifyList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer {
     match t1, t2 with
     | [], [] -> return Map.empty
     | h1::ta1, h2::ta2 -> 
-        let! s1 = unify cls h1 h2
-        let! s2 = unifyList cls (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
+        let! s1 = unify h1 h2
+        let! s2 = unifyList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
         return compose s2 s1
     | _ -> return! failure "Unification failure"
     }
 
-and unifyInner (cls: ClassEnv) (t1: Type) (t2: Type) (removeThis: bool) : InferM<Substitution> = infer {
+and unify (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     match t1, t2 with
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArrow (l1, r1), TArrow (l2, r2) -> return! unifyList cls [l1; r1] [l2; r2]
+    | TArrow (l1, r1), TArrow (l2, r2) -> return! unifyList [l1; r1] [l2; r2]
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        return! unifyList cls lts rts
-    | TBounded (ks1, t1), t2 | t2, TBounded (ks1, t1) ->
-        let! res = unify cls t1 t2
-        match lookup res "this" |> Option.map (applyType res) with
-        | Some v ->
-            if List.forall (memberOf cls v) ks1 then
-                if removeThis then return Map.remove "this" res
-                else return res
-            else
-                return! failure <| sprintf "Type bound '%s' not satisfied for %A." (String.concat " + " ks1) t2
-        | _ -> return res
-    // TODO: Other bounded rules
+        return! unifyList lts rts
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
     }
 
-and unify (cls: ClassEnv) (t1: Type) (t2: Type) : InferM<Substitution> = infer {
-    return! unifyInner cls t1 t2 true
-    }
+let rec coerce (t1: Type) (t2: Type) : Substitution option =
+    match t1, t2 with
+    | a, b when a = b -> Some (Map.empty)
+    | TVar a, b -> Some (Map.ofList [(a, b)])
+    | TArrow (l1, r1), TArrow (l2, r2) ->
+        let s1 = coerce l1 l2
+        let s2 = coerce r1 r2
+        Option.map2 compose s1 s2
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        let z = List.zip lts rts
+        let z = List.map (fun (a, b) -> coerce a b) z
+        if not <| List.forall Option.isSome z then None
+        else
+            let z = List.choose id z
+            Some (composeAll z)
+    | _ ->
+        None
+
+// Typeclasses
+let super (cls: ClassEnv) (i: string) : string list =
+    match lookup cls i with
+    | Some (is, _) -> is
+    | _ -> []
+
+let insts (cls: ClassEnv) (i: string) : Inst list =
+    match lookup cls i with
+    | Some (_, its) -> its
+    | _ -> []
+
+let rec bySuper (cls: ClassEnv) (p: Pred) : Pred list =
+    let i, t = p
+    let res =
+        super cls i
+        |> List.collect (fun ip -> bySuper cls (ip, t))
+    p :: res
+
+let rec byInst (cls: ClassEnv) (p: Pred) : Pred list option =
+    let i, t = p
+    let tryInst (ps, h) =
+        if h = p then
+            coerce (snd h) (snd p)
+            |> Option.map (fun u -> List.map (applyPred u) ps)
+        else
+            None
+    insts cls i
+    |> List.map tryInst
+    |> List.tryPick id
+
+let rec entail (cls: ClassEnv) (ps: Pred list) (p: Pred) : bool =
+    List.exists (List.contains p) (List.map (bySuper cls) ps) ||
+    match byInst cls p with
+    | Some qs -> List.forall (entail cls ps) qs
+    | None -> false
 
 // Handling for user types. Map of string to type-arity of union
 type UserEnv = Map<string, int>
@@ -162,7 +202,6 @@ let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
         match kind with
         | KSum name -> Set.add (name, List.length lts) inner
         | _ -> inner
-    | TBounded (_, ty) -> gatherUserTypesUsages ty
 
 // Check if a usage of a user type is valid (correct arity)
 let rec checkUserTypeUsage (usr: UserEnv) (name: string, arity: int) : bool =
@@ -182,8 +221,8 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (
         return Map.empty, env
     // Constants match with anything that matches the type
     | PConstant v, ty ->
-        let! s1, t1 = inferType env usr cls (ELit v)
-        let! surf = unify cls ty t1
+        let! s1, (_, t1) = inferType env usr cls (ELit v) // TODO: Handle
+        let! surf = unify ty t1
         return compose s1 surf, env
     // Tuple patterns match with same-sized tuples
     | PTuple pats, TCtor (KProduct, typs) when List.length pats = List.length typs ->
@@ -210,7 +249,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (
         | Some sc ->
             // Instantiate it with new fresh variables
             match! instantiate sc with
-            | TArrow (inp, TCtor (KSum name, oup)) ->
+            | (_, TArrow (inp, TCtor (KSum name, oup))) ->
                 // Make a fresh type variable for the pattern being bound
                 let! tv = freshName
                 // Gather constrains from the inner pattern matched with the fresh type variable
@@ -220,7 +259,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (
                 let tv = applyType s1 (TVar tv)
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
-                let! uni1 = unify cls (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
+                let! uni1 = unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
                 // Compose intermediate substitutions and return the new environment
                 return compose s1 uni1, env
             | _ -> return! failure <| sprintf "Invalid union variant %s." case
@@ -232,32 +271,31 @@ let rec gatherPatternConstraints (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`.
-and patternMatch (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Type> = infer {
+and patternMatch (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Substitution * Scheme> = infer {
     // Infer the type of the value being bound
-    let! s1, t1 = inferType env usr cls e1
+    let! s1, (p1, t1) = inferType env usr cls e1
     let env = applyEnv s1 env
-    // Generalize it, if it is a polytype, we don't generalize the binding
-    let q, t1 = generalize env t1
-    let poly = not <| List.isEmpty q
+    // If it is a polytype, we don't generalize the binding // TODO: Check this? I generalized before
+    let poly = not <| List.isEmpty p1
     // Gather constraints (substitutions, bindings) from the pattern
     let! s2, env = gatherPatternConstraints env usr cls pat t1 poly
     let env = applyEnv s2 env
     // Infer the body/rhs of the binding under the gathered constraints
-    let! s3, t3 = inferType env usr cls e2
+    let! s3, (p3, t3) = inferType env usr cls e2
     // Apply all constraints and propagate up
     let substf = composeAll [s1; s2; s3]
-    return substf, (applyType substf t3)
+    return substf, (p1 @ p3, (applyType substf t3))
     }
 
 // Constraint gathering
-and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<Substitution * Type> =
+and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<Substitution * Scheme> =
     match e with
-    | ELit (LUnit _) -> just (Map.empty, tUnit)
-    | ELit (LInt _) -> just (Map.empty, tInt)
-    | ELit (LBool _) -> just (Map.empty, tBool)
-    | ELit (LFloat _) -> just (Map.empty, tFloat)
-    | ELit (LString _) -> just (Map.empty, tString)
-    | ELit (LChar _) -> just (Map.empty, tChar)
+    | ELit (LUnit _) -> just (Map.empty, sUnit)
+    | ELit (LInt _) -> just (Map.empty, sInt)
+    | ELit (LBool _) -> just (Map.empty, sBool)
+    | ELit (LFloat _) -> just (Map.empty, sFloat)
+    | ELit (LString _) -> just (Map.empty, sString)
+    | ELit (LChar _) -> just (Map.empty, sChar)
     | EVar a -> infer {
         match lookup env a with
         | Some s ->
@@ -268,63 +306,65 @@ and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<S
         }
     | EApp (f, x) -> infer {
         let! tv = fresh
-        let! s1, t1 = inferType env usr cls f
+        let! s1, (p1, t1) = inferType env usr cls f
         let env = applyEnv s1 env
-        let! s2, t2 = inferType env usr cls x
-        let! s3 = unify cls t1 (TArrow (t2, tv))
+        let! s2, (p2, t2) = inferType env usr cls x
+        let! s3 = unify t1 (TArrow (t2, tv))
         let substf = composeAll [s1; s2; s3]
-        return substf, applyType substf tv
+        return substf, (p1 @ p2, applyType substf tv)
         }
     | ELam (x, e) -> infer {
         match x with
         | PName x ->
             let! tv = fresh
             let env = extend env x ([], tv)
-            let! s1, t1 = inferType env usr cls e
-            return (s1, TArrow (applyType s1 tv, t1))
+            let! s1, (p1, t1) = inferType env usr cls e
+            return s1, (p1, TArrow (applyType s1 tv, t1))
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
             let! s1, env = gatherPatternConstraints env usr cls (PTuple x) (TCtor (KProduct, tvs)) false
             let env = applyEnv s1 env
-            let! s2, t1 = inferType env usr cls e
+            let! s2, (p1, t1) = inferType env usr cls e
             let subs = compose s1 s2
             let tvs = List.map (applyType subs) tvs
-            return subs, TArrow (TCtor (KProduct, tvs), t1)
+            return subs, (p1, TArrow (TCtor (KProduct, tvs), t1))
         | _->
             return! failure "Unimplemented match"
         }
     | ELet (x, e1, e2) ->
         patternMatch env usr cls x e1 e2
     | EIf (cond, tr, fl) -> infer {
-        let! s1, t1 = inferType env usr cls cond
+        let! s1, (p1, t1) = inferType env usr cls cond
         let env = applyEnv s1 env
-        let! s2, t2 = inferType env usr cls tr
+        let! s2, (p2, t2) = inferType env usr cls tr
         let env = applyEnv s2 env
-        let! s3, t3 = inferType env usr cls fl
+        let! s3, (p3, t3) = inferType env usr cls fl
         let substi = composeAll [s1; s2; s3]
         let t1 = applyType substi t1
         let t2 = applyType substi t2
         let t3 = applyType substi t3
-        let! s4 = unify cls t1 tBool
-        let! s5 = unify cls t2 t3
+        let! s4 = unify t1 tBool
+        let! s5 = unify t2 t3
         let substf = composeAll [s4; s5; substi]
-        return substf, applyType substf t2
+        return substf, (p1 @ p2 @ p3, applyType substf t2)
         }
     | EOp (l, op, r) -> infer {
-        let! s1, t1 = inferType env usr cls l
-        let! s2, t2 = inferType env usr cls r
+        let! s1, (p1, t1) = inferType env usr cls l
+        let! s2, (p2, t2) = inferType env usr cls r
         let! tv = fresh
         let scheme = Map.find op opSchemes
-        let! inst = instantiate scheme
-        let! s3 = unify cls (TArrow (t1, TArrow (t2, tv))) inst
-        return composeAll [s1; s2; s3], applyType s3 tv
+        let! (p3, inst) = instantiate scheme
+        let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
+        return composeAll [s1; s2; s3], (p1 @ p2 @ p3, applyType s3 tv)
         }
     | ETuple es -> infer {
-        let! res = scanM (fun (s, _) x -> inferType (applyEnv s env) usr cls x) (Map.empty, tVoid) es
-        let subs, typs = List.unzip res
+        let! res = scanM (fun (s, _) x -> inferType (applyEnv s env) usr cls x) (Map.empty, sVoid) es
+        let subs, scs = List.unzip res
         let substf = composeAll subs
-        let typs = List.map (applyType substf) typs
-        return substf, TCtor (KProduct, typs)
+        let scs = List.map (applyScheme substf) scs
+        let ps = List.unzip scs |> fst |> List.concat
+        let typs = List.unzip scs |> snd
+        return substf, (ps, TCtor (KProduct, typs))
         }
     | EUnion (name, typs, cases, body) -> infer {
         // Sum types are special since they create types, first extend the user env with the new type
@@ -362,28 +402,29 @@ and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<S
         let! res = scanM (fun (s, _) (pat, expr) -> infer {
             let! s2, t2 = patternMatch (applyEnv s env) usr cls pat e expr
             let sub = compose s s2
-            return sub, applyType sub t2 }) (Map.empty, tVoid) bs
-        let subs, typs = List.unzip res
+            return sub, applyScheme sub t2 }) (Map.empty, sVoid) bs
+        let subs, scs = List.unzip res
         let substi = composeAll subs
         // Apply gathered substitutions so far
-        let typs = List.map (applyType substi) typs
+        let scs = List.map (applyScheme substi) scs
         // Unify every match branch
-        let uni = List.pairwise typs
-        let! uni = mapM (fun (l, r) -> unify cls l r) uni
+        let uni = List.pairwise scs
+        printfn "%A" (List.map snd scs)
+        let! uni = mapM (fun (l, r) -> unify l r) (List.map (fun (a, b) -> snd a, snd b) uni) // TODO: Sus
         // Compose all intermediate substitutions
         let substf = composeAll (substi :: uni)
-        return substf, applyType substf (List.head typs)
+        return substf, applyScheme substf (List.head scs)
         }
     | EClass (name, mems, rest) -> infer {
-        // TODO: Rename from 'this'
+        (*let cls = extend cls name ([], [])
         let nenv = List.fold (fun acc (mem, typ) ->
             extend acc mem ([], TBounded ([name], typ))) env mems
-        let ncls = extend cls name Set.empty
-        return! inferType nenv usr ncls rest
+        return! inferType nenv usr cls rest*)
+        return! failure "BLA"
         }
     | EMember (typ, name, exprs, rest) -> infer {
         // Extend the class env with the new implementor
-        let cls =
+        (*let cls =
             match lookup cls name with
             | Some set -> extend cls name (Set.add typ set)
             | None -> cls
@@ -401,20 +442,21 @@ and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<S
         if List.length etyps <> List.length atyps then
             return! failure <| sprintf "Error in typeclass instance."
         // Unify the actual and expected types gathering constraints. Don't apply these constraints
-        let! subs = mapM (fun (e, a) -> unifyInner cls e a false) (List.zip etyps atyps)
+        let! subs = mapM (fun (e, a) -> unify e a) (List.zip etyps atyps)
         let subs = composeAll subs
         // If we have inferred 'this' to be something else than what we know it should
         // be, we have an error
         match lookup subs "this" |> Option.map (applyType subs), typ with
         | Some (TVar _), _ -> return! inferType env usr cls rest
         | Some ty, typ when typ <> ty -> return! failure "Invalid typeclass implementation."
-        | _ -> return! inferType env usr cls rest
+        | _ -> return! inferType env usr cls rest*)
+        return! failure "BLO"
         }
     | ERec e -> infer {
-        let! _, t1 = inferType env usr cls e
+        let! _, (p1, t1) = inferType env usr cls e
         let! tv = fresh
-        let! s2 = unify cls (TArrow (tv, tv)) t1
-        return s2, applyType s2 tv
+        let! s2 = unify (TArrow (tv, tv)) t1
+        return s2, (p1, applyType s2 tv)
         }
 
 // Helpers to run
@@ -422,7 +464,7 @@ let inferProgramRepl typeEnv count e =
     inferType typeEnv Map.empty Map.empty e count // TODO: Include all the envs from REPL
     |> fun (ty, i) ->
         match ty with
-        | Ok (subst, ty) -> Ok (renameFresh (applyType subst ty)), i
+        | Ok (subst, ty) -> Ok (renameFresh (applyScheme subst ty)), i
         | Error a -> Error (sprintf "%s" a), i
 
 let inferProgram =
