@@ -8,7 +8,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - Full type inference. Types of expressions can be inferred without any type annotations.
 - ML-style match expressions
 - Pattern matching both in `let` and `match` constructs.
-- Polymorphism. Functions can be generic.
+- Parametric polymorphism. Functions can be generic.
 - Recursion via a fixed-point combinator named `rec`.
 - _Everything_ is an expression. Thus, an entire program is a single expression.
 - An working interpreter/REPL that also provides type information.
