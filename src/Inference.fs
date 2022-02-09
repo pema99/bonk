@@ -46,7 +46,7 @@ let rec ftvType (t: Type) : string Set =
     | TVar a -> Set.singleton a
     | TArrow (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
     | TCtor (_, args) -> args |> List.map ftvType |> List.fold Set.union Set.empty
-    | TBounded (_, ty) -> ftvType ty
+    | TBounded (ps, ty) -> Set.difference (ftvType ty) (ps |> List.map (snd >> ftvType) |> List.fold Set.union Set.empty)
 
 let applyType =
     let rec applyTypeFP (s: Substitution) (t: Type) : Type =
@@ -55,7 +55,10 @@ let applyType =
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
         | TArrow (t1, t2) -> TArrow (applyTypeFP s t1 , applyTypeFP s t2)
         | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
-        | TBounded (ks, ty) -> TBounded (ks, applyTypeFP s ty)
+        | TBounded (ps, ty) ->
+            let r = ps |> List.collect (snd >> ftvType >> Set.toList)
+            let s' = List.fold (fun acc k -> Map.remove k acc) s r
+            TBounded (ps, applyTypeFP s' ty)
     fixedPoint applyTypeFP
 
 let ftvScheme (sc: Scheme) : string Set =
@@ -100,12 +103,69 @@ let generalize (env: TypeEnv) (t: Type) : Scheme =
     (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
 
 // Typeclasses
-type ClassEnv = Map<string, Type Set>
-let memberOf (cls: ClassEnv) (t: Type) (m: string) : bool =
-    match t, lookup cls m with
-    | TVar a, _ -> true
-    | _, Some typs -> Set.contains t typs // TODO: Alpha similarity
-    | _ -> false
+let rec coerce (t1: Type) (t2: Type) : Substitution option =
+    match t1, t2 with
+    | a, b when a = b -> Some (Map.empty)
+    | TVar a, b -> Some (Map.ofList [(a, b)])
+    | TArrow (l1, r1), TArrow (l2, r2) ->
+        let s1 = coerce l1 l2
+        let s2 = coerce r1 r2
+        Option.map2 compose s1 s2
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        let z = List.zip lts rts
+        let z = List.map (fun (a, b) -> coerce a b) z
+        if not <| List.forall Option.isSome z then None
+        else
+            let z = List.choose id z
+            Some (composeAll z)
+    | _ ->
+        None
+
+// Get the superclasses of a typeclass
+let supers (cls: ClassEnv) (i: string) : string list =
+    match lookup cls i with
+    | Some (is, its) -> is
+    | None -> []
+
+// Get the subclasses (instances) of a typeclass
+let insts (cls: ClassEnv) (i: string) : Inst list =
+    match lookup cls i with
+    | Some (is, its) -> its
+    | None -> []
+
+// Given a predicate, which predicates must also hold by superclass relations?
+let rec bySuper (cls: ClassEnv) (p: Pred) : Pred list =
+    let i, t = p
+    supers cls i
+    |> List.collect (fun j -> bySuper cls (j, t))
+
+// Given a predicate, which predicates must also hold by subclass relation?
+let rec byInst (cls: ClassEnv) (p: Pred) : Pred list option =
+    let i, t = p
+    let tryInst (ps: Pred list, h) =
+        if fst h = fst p then
+            coerce (snd h) (snd p)
+            |> Option.map (fun u -> List.map (fun (j, k) -> j, applyType u k) ps)
+        else
+            None
+    insts cls i
+    |> List.map tryInst
+    |> List.tryPick id
+
+// Do the predicates ps semantically entail p? Ie: ps_1 .. ps_n |- p
+let rec entail (cls: ClassEnv) (ps: Pred list) (p: Pred) : bool =
+    List.exists (List.contains p) (List.map (bySuper cls) ps) ||
+    match byInst cls p with
+    | Some qs -> List.forall (entail cls ps) qs
+    | None -> false
+
+// Does predicate p always hold?
+let axiom (cls: ClassEnv) (p: Pred) : bool =
+    entail cls [] p
+
+// Is type 't' definitely a member of the 'klass' typeclass?
+let instOf (cls: ClassEnv) (klass: string) (t: Type) : bool =
+    axiom cls (klass, t)
 
 // Unification
 let occurs (s: string) (t: Type) : bool =
@@ -121,7 +181,7 @@ let rec unifyList (cls: ClassEnv) (t1 : Type list) (t2 : Type list) : InferM<Sub
     | _ -> return! failure "Unification failure"
     }
 
-and unifyInner (cls: ClassEnv) (t1: Type) (t2: Type) (removeThis: bool) : InferM<Substitution> = infer {
+and unify (cls: ClassEnv) (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     match t1, t2 with
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
@@ -131,21 +191,21 @@ and unifyInner (cls: ClassEnv) (t1: Type) (t2: Type) (removeThis: bool) : InferM
         return! unifyList cls lts rts
     | TBounded (ks1, t1), t2 | t2, TBounded (ks1, t1) ->
         let! res = unify cls t1 t2
-        match lookup res "this" |> Option.map (applyType res) with
-        | Some v ->
-            if List.forall (memberOf cls v) ks1 then
-                if removeThis then return Map.remove "this" res
-                else return res
-            else
-                return! failure <| sprintf "Type bound '%s' not satisfied for %A." (String.concat " + " ks1) t2
-        | _ -> return res
-    // TODO: Other bounded rules
+        let test = 
+            List.forall (fun (klass, t) ->
+                match t with
+                | TVar t ->
+                    lookup res t
+                    |> Option.map (fun nt -> instOf cls klass nt)
+                    |> Option.defaultValue false
+                | _ -> true
+                ) ks1
+        if not test then
+            return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
+        return res
+        // TODO: Do stuff. Maybe remove substitutions for this?
     | _ ->
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
-    }
-
-and unify (cls: ClassEnv) (t1: Type) (t2: Type) : InferM<Substitution> = infer {
-    return! unifyInner cls t1 t2 true
     }
 
 // Handling for user types. Map of string to type-arity of union
@@ -374,41 +434,22 @@ and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<S
         let substf = composeAll (substi :: uni)
         return substf, applyType substf (List.head typs)
         }
-    | EClass (name, mems, rest) -> infer {
-        // TODO: Rename from 'this'
+    | EClass (name, reqs, mems, rest) -> infer {
+        // TODO: Take reqs into account in the bound
         let nenv = List.fold (fun acc (mem, typ) ->
-            extend acc mem ([], TBounded ([name], typ))) env mems
-        let ncls = extend cls name Set.empty
+            extend acc mem ([], TBounded ([name, TVar "this"], typ))) env mems
+        let ncls = extend cls name (reqs, [])
         return! inferType nenv usr ncls rest
         }
-    | EMember (typ, name, exprs, rest) -> infer {
+    | EMember (blankets, pred, exprs, rest) -> infer {
         // Extend the class env with the new implementor
+        let name, typ = pred
         let cls =
             match lookup cls name with
-            | Some set -> extend cls name (Set.add typ set)
+            | Some (reqs, insts) -> extend cls name (reqs, (blankets, pred) :: insts)
             | None -> cls
-        // Calculate the types we expect each member to be
-        let etyps =
-            exprs
-            |> List.map (fun (name, ex) -> lookup env name |> Option.map snd)
-            |> List.choose id
-        // Calculate the actual types each member is inferred to
-        let! atyps =
-            exprs
-            |> mapM (fun (name, ex) -> inferType env usr cls ex)
-        let atyps = List.map snd atyps
-        // If there is a mismatch in arity, throw an error
-        if List.length etyps <> List.length atyps then
-            return! failure <| sprintf "Error in typeclass instance."
-        // Unify the actual and expected types gathering constraints. Don't apply these constraints
-        let! subs = mapM (fun (e, a) -> unifyInner cls e a false) (List.zip etyps atyps)
-        let subs = composeAll subs
-        // If we have inferred 'this' to be something else than what we know it should
-        // be, we have an error
-        match lookup subs "this" |> Option.map (applyType subs), typ with
-        | Some (TVar _), _ -> return! inferType env usr cls rest
-        | Some ty, typ when typ <> ty -> return! failure "Invalid typeclass implementation."
-        | _ -> return! inferType env usr cls rest
+        // TODO: Semantic checking
+        return! inferType env usr cls rest
         }
     | ERec e -> infer {
         let! _, t1 = inferType env usr cls e

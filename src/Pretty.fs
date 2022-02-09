@@ -50,7 +50,7 @@ let rec prettyType (t: Type) : string =
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
     | TBounded (ks, ty) ->
-        sprintf "(%s) => %s" (String.concat "," ks) (prettyType ty)
+        sprintf "(%A) => %s" (ks) (prettyType ty)
 
 let prettyTypeName (i: int) : string =
     if i < 26 then string <| 'a' + char i

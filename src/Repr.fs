@@ -41,8 +41,8 @@ and Expr =
     | ETuple of Expr list
     | EUnion of string * string list * (string * Type) list * Expr
     | EMatch of Expr * (Pat * Expr) list
-    | EClass of string * (string * Type) list * Expr // name, (fname, ftype) // TODO: Bounds
-    | EMember of Type * string  * (string * Expr) list * Expr// mtype, name, impls // TODO: Blanket impls
+    | EClass of string * string list * (string * Type) list * Expr // name, reqs, (fname, ftype)
+    | EMember of Pred list * Pred * (string * Expr) list * Expr    // blankets, pred, impls
     | ERec of Expr
 
 and Kind =
@@ -54,7 +54,12 @@ and Type =
     | TConst of string
     | TArrow of Type * Type
     | TCtor of Kind * Type list
-    | TBounded of string list * Type
+    | TBounded of Pred list * Type      // ie. (Num 'a) => 'a
+
+and Pred = (string * Type)              // ie. (Num 'a)
+and Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
+and Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
+and ClassEnv = Map<string, Class>       // Maps typeclass names to typwclass data
 
 let tInt = TConst "int"
 let tBool = TConst "bool"

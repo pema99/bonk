@@ -10,13 +10,19 @@ open Prelude
 
 let tThis = TVar "this"
 let e1 = 
-    EClass ("Add", ["add", TArrow (tThis, TArrow (tThis, tThis))],
-        EMember (tInt, "Add", ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
-            EMember (tFloat, "Add", ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
-                ETuple ([
-                    EApp (EVar "add", ELit (LFloat 2.3))
-                    EVar "add"
-                ])
+    EClass ("Add", [], ["add", TArrow (tThis, TArrow (tThis, tThis))],
+        EClass ("Sub", [], ["sub", TArrow (tThis, TArrow (tThis, tThis))],
+            EMember ([], ("Add", tInt), ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
+                EMember ([], ("Add", tFloat), ["add", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Plus, EVar "y")))],
+                    EMember (["Add", TVar "o"], ("Sub", TVar "o"), ["sub", ELam (PName "x", ELam (PName "y", EOp (EVar "x", Minus, EVar "y")))],
+                        ETuple ([
+                            //EApp (EVar "add", ELit (LFloat 2.3))
+                            EApp (EVar "sub", ELit (LInt 2))
+                            EApp (EVar "sub", ELit (LFloat 2.3))
+                            EVar "sub"
+                        ])
+                    )
+                )
             )
         )
     )
@@ -315,7 +321,7 @@ let runRepl : ReplM<unit> = repl {
             | 's' ->
                 let! (typeEnv, termEnv, _, _) = get
                 let filter = if ops.Length > 1 then ops.[1] else ""
-                let names = Map.keys typeEnv
+                let names = Map.toList typeEnv |> List.map fst
                 names
                 |> Seq.filter (fun name -> name.Contains filter)
                 |> Seq.map (fun name -> name, lookup typeEnv name, lookup termEnv name)
