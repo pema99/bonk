@@ -449,6 +449,9 @@ and inferType (env: TypeEnv) (usr: UserEnv) (cls: ClassEnv) (e: Expr) : InferM<S
             | Some (reqs, insts) -> extend cls name (reqs, (blankets, pred) :: insts)
             | None -> cls
         // TODO: Semantic checking
+        // - Check that the type of each implemented function/member matches the known type (unify)
+        // - Check that we don't infer 'this' to be be something else than the known type (unify)
+        // - Check overlapping implementations 
         return! inferType env usr cls rest
         }
     | ERec e -> infer {
