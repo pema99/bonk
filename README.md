@@ -54,6 +54,7 @@ dotnet run
 # To do (maybe, stuff I'm looking at)
 - Exhaustiveness checking for pattern matching
 - Rust-style traits/typeclasses for ad-hoc polymorphism
+- Type ascription
 
 # Fluff
 - Dependencies are cringe.
