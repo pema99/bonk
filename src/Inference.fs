@@ -13,7 +13,7 @@ open Monad
 open Pretty
 open Prelude
 
-// Schemes and environments
+// Type schemes and environments
 type Scheme = string list * Type
 type TypeEnv = Map<string, Scheme>
 
@@ -25,7 +25,9 @@ type Substitution = Map<string, Type>
 let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
 let composeAll lst = List.fold compose Map.empty lst
 
-// Inference monad is a state monad mixed with result monad
+// Inference monad is a reader and state monad transformed with a result monad
+// The reader environment contains the known typed variables. 
+// The state is the current set of substitutions as well as an integer for generatin fresh names.
 type InferM<'t> = ReaderState<TypeEnv * UserEnv, Substitution * int, 't>
 let infer = state
 let fresh : InferM<Type> = fun ((te, ue), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue), (s, c + 1))
@@ -43,7 +45,7 @@ let inUserEnv x m = local (fun (te, ue) -> te, x) m
 let withTypeEnv x sc m = local (fun (te, ue) -> extend te x sc, ue) m
 let withUserEnv x sc m = local (fun (te, ue) -> te, extend ue x sc) m
 
-// Substitution application
+// Substitution application up to fixed point
 let rec fixedPoint f s t =
     let subst = f s t
     if subst = t then subst
@@ -100,7 +102,7 @@ let generalize (t: Type) : InferM<Scheme> = infer {
     return (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
 }
 
-// Unification
+// Unification, most general unifier
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
 
@@ -126,6 +128,7 @@ and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
         return! failure <| sprintf "Failed to unify types %A and %A." t1 t2
     }
 
+// Unify two types and store the resulting substitution
 let unify (t1: Type) (t2: Type) : InferM<unit> = infer {
     let! subs = getSubstitution
     let! u = mgu (applyType subs t1) (applyType subs t2)
@@ -206,7 +209,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: Type) (poly: boo
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`.
-and patternMatch (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
+and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
     // Infer the type of the value being bound
     let! t1 = inferType e1
     // Generalize it, if it is a polytype, we don't generalize the binding
@@ -272,7 +275,7 @@ and inferTypeInner (e: Expr) : InferM<Type> =
             return! failure "Unimplemented match"
         }
     | ELet (x, e1, e2) ->
-        patternMatch x e1 e2
+        inferBinding x e1 e2
     | EIf (cond, tr, fl) -> infer {
         let! t1 = inferType cond
         let! t2 = inferType tr
@@ -330,7 +333,7 @@ and inferTypeInner (e: Expr) : InferM<Type> =
     | EMatch (e, bs) -> infer {
         // Scan over all match branches gathering constraints from pattern matching along the way
         let! typs = mapM (fun (pat, expr) -> infer {
-            return! patternMatch pat e expr }) bs
+            return! inferBinding pat e expr }) bs
         // Unify every match branch
         let uni = List.pairwise typs
         let! uni = mapM (fun (l, r) -> unify l r) uni
