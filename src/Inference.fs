@@ -215,8 +215,18 @@ and patternMatch (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
     return t3
     }
 
-// Constraint gathering
-and inferType (e: Expr) : InferM<Type> =
+// Main inference
+and inferType (e: Expr) : InferM<Type> = infer {
+    // Any time we infer a type, apply the current substitution to make
+    // sure it is as up-to-date as possible.
+    let! res = inferTypeInner e
+    let! env = getTypeEnv
+    let! subs = getSubstitution
+    do! setTypeEnv (applyEnv subs env)
+    return applyType subs res
+    }
+
+and inferTypeInner (e: Expr) : InferM<Type> =
     match e with
     | ELit (LUnit _) -> just tUnit
     | ELit (LInt _) -> just tInt
