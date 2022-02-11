@@ -64,10 +64,10 @@ let local (f: 'r -> 'r) (m: ReaderStateM<'r, 's, 't>) : ReaderStateM<'r, 's, 't>
         let res, o = get s
         match res with
         | Ok (r, s) ->
-            let a, n = m (f r, s)
+            let a, (_, n) = m (f r, s)
             match a with
-            | Ok v -> Ok v, n
-            | Error err -> Error err, n
+            | Ok v -> Ok v, (r, n)
+            | Error err -> Error err, (r, n)
         | Error err -> Error err, o
 
 
