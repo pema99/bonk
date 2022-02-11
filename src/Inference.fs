@@ -160,11 +160,11 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: Type) (poly: boo
     match pat, ty with
     // Name patterns match with anything
     | PName a, ty ->
-        let! nt = if poly then generalize ty else just ([], ty)
+        let! nt = inTypeEnv env (if poly then generalize ty else just ([], ty))
         return extend env a nt
     // Constants match with anything that matches the type
     | PConstant v, ty ->
-        let! t1 = inferType (ELit v)
+        let! t1 = inTypeEnv env (inferType (ELit v))
         do! unify ty t1
         return env
     // Tuple patterns match with same-sized tuples
@@ -186,7 +186,6 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: Type) (poly: boo
     // Union patterns match with existant unions
     | PUnion (case, pat), ty ->
         // Check if the variant constructor exists
-        let! env = getTypeEnv
         match lookup env case with
         | Some sc ->
             // Instantiate it with new fresh variables
@@ -208,20 +207,15 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: Type) (poly: boo
 
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
-// expressions `match e1 with pat -> e2`.
-and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
+// expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
+and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) (poly: bool) : InferM<Type> = infer {
     // Infer the type of the value being bound
     let! t1 = inferType e1
-    // Generalize it, if it is a polytype, we don't generalize the binding
-    let! env = getTypeEnv
-    let! q, t1 = generalize t1
-    let poly = not <| List.isEmpty q
     // Gather constraints (substitutions, bindings) from the pattern
+    let! env = getTypeEnv
     let! env = gatherPatternConstraints env pat t1 poly
     // Infer the body/rhs of the binding under the gathered constraints
-    let! t3 = inTypeEnv env (inferType e2)
-    // Apply all constraints and propagate up
-    return t3
+    return! inTypeEnv env (inferType e2)
     }
 
 // Main inference
@@ -275,7 +269,7 @@ and inferTypeInner (e: Expr) : InferM<Type> =
             return! failure "Unimplemented match"
         }
     | ELet (x, e1, e2) ->
-        inferBinding x e1 e2
+        inferBinding x e1 e2 true
     | EIf (cond, tr, fl) -> infer {
         let! t1 = inferType cond
         let! t2 = inferType tr
@@ -333,7 +327,7 @@ and inferTypeInner (e: Expr) : InferM<Type> =
     | EMatch (e, bs) -> infer {
         // Scan over all match branches gathering constraints from pattern matching along the way
         let! typs = mapM (fun (pat, expr) -> infer {
-            return! inferBinding pat e expr }) bs
+            return! inferBinding pat e expr false }) bs
         // Unify every match branch
         let uni = List.pairwise typs
         let! uni = mapM (fun (l, r) -> unify l r) uni
