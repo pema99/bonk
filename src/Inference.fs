@@ -28,7 +28,7 @@ let composeAll lst = List.fold compose Map.empty lst
 // Inference monad is a reader and state monad transformed with a result monad
 // The reader environment contains the known typed variables. 
 // The state is the current set of substitutions as well as an integer for generatin fresh names.
-type InferM<'t> = ReaderState<TypeEnv * UserEnv, Substitution * int, 't>
+type InferM<'t> = ReaderStateM<TypeEnv * UserEnv, Substitution * int, 't>
 let infer = state
 let fresh : InferM<Type> = fun ((te, ue), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue), (s, c + 1))
 

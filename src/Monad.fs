@@ -52,14 +52,14 @@ let ( >=> ) (l: 'a -> StateM<'s, 'b>) (r: 'b -> StateM<'s, 'c>) (v: 'a) : StateM
     return rv
 }
 
-type ReaderState<'r, 's, 't> = StateM<'r * 's, 't>
-let ask : ReaderState<'r, 's, 'r> =
+type ReaderStateM<'r, 's, 't> = StateM<'r * 's, 't>
+let ask : ReaderStateM<'r, 's, 'r> =
     fun s ->
         let a, n = get s
         match a with
         | Ok v -> Ok (fst v), n
         | Error err -> Error err, n
-let local (f: 'r -> 'r) (m: ReaderState<'r, 's, 't>) : ReaderState<'r, 's, 't> =
+let local (f: 'r -> 'r) (m: ReaderStateM<'r, 's, 't>) : ReaderStateM<'r, 's, 't> =
     fun s ->
         let res, o = get s
         match res with
