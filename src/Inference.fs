@@ -26,20 +26,22 @@ let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
 let composeAll lst = List.fold compose Map.empty lst
 
 // Inference monad is a state monad mixed with result monad
-type InferM<'t> = StateM<(TypeEnv * UserEnv * Substitution * int), 't>
+type InferM<'t> = ReaderState<TypeEnv * UserEnv, Substitution * int, 't>
 let infer = state
-let fresh : InferM<Type> = fun (te, ue, s, c) -> Ok (TVar (sprintf "_t%A" c)), (te, ue, s, c + 1)
+let fresh : InferM<Type> = fun ((te, ue), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue), (s, c + 1))
 
 // Environment helpers
 let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env
 let remove env x = Map.remove x env
-let getTypeEnv = fun (a, b, c, d) -> Ok a, (a, b, c, d)
-let getUserEnv = fun (a, b, c, d) -> Ok b, (a, b, c, d)
-let getSubstitution = fun (a, b, c, d) -> Ok c, (a, b, c, d)
-let setTypeEnv x = fun (a, b, c, d) -> Ok (), (x, b, c, d) 
-let setUserEnv x = fun (a, b, c, d) -> Ok (), (a, x, c, d) 
-let setSubstitution x = fun (a, b, c, d) -> Ok (), (a, b, x, d) 
+let getSubstitution = fun ((a, b), (c, d)) -> Ok c, ((a, b), (c, d))
+let setSubstitution x = fun ((a, b), (c, d)) -> Ok (), ((a, b), (x, d)) 
+let getTypeEnv = fun ((a, b), (c, d)) -> Ok a, ((a, b), (c, d))
+let getUserEnv = fun ((a, b), (c, d)) -> Ok b, ((a, b), (c, d))
+let inTypeEnv x m = local (fun (te, ue) -> x, ue) m
+let inUserEnv x m = local (fun (te, ue) -> te, x) m
+let withTypeEnv x sc m = local (fun (te, ue) -> extend te x sc, ue) m
+let withUserEnv x sc m = local (fun (te, ue) -> te, extend ue x sc) m
 
 // Substitution application
 let rec fixedPoint f s t =
@@ -93,8 +95,10 @@ let instantiate (sc: Scheme) : InferM<Type> = infer {
 }
 
 // Generalize a monotype to a polytype
-let generalize (env: TypeEnv) (t: Type) : Scheme =
-    (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
+let generalize (t: Type) : InferM<Scheme> = infer {
+    let! env = getTypeEnv
+    return (Set.toList <| Set.difference (ftvType t) (ftvEnv env), t)
+}
 
 // Unification
 let occurs (s: string) (t: Type) : bool =
@@ -149,32 +153,33 @@ let rec checkUserTypeUsage (usr: UserEnv) (name: string, arity: int) : bool =
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
-let rec gatherPatternConstraints (pat: Pat) (ty: Type) (poly: bool) : InferM<unit> = infer {
+let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: Type) (poly: bool) : InferM<TypeEnv> = infer {
     match pat, ty with
     // Name patterns match with anything
     | PName a, ty ->
-        let! env = getTypeEnv
-        let nt = if poly then generalize env ty else ([], ty)
-        let env = extend env a nt
-        do! setTypeEnv env
+        let! nt = if poly then generalize ty else just ([], ty)
+        return extend env a nt
     // Constants match with anything that matches the type
     | PConstant v, ty ->
         let! t1 = inferType (ELit v)
         do! unify ty t1
+        return env
     // Tuple patterns match with same-sized tuples
     | PTuple pats, TCtor (KProduct, typs) when List.length pats = List.length typs ->
-        do! mapM_ (fun (p, ty) -> infer {
-                do! gatherPatternConstraints p ty poly
-            }) (List.zip pats typs)
+        let! env = foldM (fun env (p, ty) -> infer {
+                        return! gatherPatternConstraints env p ty poly
+                    }) env (List.zip pats typs)
+        return env
     // Tuple patterns match with type variables if types match
     | PTuple pats, TVar b ->
         let! tvs = mapM (fun _ -> fresh) pats
-        do! mapM_ (fun (p, ty) -> infer {
-                do! gatherPatternConstraints p ty poly
-            }) (List.zip pats tvs)
+        let! env = foldM (fun env (p, ty) -> infer {
+                        return! gatherPatternConstraints env p ty poly
+                    }) env (List.zip pats tvs)
         let surf = Map.ofList [b, (TCtor (KProduct, tvs))]
         let! subs = getSubstitution
         do! setSubstitution (compose subs surf)
+        return env
     // Union patterns match with existant unions
     | PUnion (case, pat), ty ->
         // Check if the variant constructor exists
@@ -187,10 +192,11 @@ let rec gatherPatternConstraints (pat: Pat) (ty: Type) (poly: bool) : InferM<uni
                 // Make a fresh type variable for the pattern being bound
                 let! tv = fresh
                 // Gather constrains from the inner pattern matched with the fresh type variable
-                do! gatherPatternConstraints pat tv poly
+                let! env = gatherPatternConstraints env pat tv poly
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
                 do! unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
+                return env
             | _ -> return! failure <| sprintf "Invalid union variant %s." case
         | _ -> return! failure <| sprintf "Invalid union variant %s." case
     | a, b -> return! failure <| sprintf "Could not match pattern %A with type %A" a b
@@ -205,25 +211,27 @@ and patternMatch (pat: Pat) (e1: Expr) (e2: Expr) : InferM<Type> = infer {
     let! t1 = inferType e1
     // Generalize it, if it is a polytype, we don't generalize the binding
     let! env = getTypeEnv
-    let q, t1 = generalize env t1
+    let! q, t1 = generalize t1
     let poly = not <| List.isEmpty q
     // Gather constraints (substitutions, bindings) from the pattern
-    do! gatherPatternConstraints pat t1 poly
+    let! env = gatherPatternConstraints env pat t1 poly
     // Infer the body/rhs of the binding under the gathered constraints
-    let! t3 = inferType e2
+    let! t3 = inTypeEnv env (inferType e2)
     // Apply all constraints and propagate up
     return t3
     }
 
 // Main inference
 and inferType (e: Expr) : InferM<Type> = infer {
-    // Any time we infer a type, apply the current substitution to make
-    // sure it is as up-to-date as possible.
-    let! res = inferTypeInner e
+    // Before we infer a type, apply the current substitution to the environment
     let! env = getTypeEnv
-    let! subs = getSubstitution
-    do! setTypeEnv (applyEnv subs env)
-    return applyType subs res
+    let! subs1 = getSubstitution
+    // Next, infer the type in the new environment
+    let! res = inTypeEnv (applyEnv subs1 env) (inferTypeInner e)
+    // After that, collect any new substitutions from the previous inference
+    let! subs2 = getSubstitution
+    // And apply those along with the initial ones to inferred type
+    return applyType (compose subs1 subs2) res
     }
 
 and inferTypeInner (e: Expr) : InferM<Type> =
@@ -252,13 +260,13 @@ and inferTypeInner (e: Expr) : InferM<Type> =
         | PName x ->
             let! tv = fresh
             let! env = getTypeEnv
-            do! setTypeEnv (extend env x ([], tv))
-            let! t1 = inferType e
+            let! t1 = withTypeEnv x ([], tv) (inferType e)
             return TArrow (tv, t1)
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
-            do! gatherPatternConstraints (PTuple x) (TCtor (KProduct, tvs)) false
-            let! t1 = inferType e
+            let! env = getTypeEnv
+            let! env = gatherPatternConstraints env (PTuple x) (TCtor (KProduct, tvs)) false
+            let! t1 = inTypeEnv env (inferType e)
             return TArrow (TCtor (KProduct, tvs), t1)
         | _->
             return! failure "Unimplemented match"
@@ -290,7 +298,6 @@ and inferTypeInner (e: Expr) : InferM<Type> =
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
         let nusr = extend usr name (List.length typs)
-        do! setUserEnv nusr
         // Gather all user type usages
         let usages = List.map gatherUserTypesUsages (List.map snd cases)
         let usages = List.fold Set.union Set.empty usages
@@ -313,11 +320,12 @@ and inferTypeInner (e: Expr) : InferM<Type> =
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
         let! env = getTypeEnv
-        let nenv = List.fold (fun acc (case, typ) ->
-            extend acc case (generalize acc (TArrow (typ, ret)))) env cases 
-        do! setTypeEnv nenv
+        let! nenv = foldM (fun acc (case, typ) -> infer {
+                            let! sc = generalize (TArrow (typ, ret))
+                            return extend acc case sc
+                            }) env cases 
         // Finally, infer the resulting type in the new environment
-        return! inferType body
+        return! inTypeEnv nenv (inUserEnv nusr (inferType body))
         }
     | EMatch (e, bs) -> infer {
         // Scan over all match branches gathering constraints from pattern matching along the way
@@ -338,8 +346,8 @@ and inferTypeInner (e: Expr) : InferM<Type> =
 
 // Helpers to run
 let inferProgramRepl typeEnv count e =
-    inferType e (typeEnv, Map.empty, Map.empty, count)
-    |> fun (ty, (a,b,c,i)) ->
+    inferType e ((typeEnv, Map.empty), (Map.empty, count))
+    |> fun (ty, ((a,b),(c,i))) ->
         match ty with
         | Ok ty -> Ok (renameFresh (applyType c ty)), i
         | Error a -> Error (sprintf "%s" a), i

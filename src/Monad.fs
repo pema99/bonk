@@ -33,11 +33,16 @@ type StateBuilder() =
             else (Ok (), s)
         
 let state = StateBuilder()
-
 let just = state.Return
 let failure err = fun s -> Error err, s
 let set v : StateM<'a, unit> = fun _ -> (Ok (), v)
 let get : StateM<'a, 'a> = fun s -> (Ok s, s)
+let fmap f m =
+    fun s ->
+        let a, n = m s
+        match a with
+        | Ok v -> Ok (f v), n
+        | Error err -> Error err, n
 
 let ( >>= ) a b = state.Bind(a, b)
 let ( >>. ) a b = state.Combine(a, b)
@@ -46,6 +51,25 @@ let ( >=> ) (l: 'a -> StateM<'s, 'b>) (r: 'b -> StateM<'s, 'c>) (v: 'a) : StateM
     let! rv = r lv
     return rv
 }
+
+type ReaderState<'r, 's, 't> = StateM<'r * 's, 't>
+let ask : ReaderState<'r, 's, 'r> =
+    fun s ->
+        let a, n = get s
+        match a with
+        | Ok v -> Ok (fst v), n
+        | Error err -> Error err, n
+let local (f: 'r -> 'r) (m: ReaderState<'r, 's, 't>) : ReaderState<'r, 's, 't> =
+    fun s ->
+        let res, o = get s
+        match res with
+        | Ok (r, s) ->
+            let a, n = m (f r, s)
+            match a with
+            | Ok v -> Ok v, n
+            | Error err -> Error err, n
+        | Error err -> Error err, o
+
 
 let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> = state {
     match t with
