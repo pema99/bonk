@@ -39,6 +39,14 @@ let failure err = fun s -> Error err, s
 let set v : StateM<'a, unit> = fun _ -> (Ok (), v)
 let get : StateM<'a, 'a> = fun s -> (Ok s, s)
 
+let ( >>= ) a b = state.Bind(a, b)
+let ( >>. ) a b = state.Combine(a, b)
+let ( >=> ) (l: 'a -> StateM<'s, 'b>) (r: 'b -> StateM<'s, 'c>) (v: 'a) : StateM<'s, 'c> = state {
+    let! lv = l v
+    let! rv = r lv
+    return rv
+}
+
 let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> = state {
     match t with
     | h :: t ->
@@ -47,6 +55,8 @@ let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> = stat
         return v :: next
     | _ -> return []
 }
+let mapM_ f t = mapM f t >>. just ()
+
 let rec foldM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a> = state {
     match t with
     | h :: t ->
@@ -54,6 +64,8 @@ let rec foldM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s
         return! foldM f v t
     | _ -> return acc
 }
+let foldM_ f acc t = foldM f acc t >>. just ()
+
 let rec scanM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a list> = state {
     match t with
     | h :: t ->
@@ -62,3 +74,4 @@ let rec scanM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s
         return v :: next 
     | _ -> return []
 }
+let scanM_ f acc t = scanM f acc t >>. just ()
