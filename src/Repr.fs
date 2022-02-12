@@ -54,6 +54,13 @@ and Type =
     | TArrow of Type * Type
     | TCtor of Kind * Type list
 
+type Pred = (string * Type)              // ie. (Num 'a)
+type Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
+type Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
+type ClassEnv = Map<string, Class>       // Maps typeclass names to typwclass data
+type QualType = (Pred list * Type)
+type Scheme = string list * QualType
+
 let tInt = TConst "int"
 let tBool = TConst "bool"
 let tFloat = TConst "float"

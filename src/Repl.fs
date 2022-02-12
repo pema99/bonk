@@ -166,14 +166,16 @@ let setTermEnv env  = setEnv (fun (a, _, c, d) -> (a, env, c, d))
 let setUserEnv env  = setEnv (fun (a, b, _, d) -> (a, b, env, d)) 
 let setFreshCount i = setEnv (fun (a, b, c, _) -> (a, b, c, i)) 
 
-let rec extendTypeEnv pat typ = repl {
+let rec extendTypeEnv pat (typ: QualType) = repl {
     let! (typeEnv, _, _, _) = get
     match pat, typ with
     | PName a, typ ->
-        do! setTypeEnv (extend typeEnv a (ftvType typ |> Set.toList, typ))
+        do! setTypeEnv (extend typeEnv a (ftvQualType typ |> Set.toList, typ)) // TODO
         return true
-    | PTuple pats, TCtor (KProduct, typs) ->
-        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats typs)
+    | PTuple pats, (ps, TCtor (KProduct, typs)) ->
+        let rep = List.replicate (List.length typs) ps
+        let packed = List.zip rep typs
+        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats packed)
         return true
     | _ ->
         return false
@@ -207,7 +209,7 @@ let rec handleDecl silent decl = repl {
     | DExpr expr ->
         match! handleExpr expr with
         | Ok (typ, res) ->
-            let typ = typ |> renameFresh |> prettyType
+            let typ = typ |> renameFreshQualType |> prettyQualType
             if not silent then
                 printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
         | Error err -> printfn "%s" err
@@ -215,7 +217,7 @@ let rec handleDecl silent decl = repl {
         let prettyName = prettyPattern pat
         match! handleExpr expr with
         | Ok (typ, res) ->
-            let ptyp = typ |> renameFresh |> prettyType
+            let ptyp = typ |> renameFreshQualType |> prettyQualType
             let! s1 = extendTypeEnv pat typ
             let! s2 = extendTermEnv pat res
             if not silent then
@@ -288,7 +290,7 @@ let runRepl : ReplM<unit> = repl {
             | 't' when ops.Length > 1 -> 
                 let! (typeEnv, _, _, _) = get
                 match lookup typeEnv (ops.[1]) with
-                | Some (_, ty) -> printColor <| sprintf "$w%s : $b%s" (ops.[1]) (prettyType ty)
+                | Some (_, ty) -> printColor <| sprintf "$w%s : $b%s" (ops.[1]) (prettyQualType (renameFreshQualType ty))
                 | _ -> printfn "Invalid identifier!"
             | 'f' when ops.Length > 1 ->
                 do! runExpr (System.IO.File.ReadAllText ops.[1])
@@ -304,7 +306,7 @@ let runRepl : ReplM<unit> = repl {
                 |> Seq.iter (fun (name, ty, te) ->
                     match ty, te with
                     | Some (_, ty), Some te ->
-                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyType ty) (prettyValue te)
+                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyQualType (renameFreshQualType ty)) (prettyValue te)
                     | _ -> ())
             | 'q' ->
                 System.Environment.Exit 0

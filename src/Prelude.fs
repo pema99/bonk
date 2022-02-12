@@ -3,20 +3,20 @@ module Prelude
 open Repr
 
 // Built in operators
-let opSchemes: Map<BinOp, (string list * Type)> = Map.ofList [
-    Plus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Minus, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Star, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Slash, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Modulo, (["a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a")))
-    Equal, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    NotEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    GreaterEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    LessEq, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Greater, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    Less, (["a"], TArrow (TVar "a", TArrow (TVar "a", tBool)))
-    And, ([], TArrow (tBool, TArrow (tBool, tBool)))
-    Or, ([], TArrow (tBool, TArrow (tBool, tBool)))
+let opSchemes: Map<BinOp, Scheme> = Map.ofList [
+    Plus,       (["a"], (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a"))))
+    Minus,      (["a"], (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a"))))
+    Star,       (["a"], (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a"))))
+    Slash,      (["a"], (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a"))))
+    Modulo,     (["a"], (["Num", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", TVar "a"))))
+    Equal,      (["a"], (["Eq", TVar "a"],  TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    NotEq,      (["a"], (["Eq", TVar "a"],  TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    GreaterEq,  (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    LessEq,     (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    Greater,    (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    Less,       (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
+    And,        ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
+    Or,         ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
     ]
 
 // Instrinsics
@@ -109,30 +109,30 @@ let mathOp2 f v =
     | _ -> None
 
 // TODO: Safe wrappers
-let funSchemes: Map<string, (string list * Type)> = Map.ofList [
-    "lengthString", ([], TArrow (tString, tInt))
-    "indexString",  ([], TArrow (tString, TArrow (tInt, tChar)))
-    "substring",    ([], TArrow (tString, TArrow (tInt, TArrow (tInt, tString))))
-    "print",        ([], TArrow (tString, tUnit))
-    "read",         ([], TArrow (tUnit, tString))
-    "toFloat",      (["a"], TArrow (TVar "a", tFloat)) 
-    "toString",     (["a"], TArrow (TVar "a", tString)) 
-    "toBool",       (["a"], TArrow (TVar "a", tBool)) 
-    "toChar",       (["a"], TArrow (TVar "a", tChar)) 
-    "toInt",        (["a"], TArrow (TVar "a", tInt))
-    "sqrt",         ([], TArrow (tFloat, tFloat))
-    "sin",          ([], TArrow (tFloat, tFloat))
-    "cos",          ([], TArrow (tFloat, tFloat))
-    "tan",          ([], TArrow (tFloat, tFloat))
-    "asin",         ([], TArrow (tFloat, tFloat))
-    "acos",         ([], TArrow (tFloat, tFloat))
-    "atan",         ([], TArrow (tFloat, tFloat))
-    "atan2",        ([], TArrow (tFloat, TArrow (tFloat, tFloat)))
-    "exp",          ([], TArrow (tFloat, tFloat))
-    "pow",          ([], TArrow (tFloat, TArrow (tFloat, tFloat)))
-    "ln",           ([], TArrow (tFloat, tFloat))
-    "floor",        ([], TArrow (tFloat, tFloat))
-    "ceil",         ([], TArrow (tFloat, tFloat))
+let funSchemes: Map<string, Scheme> = Map.ofList [
+    "lengthString", ([],    ([], TArrow (tString, tInt)))
+    "indexString",  ([],    ([], TArrow (tString, TArrow (tInt, tChar))))
+    "substring",    ([],    ([], TArrow (tString, TArrow (tInt, TArrow (tInt, tString)))))
+    "print",        ([],    ([], TArrow (tString, tUnit)))
+    "read",         ([],    ([], TArrow (tUnit, tString)))
+    "toFloat",      (["a"], (["ToFloat", TVar "a"], TArrow (TVar "a", tFloat)) )
+    "toString",     (["a"], (["ToString", TVar "a"], TArrow (TVar "a", tString)) )
+    "toBool",       (["a"], (["ToBool", TVar "a"], TArrow (TVar "a", tBool)) )
+    "toChar",       (["a"], (["ToChar", TVar "a"], TArrow (TVar "a", tChar)) )
+    "toInt",        (["a"], (["ToInt", TVar "a"], TArrow (TVar "a", tInt)))
+    "sqrt",         ([],    ([], TArrow (tFloat, tFloat)))
+    "sin",          ([],    ([], TArrow (tFloat, tFloat)))
+    "cos",          ([],    ([], TArrow (tFloat, tFloat)))
+    "tan",          ([],    ([], TArrow (tFloat, tFloat)))
+    "asin",         ([],    ([], TArrow (tFloat, tFloat)))
+    "acos",         ([],    ([], TArrow (tFloat, tFloat)))
+    "atan",         ([],    ([], TArrow (tFloat, tFloat)))
+    "atan2",        ([],    ([], TArrow (tFloat, TArrow (tFloat, tFloat))))
+    "exp",          ([],    ([], TArrow (tFloat, tFloat)))
+    "pow",          ([],    ([], TArrow (tFloat, TArrow (tFloat, tFloat))))
+    "ln",           ([],    ([], TArrow (tFloat, tFloat)))
+    "floor",        ([],    ([], TArrow (tFloat, tFloat)))
+    "ceil",         ([],    ([], TArrow (tFloat, tFloat)))
 ]
 
 // Name, (impl, arity)
@@ -160,4 +160,51 @@ let funImpls = Map.ofList [
     "ln",           (mathOp1 log,   1)
     "floor",        (mathOp1 floor, 1)
     "ceil",         (mathOp1 ceil,  1)
+]
+
+let classes: ClassEnv = Map.ofList [
+    "Num", ([], [
+        [], ("Num", tInt)
+        [], ("Num", tFloat)
+        [], ("Num", tChar)
+        [], ("Num", tString) // TODO: This is wrong!!
+    ])
+    "Eq", ([], [
+        [], ("Eq", tInt)
+        [], ("Eq", tBool)
+        [], ("Eq", tFloat)
+        [], ("Eq", tString)
+        [], ("Eq", tChar)
+        [], ("Eq", tUnit)
+    ])
+    "Ord", (["Eq"], [
+        [], ("Ord", tInt)
+        [], ("Ord", tFloat)
+        [], ("Ord", tChar)
+    ])
+    "ToString", ([], [
+        [], ("ToString", tInt)
+        [], ("ToString", tBool)
+        [], ("ToString", tFloat)
+        [], ("ToString", tChar)
+        [], ("ToString", tUnit)
+        [], ("ToString", tString)
+    ])
+    "ToFloat", ([], [
+        [], ("ToFloat", tInt)
+        [], ("ToFloat", tString)
+        [], ("ToFloat", tChar)
+    ])
+    "ToBool", ([], [
+        [], ("ToBool", tString)
+    ])
+    "ToChar", ([], [
+        [], ("ToChar", tInt)
+        [], ("ToChar", tString)
+    ])
+    "ToInt", ([], [
+        [], ("ToInt", tFloat)
+        [], ("ToInt", tString)
+        [], ("ToInt", tChar)
+    ])
 ]
