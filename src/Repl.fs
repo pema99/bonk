@@ -170,7 +170,7 @@ let rec extendTypeEnv pat (typ: QualType) = repl {
     let! (typeEnv, _, _, _) = get
     match pat, typ with
     | PName a, typ ->
-        do! setTypeEnv (extend typeEnv a (ftvQualType typ |> Set.toList, typ)) // TODO
+        do! setTypeEnv (extend typeEnv a (ftvQualType typ |> Set.toList, typ))
         return true
     | PTuple pats, (ps, TCtor (KProduct, typs)) ->
         let rep = List.replicate (List.length typs) ps
