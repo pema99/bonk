@@ -44,6 +44,8 @@ and Expr =
     | ETuple of Expr list
     | EUnion of string * string list * (string * Type) list * Expr
     | EMatch of Expr * (Pat * Expr) list
+    | EClass of string * string list * (string * Type) list * Expr // name, reqs, (fname, ftype)
+    | EMember of Pred list * Pred * (string * Expr) list * Expr    // blankets, pred, impls
     | ERec of Expr
 
 // Kinds of type constructors
@@ -60,10 +62,10 @@ and Type =
     | TCtor of Kind * Type list
 
 // Type predicates, used to handle typeclasses
-type Pred = (string * Type)              // ie. (Num 'a)
-type Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
-type Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
-type QualType = (Pred list * Type)
+and Pred = (string * Type)              // ie. (Num 'a)
+and Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
+and Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
+and QualType = (Pred list * Type)
 
 // Type schemes for polytypes
 type Scheme = string list * QualType

@@ -62,7 +62,8 @@ let reserved = Set.ofList [
     "if"; "then"; "else"; "fn"
     "rec"; "sum"; "match"; "with"
     "int"; "bool"; "float"; "string";
-    "void"; "unit"
+    "void"; "unit"; "class"; "this"
+    "of"; "member"
     ]
 
 let notKeywordP : Com<string, char> =
@@ -212,6 +213,7 @@ let typeVarP =
 let primTypeP =
     (typeVarP |>> TVar)
     <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TConst)
+    <|> (keywordP "this" *> just (TVar "this"))
 
 let typeTermP =
     (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
@@ -225,9 +227,22 @@ let productP =
     |> attempt
 
 let arrowP =
-    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
+    chainR1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
 
 typePImpl := whitespacedP arrowP
+
+let classDeclP = // TODO: Requirements
+    (keywordP "class" *> notKeywordP <* one '=')
+    <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
+    <* keywordP "in" <+> exprP
+    |>> (fun ((a, b), c) -> EClass (a, [], b, c) )
+
+let classImplP = // TODO: Blanket impls
+    (keywordP "member" *> typeP <* keywordP "of")
+    <+> (notKeywordP <* one '=')
+    <+> (sepBy1 (notKeywordP <* (one '=') <+> exprP) (one '|'))
+    <* keywordP "in" <+> exprP
+    |>> (fun ((a,b),c) -> EMember ([],flip a,b,c))
 
 let sumDeclP =
     (keywordP "sum" *> notKeywordP
@@ -236,7 +251,7 @@ let sumDeclP =
     <* keywordP "in" <+> exprP
     |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
 
-exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
+exprPImpl := whitespacedP (sumDeclP <|> classDeclP <|> classImplP <|> boolOpP)
 
 let removeComments (txt: string) =
     txt.Split('\n')

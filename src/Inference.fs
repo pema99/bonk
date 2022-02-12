@@ -475,6 +475,28 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
         // Compose all intermediate substitutions
         return (List.concat ps, List.head typs)
         }
+    | EClass (name, reqs, mems, rest) -> infer {
+        let! env = getTypeEnv
+        let! cls = getClassEnv
+        let env = List.fold (fun acc (mem, typ) ->
+            extend acc mem (["this"], ([name, TVar "this"], typ))) env mems
+        let cls = extend cls name (reqs, [])
+        return! inClassEnv cls (inTypeEnv env (inferType rest))
+        }
+    | EMember (blankets, pred, exprs, rest) -> infer {
+        // Extend the class env with the new implementor
+        let name, typ = pred
+        let! cls = getClassEnv
+        let cls =
+            match lookup cls name with
+            | Some (reqs, insts) -> extend cls name (reqs, (blankets, pred) :: insts)
+            | None -> cls
+        // TODO: Semantic checking
+        // - Check that the type of each implemented function/member matches the known type (unify)
+        // - Check that we don't infer 'this' to be be something else than the known type (unify)
+        // - Check overlapping implementations 
+        return! inClassEnv cls (inferType rest)
+        }
     | ERec e -> infer {
         let! (p1, t1) = inferType e
         let! tv = fresh
