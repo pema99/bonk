@@ -1,6 +1,6 @@
 module Repr
 
-// AST and types
+// Binary operators
 type BinOp =
     | Plus
     | Minus
@@ -16,12 +16,14 @@ type BinOp =
     | And
     | Or
 
+// Patterns
 type Pat =
     | PName of string
     | PTuple of Pat list
     | PUnion of string * Pat
     | PConstant of Lit
 
+// Literals
 and Lit =
     | LFloat of float
     | LString of string
@@ -30,6 +32,7 @@ and Lit =
     | LChar of char
     | LUnit
 
+// Expression AST
 and Expr =
     | EVar of string
     | EApp of Expr * Expr
@@ -43,24 +46,34 @@ and Expr =
     | EMatch of Expr * (Pat * Expr) list
     | ERec of Expr
 
+// Kinds of type constructors
 and Kind =
     | KSum of string
     | KProduct
     | KConst of string 
 
+// Concrete types
 and Type =
     | TVar of string
     | TConst of string
     | TArrow of Type * Type
     | TCtor of Kind * Type list
 
+// Type predicates, used to handle typeclasses
 type Pred = (string * Type)              // ie. (Num 'a)
 type Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
 type Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
-type ClassEnv = Map<string, Class>       // Maps typeclass names to typwclass data
 type QualType = (Pred list * Type)
+
+// Type schemes for polytypes
 type Scheme = string list * QualType
 
+// Different kinds of environment
+type ClassEnv = Map<string, Class> // name -> typeclass data
+type TypeEnv = Map<string, Scheme> // name -> scheme
+type UserEnv = Map<string, int>    // name -> arity
+
+// Primitive types
 let tInt = TConst "int"
 let tBool = TConst "bool"
 let tFloat = TConst "float"

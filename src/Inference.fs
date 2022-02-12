@@ -13,12 +13,6 @@ open Monad
 open Pretty
 open Prelude
 
-// Type schemes and environments
-type TypeEnv = Map<string, Scheme>
-
-// Handling for user types. Map of string to type-arity of union
-type UserEnv = Map<string, int>
-
 // Substitutions
 type Substitution = Map<string, Type>
 let compose s1 s2 = Map.fold (fun acc k v -> Map.add k v acc) s1 s2
@@ -27,22 +21,25 @@ let composeAll lst = List.fold compose Map.empty lst
 // Inference monad is a reader and state monad transformed with a result monad
 // The reader environment contains the known typed variables. 
 // The state is the current set of substitutions as well as an integer for generatin fresh names.
-type InferM<'t> = ReaderStateM<TypeEnv * UserEnv, Substitution * int, 't>
+type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv, Substitution * int, 't>
 let infer = state
-let fresh : InferM<Type> = fun ((te, ue), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue), (s, c + 1))
+let fresh : InferM<Type> = fun ((te, ue, ce), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce), (s, c + 1))
 
 // Environment helpers
 let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env
 let remove env x = Map.remove x env
-let getSubstitution = fun ((a, b), (c, d)) -> Ok c, ((a, b), (c, d))
-let setSubstitution x = fun ((a, b), (c, d)) -> Ok (), ((a, b), (x, d)) 
-let getTypeEnv = fun ((a, b), (c, d)) -> Ok a, ((a, b), (c, d))
-let getUserEnv = fun ((a, b), (c, d)) -> Ok b, ((a, b), (c, d))
-let inTypeEnv x m = local (fun (te, ue) -> x, ue) m
-let inUserEnv x m = local (fun (te, ue) -> te, x) m
-let withTypeEnv x sc m = local (fun (te, ue) -> extend te x sc, ue) m
-let withUserEnv x sc m = local (fun (te, ue) -> te, extend ue x sc) m
+let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
+let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d)) 
+let getTypeEnv = fun ((a, b, c), s) -> Ok a, ((a, b, c), s)
+let getUserEnv = fun ((a, b, c), s) -> Ok b, ((a, b, c), s)
+let getClassEnv = fun ((a, b, c), s) -> Ok c, ((a, b, c), s)
+let inTypeEnv x m = local (fun (te, ue, ce) -> x, ue, ce) m
+let inUserEnv x m = local (fun (te, ue, ce) -> te, x, ce) m
+let inClassEnv x m = local (fun (te, ue, ce) -> te, ue, x) m
+let withTypeEnv x sc m = local (fun (te, ue, ce) -> extend te x sc, ue, ce) m
+let withUserEnv x sc m = local (fun (te, ue, ce) -> te, extend ue x sc, ce) m
+let withClassEnv x sc m = local (fun (te, ue, ce) -> te, ue, extend ce x sc) m
 
 // Substitution application up to fixed point
 let rec fixedPoint f s t =
@@ -115,7 +112,8 @@ let generalize (t: Type) : InferM<Scheme> = infer {
 let toScheme (t: Type) : Scheme =
     ([], ([], t))
 
-// Typeclasses
+// Type coercien is like unification but directional. Try to find a substitution that turns
+// type t1 into type t2 when applied.
 let rec coerce (t1: Type) (t2: Type) : Substitution option =
     match t1, t2 with
     | a, b when a = b -> Some (Map.empty)
@@ -135,25 +133,30 @@ let rec coerce (t1: Type) (t2: Type) : Substitution option =
         None
 
 // Get the superclasses of a typeclass
-let supers (cls: ClassEnv) (i: string) : string list =
+let supers (i: string) : InferM<string list> = infer {
+    let! cls = getClassEnv
     match lookup cls i with
-    | Some (is, its) -> is
-    | None -> []
+    | Some (is, its) -> return is
+    | None -> return []
+    }
 
 // Get the subclasses (instances) of a typeclass
-let insts (cls: ClassEnv) (i: string) : Inst list =
+let insts (i: string) : InferM<Inst list> = infer {
+    let! cls = getClassEnv
     match lookup cls i with
-    | Some (is, its) -> its
-    | None -> []
+    | Some (is, its) -> return its
+    | None -> return []
+    }
 
 // Given a predicate, which predicates must also hold by superclass relations?
-let rec bySuper (cls: ClassEnv) (p: Pred) : Pred list =
+let rec bySuper (p: Pred) : InferM<Pred list> = infer {
     let i, t = p
-    supers cls i
-    |> List.collect (fun j -> bySuper cls (j, t))
+    let! res = (supers i) >>= mapM (fun j -> bySuper (j, t))
+    return List.concat res
+    }
 
 // Given a predicate, which predicates must also hold by subclass relation?
-let rec byInst (cls: ClassEnv) (p: Pred) : Pred list option =
+let rec byInst (p: Pred) : InferM<Pred list option> = infer {
     let i, t = p
     let tryInst (ps: Pred list, h) =
         if fst h = fst p then
@@ -161,24 +164,32 @@ let rec byInst (cls: ClassEnv) (p: Pred) : Pred list option =
             |> Option.map (fun u -> List.map (fun (j, k) -> j, applyType u k) ps)
         else
             None
-    insts cls i
-    |> List.map tryInst
-    |> List.tryPick id
+    let! res = insts i
+    return
+        res
+        |> List.map tryInst
+        |> List.tryPick id
+    }
 
 // Do the predicates ps semantically entail p? Ie: ps_1 .. ps_n |- p
-let rec entail (cls: ClassEnv) (ps: Pred list) (p: Pred) : bool =
-    List.exists (List.contains p) (List.map (bySuper cls) ps) ||
-    match byInst cls p with
-    | Some qs -> List.forall (entail cls ps) qs
-    | None -> false
+let rec entail (ps: Pred list) (p: Pred) : InferM<bool> = infer {
+    let! up = mapM bySuper ps
+    let byUp = List.exists (List.contains p) up
+    match! byInst p with
+    | Some qs ->
+        let! down = mapM (entail ps) qs
+        return byUp || List.forall id down
+    | None ->
+        return byUp
+    }
 
 // Does predicate p always hold?
-let axiom (cls: ClassEnv) (p: Pred) : bool =
-    entail cls [] p
+let axiom (p: Pred) : InferM<bool> =
+    entail [] p
 
 // Is type 't' definitely a member of the 'klass' typeclass?
-let instOf (cls: ClassEnv) (klass: string) (t: Type) : bool =
-    axiom cls (klass, t)
+let instOf (klass: string) (t: Type) : InferM<bool> =
+    axiom (klass, t)
 
 // Is predicate in head normal form?
 let isHNF (p: Pred) : bool =
@@ -188,33 +199,40 @@ let isHNF (p: Pred) : bool =
         | TConst _ -> false
         | TArrow (l, r) -> false
         | TCtor (_, typs) -> false
-    cont (snd p)
-    
-let rec toHNFs (cls: ClassEnv) (ps: Pred list) : InferM<Pred list> = infer {
-    let! res = mapM (toHNF cls) ps
+    cont (snd p) // TODO: Is this fine?
+
+// Convert a list of predicate to head normal form.
+let rec toHNFs (ps: Pred list) : InferM<Pred list> = infer {
+    let! res = mapM toHNF ps
     return List.concat res
     }
 
-and toHNF (cls: ClassEnv) (p: Pred) : InferM<Pred list> = infer {
+// Convert a single predicate to head normal form if possible.
+and toHNF (p: Pred) : InferM<Pred list> = infer {
     if isHNF p then return [p]
     else
-        match byInst cls p with
+        match! byInst p with
         | None -> return! failure <| sprintf "Failed to satisfy constraint, type '%s' is not in class '%s'." (prettyType (snd p)) (fst p)
-        | Some ps -> return! toHNFs cls ps
+        | Some ps -> return! toHNFs ps
     }
 
-let simplify (cls: ClassEnv) (p: Pred list) : Pred list =
-    let rec loop rs lst =
+// Simplify a list of head normal form predicates via reduction
+let simplify (p: Pred list) : InferM<Pred list> = infer {
+    let rec loop rs lst = infer {
         match lst with
-        | [] -> rs
+        | [] -> return rs
         | p :: ps ->
-            if entail cls (rs @ ps) p then loop rs ps
-            else loop (p :: rs) ps
-    loop [] p
+            let! test = entail (rs @ ps) p
+            if test then return! loop rs ps
+            else return! loop (p :: rs) ps
+        }
+    return! loop [] p
+    }
 
-let reduce (cls: ClassEnv) (ps: Pred list) : InferM<Pred list> = infer {
-    let! qs = toHNFs cls ps
-    return simplify cls qs
+// Reduce a list of predicates via reduction. Solve typeclass constraints along the way.
+let reduce (ps: Pred list) : InferM<Pred list> = infer {
+    let! qs = toHNFs ps
+    return! simplify qs
     }
 
 // Unification, most general unifier
@@ -463,12 +481,17 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
 
 // Helpers to run
 let inferProgramRepl typeEnv count e =
-    inferType e ((typeEnv, Map.empty), (Map.empty, count))
-    |> fun (ty, ((a,b),(c,i))) ->
+    let cont = 
+        infer {
+            let! (ps, res) = inferType e
+            let! ps = reduce ps
+            let! subs = getSubstitution
+            return applyQualType subs (ps, res)
+        }
+    cont ((typeEnv, Map.empty, classes), (Map.empty, count))
+    |> fun (ty, ((a,b,c),(d,i))) ->
         match ty with
-        | Ok (ps, ty) ->
-            let ps, ((a,b),(c,i)) = reduce classes ps ((a,b),(c,i))
-            Result.map (fun ps -> applyQualType c (ps, ty)) ps, i
+        | Ok (ty) -> Ok ty, i
         | Error a -> Error (sprintf "%s" a), i
 
 let inferProgram =
