@@ -204,6 +204,8 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
+exprPImpl := whitespacedP boolOpP
+
 // User types
 let typeP, typePImpl = declParser()
 
@@ -231,27 +233,43 @@ let arrowP =
 
 typePImpl := whitespacedP arrowP
 
-let classDeclP = // TODO: Requirements
-    (keywordP "class" *> notKeywordP <* one '=')
-    <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
-    <* keywordP "in" <+> exprP
-    |>> (fun ((a, b), c) -> EClass (a, [], b, c) )
+// Declarations
+let declLetP =
+    keywordP "let" *>
+    (patP)
+    <* one '=' <* whitespaceP
+    <+> exprP
+    <* keywordP "in"
+    |>> DLet
 
-let classImplP = // TODO: Blanket impls
-    (keywordP "member" *> typeP <* keywordP "of")
-    <+> (notKeywordP <* one '=')
-    <+> (sepBy1 (notKeywordP <* (one '=') <+> exprP) (one '|'))
-    <* keywordP "in" <+> exprP
-    |>> (fun ((a,b),c) -> EMember ([],flip a,b,c))
-
-let sumDeclP =
+let declSumP =
     (keywordP "sum" *> notKeywordP
     <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-    <* keywordP "in" <+> exprP
-    |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
+    <* keywordP "in"
+    |>> (fun ((a,b),c) -> DUnion (a,b,c))
 
-exprPImpl := whitespacedP (sumDeclP <|> classDeclP <|> classImplP <|> boolOpP)
+let declClassP = // TODO: Requirements
+    (keywordP "class" *> notKeywordP <* one '=')
+    <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
+    <* keywordP "in"
+    |>> (fun (a, b) -> DClass (a, [], b) )
+
+let declImplP = // TODO: Blanket impls
+    (keywordP "member" *> typeP <* keywordP "of")
+    <+> (notKeywordP <* one '=')
+    <+> (sepBy1 (notKeywordP <* (one '=') <+> exprP) (one '|'))
+    <* keywordP "in"
+    |>> (fun (a, b) -> DMember ([],flip a,b))
+
+let declExprP =
+    exprP |>> DExpr
+
+let declP =
+    (attempt declExprP) <|> declLetP <|> declSumP <|> declClassP <|> declImplP
+
+let programP =
+    many declP
 
 let removeComments (txt: string) =
     txt.Split('\n')
@@ -259,36 +277,16 @@ let removeComments (txt: string) =
     |> Array.filter (fun s -> not <| s.StartsWith("//"))
     |> String.concat "\n"
 
+let parseDecl txt =
+    txt
+    |> removeComments
+    |> mkMultiLineParser
+    |> declP
+    |> fst
+
 let parseProgram txt =
     txt
     |> removeComments
     |> mkMultiLineParser
-    |> exprP
-    |> fst
-
-// Incomplete declarations for REPL
-let declLetP =
-    keywordP "let" *>
-    (patP)
-    <* one '=' <* whitespaceP
-    <+> exprP
-    |>> DLet
-
-let declSumP =
-    (keywordP "sum" *> notKeywordP
-    <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
-    <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-    |>> (fun ((a,b),c) -> DUnion (a,b,c))
-
-let declExprP =
-    exprP |>> DExpr
-
-let replP =
-    (attempt declExprP) <|> declLetP <|> declSumP
-
-let parseRepl txt =
-    txt
-    |> removeComments
-    |> mkMultiLineParser
-    |> replP
+    |> programP
     |> fst

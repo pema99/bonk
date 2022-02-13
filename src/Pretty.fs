@@ -99,3 +99,15 @@ let renameFreshQualType (t: QualType) =
     let a = List.scan (fun (_, (_, s, c)) (ps, v) -> ps, renameFreshInner v s c) ("", (tVoid, s, c)) a
     let a = List.map (fun (a, (b, _, _)) -> a, b) (List.tail a)
     (a, b)
+
+let rec prettyValue v =
+    match v with
+    | VUnit -> "()"
+    | VInt v -> string v
+    | VBool v -> string v
+    | VFloat v -> string v
+    | VString v -> sprintf "%A" v
+    | VChar v -> sprintf "'%c'" v
+    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
+    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
+    | VClosure _ | VUnionCtor _ | VLazy _ | VIntrinsic _ -> "Closure"

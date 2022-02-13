@@ -41,14 +41,14 @@ isRight : (Either<'a, 'b> -> bool) = Closure
 isSome : (Option<'a> -> bool) = Closure
 length : (List<'a> -> int) = Closure
 lengthString : (string -> int) = Closure
-listToString : (List<'a> -> string) = Closure
+listToString : (ToString 'a) => (List<'a> -> string) = Closure
 ln : (float -> float) = Closure
 map : (('a -> 'b) -> (List<'a> -> List<'b>)) = Closure
 mapLeft : (('a -> 'b) -> (Either<'a, 'c> -> Either<'b, 'c>)) = Closure
 mapOption : (('a -> 'b) -> (Option<'a> -> Option<'b>)) = Closure
 mapRight : (('a -> 'b) -> (Either<'c, 'a> -> Either<'c, 'b>)) = Closure
-max : ('a -> ('a -> 'a)) = Closure
-min : ('a -> ('a -> 'a)) = Closure
+max : (Ord 'a) => ('a -> ('a -> 'a)) = Closure
+min : (Ord 'a) => ('a -> ('a -> 'a)) = Closure
 negf : (float -> float) = Closure
 negi : (int -> int) = Closure
 not : (bool -> bool) = Closure
@@ -66,9 +66,9 @@ stringToList : (string -> List<char>) = Closure
 substring : (string -> (int -> (int -> string))) = Closure
 tail : (List<'a> -> Option<List<'a>>) = Closure
 tan : (float -> float) = Closure
-toBool : ('a -> bool) = Closure
-toChar : ('a -> char) = Closure
-toFloat : ('a -> float) = Closure
-toInt : ('a -> int) = Closure
-toString : ('a -> string) = Closure
+toBool : (ToBool 'a) => ('a -> bool) = Closure
+toChar : (ToChar 'a) => ('a -> char) = Closure
+toFloat : (ToFloat 'a) => ('a -> float) = Closure
+toInt : (ToInt 'a) => ('a -> int) = Closure
+toString : (ToString 'a) => ('a -> string) = Closure
 uncurry : (('a -> ('b -> 'c)) -> (('a * 'b) -> 'c)) = Closure

@@ -42,10 +42,7 @@ and Expr =
     | EIf of Expr * Expr * Expr
     | EOp of Expr * BinOp * Expr
     | ETuple of Expr list
-    | EUnion of string * string list * (string * Type) list * Expr
     | EMatch of Expr * (Pat * Expr) list
-    | EClass of string * string list * (string * Type) list * Expr // name, reqs, (fname, ftype)
-    | EMember of Pred list * Pred * (string * Expr) list * Expr    // blankets, pred, impls
     | ERec of Expr
 
 // Kinds of type constructors
@@ -72,8 +69,16 @@ type Scheme = string list * QualType
 
 // Different kinds of environment
 type ClassEnv = Map<string, Class> // name -> typeclass data
+type ClassBinding = string * Class
+type ImplBinding = string * Inst
+
 type TypeEnv = Map<string, Scheme> // name -> scheme
+type VarBinding = string * Scheme
+
 type UserEnv = Map<string, int>    // name -> arity
+type SumBinding = string * int
+
+type EnvUpdate = VarBinding list * SumBinding list * ClassBinding list * ImplBinding list
 
 // Primitive types
 let tInt = TConst "int"
@@ -89,6 +94,8 @@ type Decl =
     | DExpr of Expr
     | DLet of Pat * Expr
     | DUnion of string * string list * (string * Type) list 
+    | DClass of string * string list * (string * Type) list // name, reqs, (fname, ftype)
+    | DMember of Pred list * Pred * (string * Expr) list    // blankets, pred, impls
 
 type Value =
     | VUnit

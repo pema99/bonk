@@ -300,7 +300,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly:
     // Constants match with anything that matches the type
     | PConstant v, (_, ty) ->
         // This is fine since literals are always unambiguous. No new predicates can occur.
-        let! _, t1 = inTypeEnv env (inferType (ELit v))
+        let! _, t1 = inTypeEnv env (inferExpr (ELit v))
         do! unify ty t1
         return env
     // Tuple patterns match with same-sized tuples
@@ -348,29 +348,29 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly:
 // expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
 and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType> = infer {
     // Infer the type of the value being bound
-    let! (p1, t1) = inferType e1
+    let! (p1, t1) = inferExpr e1
     // Gather constraints (substitutions, bindings) from the pattern
     let! env = getTypeEnv
     let! env = gatherPatternConstraints env pat (p1, t1) poly
     // Infer the body/rhs of the binding under the gathered constraints
-    let! (p2, t2) = inTypeEnv env (inferType e2)
+    let! (p2, t2) = inTypeEnv env (inferExpr e2)
     return (p2, t2) // TODO: Should this include p1?
     }
 
 // Main inference
-and inferType (e: Expr) : InferM<QualType> = infer {
+and inferExpr (e: Expr) : InferM<QualType> = infer {
     // Before we infer a type, apply the current substitution to the environment
     let! env = getTypeEnv
     let! subs1 = getSubstitution
     // Next, infer the type in the new environment
-    let! res = inTypeEnv (applyEnv subs1 env) (inferTypeInner e)
+    let! res = inTypeEnv (applyEnv subs1 env) (inferExprInner e)
     // After that, collect any new substitutions from the previous inference
     let! subs2 = getSubstitution
     // And apply those along with the initial ones to inferred type
     return applyQualType (compose subs1 subs2) res
     }
 
-and inferTypeInner (e: Expr) : InferM<QualType> =
+and inferExprInner (e: Expr) : InferM<QualType> =
     match e with
     | ELit (LUnit _) -> just ([], tUnit)
     | ELit (LInt _) -> just ([], tInt)
@@ -386,8 +386,8 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
         }
     | EApp (f, x) -> infer {
         let! tv = fresh
-        let! (p1, t1) = inferType f
-        let! (p2, t2) = inferType x
+        let! (p1, t1) = inferExpr f
+        let! (p2, t2) = inferExpr x
         do! unify t1 (TArrow (t2, tv))
         return (p1 @ p2, tv) 
         }
@@ -396,13 +396,13 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
         | PName x ->
             let! tv = fresh
             let! env = getTypeEnv
-            let! (p1, t1) = withTypeEnv x (toScheme tv) (inferType e)
+            let! (p1, t1) = withTypeEnv x (toScheme tv) (inferExpr e)
             return (p1, TArrow (tv, t1))
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
             let! env = getTypeEnv
             let! env = gatherPatternConstraints env (PTuple x) ([], (TCtor (KProduct, tvs))) false
-            let! (p1, t1) = inTypeEnv env (inferType e)
+            let! (p1, t1) = inTypeEnv env (inferExpr e)
             return (p1, TArrow (TCtor (KProduct, tvs), t1))
         | _->
             return! failure <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
@@ -410,16 +410,16 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
     | ELet (x, e1, e2) ->
         inferBinding x e1 e2 true
     | EIf (cond, tr, fl) -> infer {
-        let! (p1, t1) = inferType cond
-        let! (p2, t2) = inferType tr
-        let! (p3, t3) = inferType fl
+        let! (p1, t1) = inferExpr cond
+        let! (p2, t2) = inferExpr tr
+        let! (p3, t3) = inferExpr fl
         let! s4 = unify t1 tBool
         let! s5 = unify t2 t3
         return (p1 @ p2 @ p3, t2)
         }
     | EOp (l, op, r) -> infer {
-        let! (p1, t1) = inferType l
-        let! (p2, t2) = inferType r
+        let! (p1, t1) = inferExpr l
+        let! (p2, t2) = inferExpr r
         let! tv = fresh
         let scheme = Map.find op opSchemes
         let! (p3, inst) = instantiate scheme
@@ -427,11 +427,58 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
         return (p1 @ p2 @ p3, tv)
         }
     | ETuple es -> infer {
-        let! scs = mapM inferType es
+        let! scs = mapM inferExpr es
         let ps, typs = List.unzip scs
         return (List.concat ps, TCtor (KProduct, typs))
         }
-    | EUnion (name, typs, cases, body) -> infer {
+    | EMatch (e, bs) -> infer {
+        // Scan over all match branches gathering constraints from pattern matching along the way
+        let! scs = mapM (fun (pat, expr) -> infer {
+            return! inferBinding pat e expr false }) bs
+        let ps, typs = List.unzip scs
+        // Unify every match branch
+        let uni = List.pairwise typs
+        let! uni = mapM (fun (l, r) -> unify l r) uni
+        // Compose all intermediate substitutions
+        return (List.concat ps, List.head typs)
+        }
+    | ERec e -> infer {
+        let! (p1, t1) = inferExpr e
+        let! tv = fresh
+        do! unify (TArrow (tv, tv)) t1
+        return (p1, tv)
+        }
+
+// Infer and expression and then solve constraints
+let inferExprTop (e: Expr) : InferM<QualType> = infer {
+    let! (ps, res) = inferExpr e
+    let! ps = reduce ps
+    let! subs = getSubstitution
+    return applyQualType subs (ps, res)
+    }
+
+// Gather variable bindings from a type and pattern
+let rec gatherVarBindings (pat: Pat) (typ: QualType) : VarBinding list =
+    match pat, typ with
+    | PName a, typ ->
+        [a, (ftvQualType typ |> Set.toList, typ)]
+    | PTuple pats, (ps, TCtor (KProduct, typs)) ->
+        let rep = List.replicate (List.length typs) ps
+        let packed = List.zip rep typs
+        List.collect (fun (pat, va) -> gatherVarBindings pat va) (List.zip pats packed)
+    | _ -> [] // TODO
+
+// Infer a declaration. Returns an update to the environment.
+let rec inferDecl (d: Decl) : InferM<EnvUpdate> = infer {
+    match d with
+    | DExpr e ->
+        let! res = inferExprTop e
+        return ["it", (ftvQualType res |> Set.toList, res)], [], [], []
+    | DLet (name, e) ->
+        let! res = inferExprTop e
+        let bindings = gatherVarBindings name res
+        return (bindings, [], [], [])
+    | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
         let nusr = extend usr name (List.length typs)
@@ -457,67 +504,22 @@ and inferTypeInner (e: Expr) : InferM<QualType> =
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
         let! env = getTypeEnv
-        let! nenv = foldM (fun acc (case, typ) -> infer {
+        let! nenv = mapM (fun (case, typ) -> infer {
                             let! sc = generalize ([], (TArrow (typ, ret)))
-                            return extend acc case sc
-                            }) env cases 
-        // Finally, infer the resulting type in the new environment
-        return! inTypeEnv nenv (inUserEnv nusr (inferType body))
-        }
-    | EMatch (e, bs) -> infer {
-        // Scan over all match branches gathering constraints from pattern matching along the way
-        let! scs = mapM (fun (pat, expr) -> infer {
-            return! inferBinding pat e expr false }) bs
-        let ps, typs = List.unzip scs
-        // Unify every match branch
-        let uni = List.pairwise typs
-        let! uni = mapM (fun (l, r) -> unify l r) uni
-        // Compose all intermediate substitutions
-        return (List.concat ps, List.head typs)
-        }
-    | EClass (name, reqs, mems, rest) -> infer {
-        let! env = getTypeEnv
-        let! cls = getClassEnv
-        let env = List.fold (fun acc (mem, typ) ->
-            extend acc mem (["this"], ([name, TVar "this"], typ))) env mems
-        let cls = extend cls name (reqs, [])
-        return! inClassEnv cls (inTypeEnv env (inferType rest))
-        }
-    | EMember (blankets, pred, exprs, rest) -> infer {
+                            return case, sc
+                         }) cases
+        return nenv, [name, (List.length typs)], [], []
+    | DClass (name, reqs, mems) ->
+        let vars = List.map (fun (mem, typ) -> mem, (["this"], ([name, TVar "this"], typ))) mems
+        let cls = name, (reqs, [])
+        return (vars, [], [cls], [])
+    | DMember (blankets, pred, exprs) ->
         // Extend the class env with the new implementor
         let name, typ = pred
-        let! cls = getClassEnv
-        let cls =
-            match lookup cls name with
-            | Some (reqs, insts) -> extend cls name (reqs, (blankets, pred) :: insts)
-            | None -> cls
+        let imp = name, (blankets, pred)
         // TODO: Semantic checking
         // - Check that the type of each implemented function/member matches the known type (unify)
         // - Check that we don't infer 'this' to be be something else than the known type (unify)
-        // - Check overlapping implementations 
-        return! inClassEnv cls (inferType rest)
-        }
-    | ERec e -> infer {
-        let! (p1, t1) = inferType e
-        let! tv = fresh
-        do! unify (TArrow (tv, tv)) t1
-        return (p1, tv)
-        }
-
-// Helpers to run
-let inferProgramRepl typeEnv count e =
-    let cont = 
-        infer {
-            let! (ps, res) = inferType e
-            let! ps = reduce ps
-            let! subs = getSubstitution
-            return applyQualType subs (ps, res)
-        }
-    cont ((typeEnv, Map.empty, classes), (Map.empty, count))
-    |> fun (ty, ((a,b,c),(d,i))) ->
-        match ty with
-        | Ok (ty) -> Ok ty, i
-        | Error a -> Error (sprintf "%s" a), i
-
-let inferProgram =
-    inferProgramRepl (funSchemes) 0 >> fst
+        // - Check overlapping implementations
+        return ([], [], [], [imp])
+    }
