@@ -129,6 +129,6 @@ type Value =
     | VClosure   of Pat * TypedExpr * TermEnv
     | VLazy      of Value Lazy
     | VIntrinsic of string * Value list
-    | VOverload  of (Inst * TypedExpr) list
+    | VOverload  of (Inst * TypedExpr) list * int * (TypedExpr) list
 
 and TermEnv = Map<string, Value>

@@ -9,6 +9,57 @@ open Parse
 open Prelude
 
 // Evaluation
+let getExprType ex = 
+    match ex with
+    | TELit (pt, v)           -> pt
+    | TEVar (pt, a)           -> pt
+    | TEApp (pt, f, x)        -> pt
+    | TELam (pt, x, e)        -> pt
+    | TELet (pt, x, e1, e2)   -> pt
+    | TEIf (pt, cond, tr, fl) -> pt
+    | TEOp (pt, l, op, r)     -> pt
+    | TETuple (pt, es)        -> pt
+    | TEMatch (pt, e, bs)     -> pt
+    | TERec (pt, e)           -> pt
+
+let rec compatible (l: QualType) (r: QualType) : bool =
+    match l, r with
+    | l, r when l = r -> // precisely equall types
+        true
+    | (_, TConst a), (_, TConst b) when a = b -> // same typed constants
+        true
+    | (qs, TVar a), b | b, (qs, TVar a) ->
+        true // TODO!!!
+    | (ql, TArrow (lf, lt)), (qr, TArrow (rf, rt)) -> // arrow types, check both sides
+        compatible (ql, lf) (qr, rf) && compatible (ql, lt) (qr, rt)
+    | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
+        let qls = List.map (fun a -> ql, a) ls
+        let qrs = List.map (fun a -> qr, a) rs
+        List.forall (fun (a, b) -> compatible a b) (List.zip qls qrs)
+    | _ -> false
+
+let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
+    match overload, args with
+    | TELam ((qt, TArrow (a, _)), x, rest), h :: t ->
+        compatible (qt, a) h && candidate rest t
+    | _, [] -> true 
+    | _ -> false
+
+let resolveOverload (overloads: (Inst * TypedExpr) list) (args: QualType list) : TypedExpr option =
+    match List.tryFind (fun (_, ex) -> candidate ex args) overloads with
+    | Some (_, goal) -> Some goal
+    | None -> None
+
+let rec calcArity (ex: TypedExpr) : int =
+    match ex with
+    | TELam (ty, x, rest) -> 1 + calcArity rest
+    | _ -> 0
+
+let rec buildApp (f: TypedExpr) (args: TypedExpr list) =
+    match args with
+    | h :: t -> TEApp (([], tVoid), buildApp f t, h)
+    | [] -> f
+
 let rec matchPattern tenv pat v =
     match pat, v with
     | PName a, v ->
@@ -113,6 +164,14 @@ and eval tenv (e: TypedExpr) =
                 if arity = List.length applied then impl (List.rev applied)
                 else Some (VIntrinsic (name, applied))
             | None -> None
+        | Some (VOverload (lst, arity, args)), Some v ->
+            let applied = x :: args
+            if arity = List.length applied then
+                let typs = List.map getExprType applied
+                let goal = resolveOverload lst typs
+                Option.bind (fun goal -> eval tenv (buildApp goal applied)) goal
+            else
+                Some (VOverload (lst, arity, applied))
         | _ -> None
     | TELam (_, x, t) -> Some (VClosure (x, t, tenv))
     | TELet (_, x, v, t) ->
@@ -236,8 +295,8 @@ let rec handleDecl silent decl = repl {
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv
             match lookup env s with
-            | Some (VOverload lst) -> do! extendTermEnv [s, VOverload ((inst, e) :: lst)]
-            | None -> do! extendTermEnv [s, VOverload [inst, e]]
+            | Some (VOverload (lst, arity, v)) -> do! extendTermEnv [s, VOverload ((inst, e) :: lst, arity, v)]
+            | None -> do! extendTermEnv [s, VOverload ([inst, e], calcArity e, [])]
             | _ -> ()
             }) impls
     | _ -> ()// TODO: Typeclasses
