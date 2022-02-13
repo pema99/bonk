@@ -50,7 +50,7 @@ and Decl =
     | DLet    of Pat * Expr
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | DMember of Pred list * Pred * (string * Expr) list    // blankets, pred, impls
+    | DMember of Pred list * Pred * (string * Expr) list     // blankets, pred, impls
 
 // Kinds of type constructors
 and Kind =
@@ -87,8 +87,8 @@ type TypedDecl =
     | TDExpr   of TypedExpr
     | TDLet    of Pat * TypedExpr
     | TDUnion  of string * string list * (string * Type) list 
-    | TDClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | TDMember of Pred list * Pred * (string * TypedExpr) list    // blankets, pred, impls
+    | TDClass  of string * string list * (string * Type) list  // name, reqs, (fname, ftype)
+    | TDMember of Pred list * Pred * (string * TypedExpr) list // blankets, pred, impls
 
 // Type schemes for polytypes
 type Scheme = string list * QualType

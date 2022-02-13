@@ -203,8 +203,11 @@ let rec handleDecl silent decl = repl {
     | Some (TDExpr expr) ->
         match! checkType "it" with
         | Some typ when not silent ->
-            eval tenv expr
-            |> Option.iter (fun res -> printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res))
+            let opt = 
+                eval tenv expr
+                |> Option.map (fun res -> printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res))
+            if Option.isNone opt then
+                printfn "Evaluation error"
         | _ -> ()
     | Some (TDLet (pat, expr)) ->
         let vs = eval tenv expr |> Option.bind (matchPattern tenv pat)
@@ -228,6 +231,15 @@ let rec handleDecl silent decl = repl {
                 let decl = DLet (PName case, EVar case)
                 return! handleDecl silent decl 
                 }) names
+    | Some (TDMember (blankets, pred, impls)) ->
+        let inst = blankets, pred
+        do! mapM_ (fun (s, e) -> repl {
+            let! env = getTermEnv
+            match lookup env s with
+            | Some (VOverload lst) -> do! extendTermEnv [s, VOverload ((inst, e) :: lst)]
+            | None -> do! extendTermEnv [s, VOverload [inst, e]]
+            | _ -> ()
+            }) impls
     | _ -> ()// TODO: Typeclasses
     }
 
