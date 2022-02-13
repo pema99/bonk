@@ -321,6 +321,7 @@ let rec readUntilSemicolon (str: string) =
 
 let loadLibrary silent input = repl {
     let ast = parseProgram input
+    //printfn "%A" ast
     match ast with
     | Success decls -> do! mapM_ (handleDecl silent) decls
     | _ -> printfn "Failed to load library."

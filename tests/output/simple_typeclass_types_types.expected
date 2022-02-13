@@ -1,0 +1,4 @@
+a : int
+add : (MyClass 'a) => ('a -> ('a -> 'a))
+b : int
+sub : (MyClass 'a) => ('a -> ('a -> 'a))

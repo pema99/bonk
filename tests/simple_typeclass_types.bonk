@@ -1,0 +1,14 @@
+// A simple test for typeclass implementation
+
+class MyClass =
+    | add : this -> this -> this
+    | sub : this -> this -> this
+in
+
+member int of MyClass =
+    | add : [x] [y] x + y
+    | sub : [x] [y] x - y
+in
+
+let a = add 3 2 in
+let b = sub 5 2 in

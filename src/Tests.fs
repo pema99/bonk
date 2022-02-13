@@ -54,7 +54,7 @@ let testTypes prelude file =
         return! listTypes
     }
     match runReplAction prelude action with
-    | Ok s -> compareOrBless file s
+    | Ok s -> compareOrBless (file + "_types") s
     | _ -> Error "Failed to run REPL action."
 
 let testValues prelude file =
@@ -72,7 +72,7 @@ let testValues prelude file =
         sw.GetStringBuilder().ToString().Split([|"\r\n"; "\n"; "\r"|], StringSplitOptions.None)
         |> Seq.toList
     match res with
-    | Ok s -> compareOrBless file (split)
+    | Ok s -> compareOrBless (file + "_values") (split)
     | _ -> Error "Failed to run REPL action."
 
 let testPrelude() =
@@ -85,6 +85,8 @@ let tests = [
     "Prelude types match", testPrelude
     "Let polymorphism", fun () -> testTypes false "let_polymorphism"
     "Simple value test", fun () -> testValues true "simple_value"
+    "Simple typeclass test #1", fun () -> testTypes false "simple_typeclass_types"
+    "Simple typeclass test #2", fun () -> testValues true "simple_typeclass_values"
 ]
 
 let startTests() =
