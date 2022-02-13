@@ -1,0 +1,2 @@
+add : (Add 'a) => ('a -> ('a -> 'a))
+res : (int * float)

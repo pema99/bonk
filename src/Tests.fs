@@ -88,15 +88,17 @@ let tests = [
     "Simple typeclass test #1", fun () -> testTypes false "simple_typeclass_types"
     "Simple typeclass test #2", fun () -> testValues true "simple_typeclass_values"
     "Strange parsing edgecase", fun () -> testValues true "strange_parse"
+    "Typeclass instance for constructed type", fun () -> testTypes false "typeclass_constructed_type"
+    "Basic overload resolution works", fun () -> testValues true "overload_resolution"
 ]
 
 let startTests() =
     let results = List.map (fun (name, body) ->
         match body() with
         | Ok () ->
-            Ok <| sprintf "| %-25s | Pass" name
+            Ok <| sprintf "| %-40s | Pass" name
         | Error err ->
-            Error <| sprintf "| %-25s | Fail\n\t%s" name err) tests
+            Error <| sprintf "| %-40s | Fail\n\t%s" name err) tests
     printfn "Running tests..."
     for res in results do
         match res with

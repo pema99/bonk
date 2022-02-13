@@ -549,8 +549,11 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let name, typ = pred
         let imp = name, (blankets, pred)
         // TODO: Semantic checking
+        // - Check that the typeclass exists
+        // - Check that the requirements are satisfied
         // - Check that the type of each implemented function/member matches the known type (unify)
         // - Check that we don't infer 'this' to be be something else than the known type (unify)
+        // - Replace occurences of 'this' with the more specific type
         // - Check overlapping implementations
         let names, impls = List.unzip exprs
         let! typs = mapM (inferExprTop) impls
