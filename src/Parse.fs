@@ -173,8 +173,16 @@ let recP =
     exprP
     |>> ERec
 
+let opFunP =
+    (operatorP
+    |>> fun op -> ELam (PName "x", ELam (PName "y", EOp (EVar "x", op, EVar "y"))))
+    |> whitespacedP
+    |> parens
+    |> attempt
+
 let nonAppP =
-    (literalP |>> ELit)
+    opFunP
+    <|> (literalP |>> ELit)
     <|> groupP
     <|> lamP
     <|> letP
@@ -187,12 +195,6 @@ let nonAppP =
 let appP = 
     chainL1 nonAppP (just (curry EApp))
 
-// TODO: Unop
-(*let unOpP = 
-  (specificOperatorP Plus <|> specificOperatorP Minus <|> specificOperatorP Not)
-  <+> exprP // TODO: technically should be term
-  |>> UnOp*)
-
 let specificBinOpP op =
   specificOperatorP op
   *> just (curry <| fun (l, r) -> EOp (l, op, r))
@@ -204,7 +206,12 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
-exprPImpl := whitespacedP boolOpP
+let unOpP = 
+    (specificOperatorP Minus)
+    <+> exprP
+    |>> fun (_, e) -> EOp (EOp (e, Minus, e), Minus, e)
+
+exprPImpl := whitespacedP (boolOpP <|> unOpP)
 
 // User types
 let typeP, typePImpl = declParser()
