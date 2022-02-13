@@ -18,7 +18,8 @@
     <Compile Include="src/Monad.fs" />
     <Compile Include="src/Parse.fs" />
     <Compile Include="src/Inference.fs" />
-    <Compile Include="src/Tests.fs" />
     <Compile Include="src/Repl.fs" />
+    <Compile Include="src/Tests.fs" />
+    <Compile Include="src/Main.fs" />
   </ItemGroup>
 </Project>

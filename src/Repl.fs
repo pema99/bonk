@@ -380,5 +380,11 @@ let runRepl : ReplM<unit> = repl {
             do! runExpr (readUntilSemicolon input)
 }
 
-runRepl ((funSchemes, Map.empty, classes, 0), Map.map (fun k v -> VIntrinsic (k, [])) funSchemes)
-|> ignore
+let runReplAction prelude action =
+    let funSchemes = if prelude then funSchemes else Map.empty
+    action ((funSchemes, Map.empty, classes, 0), Map.map (fun k v -> VIntrinsic (k, [])) funSchemes)
+    |> fst
+
+let startRepl() =
+    runReplAction true runRepl
+    |> ignore
