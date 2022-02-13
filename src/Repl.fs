@@ -14,7 +14,7 @@ let rec matchPattern tenv pat v =
     | PName a, v ->
         Some [a, v]
     | PConstant a, v ->
-        if (eval tenv (ELit a)) = Some v then Some []
+        if (eval tenv (TELit (([], tVoid), a))) = Some v then Some []
         else None
     | PTuple pats, VTuple vs ->
         let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
@@ -78,22 +78,22 @@ and binop l op r =
     
     | _ -> None
 
-and eval tenv e =
+and eval tenv (e: TypedExpr) =
     match e with
-    | ELit LUnit -> Some VUnit
-    | ELit (LInt v) -> Some (VInt v)
-    | ELit (LBool v) -> Some (VBool v)
-    | ELit (LFloat v) -> Some (VFloat v)
-    | ELit (LString v) -> Some (VString v)
-    | ELit (LChar v) -> Some (VChar v)
-    | EOp (l, op, r) ->
+    | TELit (_, LUnit) -> Some VUnit
+    | TELit (_, LInt v) -> Some (VInt v)
+    | TELit (_, LBool v) -> Some (VBool v)
+    | TELit (_, LFloat v) -> Some (VFloat v)
+    | TELit (_, LString v) -> Some (VString v)
+    | TELit (_, LChar v) -> Some (VChar v)
+    | TEOp (_, l, op, r) ->
         let v1 = eval tenv l
         let v2 = eval tenv r
         match v1, v2 with
         | Some v1, Some v2 -> binop v1 op v2
         | _ -> None
-    | EVar a -> lookup tenv a
-    | EApp (f, x) ->
+    | TEVar (_, a) -> lookup tenv a
+    | TEApp (_, f, x) ->
         let clos = eval tenv f
         let arg = eval tenv x
         match clos, arg with
@@ -114,28 +114,28 @@ and eval tenv e =
                 else Some (VIntrinsic (name, applied))
             | None -> None
         | _ -> None
-    | ELam (x, t) -> Some (VClosure (x, t, tenv))
-    | ELet (x, v, t) ->
+    | TELam (_, x, t) -> Some (VClosure (x, t, tenv))
+    | TELet (_, x, v, t) ->
         match eval tenv v with
         | Some ve ->
             Option.bind (fun nenv -> eval nenv t) (evalPattern tenv x ve)
         | _ -> None
-    | EIf (c, tr, fl) ->
+    | TEIf (_, c, tr, fl) ->
         match eval tenv c with
         | Some (VBool v) ->
             if v 
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
-    | ETuple es ->
+    | TETuple (_, es) ->
         let ev = List.map (eval tenv) es
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | ERec e ->
-        lazy (eval tenv (EApp (e, (ERec e))) |> Option.get)
+    | TERec (ty, e) ->
+        lazy (eval tenv (TEApp (ty, e, (TERec (ty, e)))) |> Option.get) // TODO: Are the types right here?
         |> fun x -> Some (VLazy x)
-    | EMatch (e, xs) ->
+    | TEMatch (_, e, xs) ->
         match eval tenv e with
         | Some ev ->
             xs
@@ -170,17 +170,17 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
     do! set ((typeEnv, userEnv, classEnv, freshCount), termEnv)
     }
 
-let runInfer (decl: Decl) : ReplM<EnvUpdate> = repl {
+let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
-    let update, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv), (Map.empty, freshCount))
+    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv), (Map.empty, freshCount))
     do! setFreshCount i
-    match update with
-    | Ok update ->
+    match res with
+    | Ok (update, tdecl) ->
         do! applyEnvUpdate update
-        return update
+        return update, Some tdecl
     | Error err ->
         printfn "Type error: %s" err
-        return [], [], [], []
+        return ([], [], [], []), None
     }
 
 let checkType (name: string) : ReplM<string option> = repl {
@@ -197,16 +197,16 @@ let rec extendTermEnv bindings = repl {
     }
 
 let rec handleDecl silent decl = repl {
-    let! (varBindings, _, _, _) = runInfer decl
+    let! (varBindings, _, _, _), tdecl = runInfer decl
     let! tenv = getTermEnv
-    match decl with
-    | DExpr expr ->
+    match tdecl with
+    | Some (TDExpr expr) ->
         match! checkType "it" with
         | Some typ when not silent ->
             eval tenv expr
             |> Option.iter (fun res -> printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res))
         | _ -> ()
-    | DLet (pat, expr) ->
+    | Some (TDLet (pat, expr)) ->
         let vs = eval tenv expr |> Option.bind (matchPattern tenv pat)
         match vs with
         | Some vs ->
@@ -220,7 +220,7 @@ let rec handleDecl silent decl = repl {
         | None ->
             printfn "Evaluation failure"//TODO: Print
             //printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" prettyName ptyp
-    | DUnion (name, tvs, cases) ->
+    | Some (TDUnion (name, tvs, cases)) ->
         let ctors = List.map fst cases
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases

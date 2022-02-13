@@ -146,7 +146,7 @@ let varP =
     |> attempt
     |>> EVar
 
-let lamP : Com<Expr, char> =
+let lamP =
     between (one '[') patP (one ']')
     <+> exprP
     |>> ELam
