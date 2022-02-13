@@ -250,14 +250,14 @@ let declSumP =
     |>> (fun ((a,b),c) -> DUnion (a,b,c))
 
 let declClassP = // TODO: Requirements
-    (keywordP "class" *> notKeywordP <* one '=')
+    (keywordP "class" *> notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
     <* opt (keywordP "in")
     |>> (fun (a, b) -> DClass (a, [], b) )
 
 let declImplP = // TODO: Blanket impls
     (keywordP "member" *> typeP <* keywordP "of")
-    <+> (notKeywordP <* one '=')
+    <+> (notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <* (one ':') <+> exprP) (one '|'))
     <* opt (keywordP "in")
     |>> (fun (a, b) -> DMember ([],flip a,b))
