@@ -184,16 +184,16 @@ let nonAppP =
     opFunP
     <|> (literalP |>> ELit)
     <|> groupP
-    <|> lamP
+    <|> varP
+    |> whitespacedP
+
+let appP =
+    lamP
     <|> letP
     <|> matchP
     <|> recP
     <|> ifP
-    <|> varP
-    |> whitespacedP
-
-let appP = 
-    chainL1 nonAppP (just (curry EApp))
+    <|> chainL1 nonAppP (just (curry EApp))
 
 let specificBinOpP op =
   specificOperatorP op

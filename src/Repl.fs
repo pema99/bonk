@@ -304,6 +304,7 @@ let rec handleDecl silent decl = repl {
 
 let runExpr input = repl {
     let ast = parseDecl input
+    //printfn "%A" ast
     match ast with
     | Success (decl) -> do! handleDecl false decl
     | FailureWith err -> printfn "Parsing error: %A" err
@@ -321,7 +322,6 @@ let rec readUntilSemicolon (str: string) =
 
 let loadLibrary silent input = repl {
     let ast = parseProgram input
-    //printfn "%A" ast
     match ast with
     | Success decls -> do! mapM_ (handleDecl silent) decls
     | _ -> printfn "Failed to load library."

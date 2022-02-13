@@ -87,6 +87,7 @@ let tests = [
     "Simple value test", fun () -> testValues true "simple_value"
     "Simple typeclass test #1", fun () -> testTypes false "simple_typeclass_types"
     "Simple typeclass test #2", fun () -> testValues true "simple_typeclass_values"
+    "Strange parsing edgecase", fun () -> testValues true "strange_parse"
 ]
 
 let startTests() =
