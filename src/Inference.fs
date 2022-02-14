@@ -302,6 +302,19 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
     | TERec (pt, e)           -> TERec (ty, e)
 
+let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : TypedExpr =
+    match ex with
+    | TELit (pt, v)           -> TELit (applyQualType s pt, v)
+    | TEVar (pt, a)           -> TEVar (applyQualType s pt, a)
+    | TEApp (pt, f, x)        -> TEApp (applyQualType s pt, applyTypedExpr s f, applyTypedExpr s x) 
+    | TELam (pt, x, e)        -> TELam (applyQualType s pt, x, applyTypedExpr s e)
+    | TELet (pt, x, e1, e2)   -> TELet (applyQualType s pt, x, applyTypedExpr s e1, applyTypedExpr s e2)
+    | TEIf (pt, cond, tr, fl) -> TEIf (applyQualType s pt, applyTypedExpr s cond, applyTypedExpr s tr, applyTypedExpr s fl)
+    | TEOp (pt, l, op, r)     -> TEOp (applyQualType s pt, applyTypedExpr s l, op, applyTypedExpr s r)
+    | TETuple (pt, es)        -> TETuple (applyQualType s pt, List.map (applyTypedExpr s) es)
+    | TEMatch (pt, e, bs)     -> TEMatch (applyQualType s pt, applyTypedExpr s e, List.map (fun (a, b) -> a, applyTypedExpr s b) bs)
+    | TERec (pt, e)           -> TERec (applyQualType s pt, applyTypedExpr s e)
+
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
@@ -545,18 +558,49 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let cls = name, (reqs, [])
         return (vars, [], [cls], []), TDClass (name, reqs, mems)
     | DMember (blankets, pred, exprs) ->
-        // Extend the class env with the new implementor
-        let name, typ = pred
-        let imp = name, (blankets, pred)
         // TODO: Semantic checking
-        // - Check that the typeclass exists
+        // o Check that the typeclass exists
+        // - Check that the names of the member match exactly
         // - Check that the requirements are satisfied
-        // - Check that the type of each implemented function/member matches the known type (unify)
-        // - Check that we don't infer 'this' to be be something else than the known type (unify)
-        // - Replace occurences of 'this' with the more specific type
+        // o Replace occurences of 'this' with the more specific type
+        // o Check that the type of each implemented function/member matches the known type (unify)
+        // o Check that we don't infer 'this' to be be something else than the known type (unify)
         // - Check overlapping implementations
+        // First, check if the typeclass even exists
+        let! cls = getClassEnv
+        let name, typ = pred
+        let klass = lookup cls name
+        if not <| Option.isSome klass then
+            return! failure <| sprintf "Typeclass '%s' does not exist." name
+        let (reqs, instances) = Option.get klass
+        // TODO: Next, check that the names of the member match exactly
+        // TODO: Then, check that the requirements are satisfied
+        // Gather the expected function types from the environment, with 'this' renamed to a fresh tv
+        let! env = getTypeEnv
+        let! tv = fresh
+        let! eqtypes = 
+            mapM (fun (fname, impl) -> infer {
+                match lookup env fname with
+                | Some (_, qt) -> return applyQualType (Map.ofList ["this", tv]) qt
+                | None -> return! failure <| sprintf "Couldn't find typeclass member '%s'." name
+            }) exprs
+        let epreds, etyps = List.unzip eqtypes
+        // Infer the actual function types from their implementations
         let names, impls = List.unzip exprs
-        let! typs = mapM (inferExprTop) impls
-        let typs = List.map snd typs
-        return ([], [], [], [imp]), TDMember (blankets, pred, List.zip names typs)
+        let! actual = mapM (inferExprTop) impls
+        let aqtypes, aexprs = List.unzip actual
+        let apreds, atyps = List.unzip aqtypes
+        // Unify 'this' with the actual type we know it should be
+        do! unify typ tv
+        // Unify the actual and inferred function types. TODO: Should this be coerce?
+        do! mapM_ (fun (a, b) -> unify a b) (List.zip etyps atyps)
+        // Apply all substitutions thus far to the inferred types
+        let! subs = getSubstitution
+        let aexprs = List.map (applyTypedExpr subs) aexprs
+        // TODO: Handle the collected predicates somehow here
+        // let! ps = reduce (List.concat apreds @ List.concat epreds)
+        // Make the implementation to extend the class environment with
+        let imp = name, (blankets, pred)
+        // Return the class implementation and the type-annotated expression for each function
+        return ([], [], [], [imp]), TDMember (blankets, pred, List.zip names aexprs)
     }
