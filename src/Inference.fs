@@ -232,7 +232,8 @@ let simplify (p: Pred list) : InferM<Pred list> = infer {
 // Reduce a list of predicates via reduction. Solve typeclass constraints along the way.
 let reduce (ps: Pred list) : InferM<Pred list> = infer {
     let! qs = toHNFs ps
-    return! simplify qs
+    let! res = simplify qs
+    return List.distinct res
     }
 
 // Unification, most general unifier
