@@ -152,10 +152,13 @@ let lamP =
     |>> ELam
 
 let letP =
-    keywordP "let" *> patP <* one '=' <* whitespaceP
+    (keywordP "let" *> (maybe (keywordP "rec"))) 
+    <+> (patP) <* one '=' <* whitespaceP
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
-    |>> (fun ((a, b), c) -> ELet (a, b, c))
+    |>> (fun (((a, b), c), d) ->
+        if a then ELet (b, ERec (ELam (b, c)), d)
+        else ELet (b, c, d))
 
 let matchP =
     keywordP "match" *> exprP <* keywordP "with" <* opt (one '|')
@@ -242,12 +245,14 @@ typePImpl := whitespacedP arrowP
 
 // Declarations
 let declLetP =
-    keywordP "let" *>
-    (patP)
+    (keywordP "let" *> (maybe (keywordP "rec")))
+    <+> (patP) 
     <* one '=' <* whitespaceP
     <+> exprP
     <* keywordP "in"
-    |>> DLet
+    |>> fun ((a,b),c) ->
+        if a then DLet (b, ERec (ELam (b, c)))
+        else DLet (b, c)
 
 let declSumP =
     (keywordP "sum" *> notKeywordP
