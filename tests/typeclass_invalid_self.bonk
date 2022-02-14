@@ -1,0 +1,9 @@
+// Test a wrong implementation of a typeclass fails
+
+class Show =
+    | show : this -> string
+
+member bool of Show =
+    | show : [x] let y = x + 1 in "Hello"
+
+let a = show true in

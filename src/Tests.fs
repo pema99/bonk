@@ -90,6 +90,8 @@ let tests = [
     "Strange parsing edgecase", fun () -> testValues true "strange_parse"
     "Typeclass instance for constructed type", fun () -> testTypes false "typeclass_constructed_type"
     "Basic overload resolution works", fun () -> testValues true "overload_resolution"
+    "Wrong typeclass implementation fails #1", fun () -> testValues false "typeclass_invalid"
+    "Wrong typeclass implementation fails #2", fun () -> testValues false "typeclass_invalid_self"
 ]
 
 let startTests() =
