@@ -207,5 +207,3 @@ let getRight = [def] [o]
     | Left _ -> def
     | Right a -> a
 in
-
-()

@@ -8,35 +8,80 @@ open Combinator
 open Parse
 open Prelude
 
-// Printing
-let rec prettyValue v =
-    match v with
-    | VUnit -> "()"
-    | VInt v -> string v
-    | VBool v -> string v
-    | VFloat v -> string v
-    | VString v -> sprintf "%A" v
-    | VChar v -> sprintf "'%c'" v
-    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
-    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
-    | VClosure _ | VUnionCtor _ | VLazy _ | VIntrinsic _ -> "Closure"
-
 // Evaluation
+let getExprType ex = 
+    match ex with
+    | TELit (pt, v)           -> pt
+    | TEVar (pt, a)           -> pt
+    | TEApp (pt, f, x)        -> pt
+    | TELam (pt, x, e)        -> pt
+    | TELet (pt, x, e1, e2)   -> pt
+    | TEIf (pt, cond, tr, fl) -> pt
+    | TEOp (pt, l, op, r)     -> pt
+    | TETuple (pt, es)        -> pt
+    | TEMatch (pt, e, bs)     -> pt
+    | TERec (pt, e)           -> pt
+
+let rec compatible (l: QualType) (r: QualType) : bool =
+    match l, r with
+    | l, r when l = r -> // precisely equall types
+        true
+    | (_, TConst a), (_, TConst b) when a = b -> // same typed constants
+        true
+    | (qs, TVar a), b | b, (qs, TVar a) ->
+        true // TODO!!!
+    | (ql, TArrow (lf, lt)), (qr, TArrow (rf, rt)) -> // arrow types, check both sides
+        compatible (ql, lf) (qr, rf) && compatible (ql, lt) (qr, rt)
+    | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
+        let qls = List.map (fun a -> ql, a) ls
+        let qrs = List.map (fun a -> qr, a) rs
+        List.forall (fun (a, b) -> compatible a b) (List.zip qls qrs)
+    | _ -> false
+
+let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
+    match overload, args with
+    | TELam ((qt, TArrow (a, _)), x, rest), h :: t ->
+        compatible (qt, a) h && candidate rest t
+    | _, [] -> true 
+    | _ -> false
+
+let resolveOverload (overloads: (Inst * TypedExpr) list) (args: QualType list) : TypedExpr option =
+    match List.tryFind (fun (_, ex) -> candidate ex args) overloads with
+    | Some (_, goal) -> Some goal
+    | None -> None
+
+let rec calcArity (ex: TypedExpr) : int =
+    match ex with
+    | TELam (ty, x, rest) -> 1 + calcArity rest
+    | _ -> 0
+
+let rec buildApp (f: TypedExpr) (args: TypedExpr list) =
+    match args with
+    | h :: t -> TEApp (([], tVoid), buildApp f t, h)
+    | [] -> f
+
 let rec matchPattern tenv pat v =
     match pat, v with
     | PName a, v ->
-        Some (extend tenv a v)
+        Some [a, v]
     | PConstant a, v ->
-        if (eval tenv (ELit a)) = Some v then Some tenv
+        if (eval tenv (TELit (([], tVoid), a))) = Some v then Some []
         else None
     | PTuple pats, VTuple vs ->
-        List.fold (fun env (pat, va) -> 
-            Option.bind (fun env -> matchPattern env pat va) env)
-                (Some tenv) (List.zip pats vs)
+        let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
+        if List.forall (Option.isSome) vs then List.choose id vs |> List.concat |> Some
+        else None
     | PUnion (case, pat), VUnionCase (s, v) ->
         if case = s then matchPattern tenv pat v
         else None
     | _ -> None
+
+and evalPattern (tenv: TermEnv) pat v =
+    match matchPattern tenv pat v with
+    | Some nv ->
+        List.fold (fun env (name, va) -> extend env name va) tenv nv
+        |> Some
+    | None -> None
 
 and binop l op r =
     match l, op, r with
@@ -84,33 +129,33 @@ and binop l op r =
     
     | _ -> None
 
-and eval tenv e =
+and eval tenv (e: TypedExpr) =
     match e with
-    | ELit LUnit -> Some VUnit
-    | ELit (LInt v) -> Some (VInt v)
-    | ELit (LBool v) -> Some (VBool v)
-    | ELit (LFloat v) -> Some (VFloat v)
-    | ELit (LString v) -> Some (VString v)
-    | ELit (LChar v) -> Some (VChar v)
-    | EOp (l, op, r) ->
+    | TELit (_, LUnit) -> Some VUnit
+    | TELit (_, LInt v) -> Some (VInt v)
+    | TELit (_, LBool v) -> Some (VBool v)
+    | TELit (_, LFloat v) -> Some (VFloat v)
+    | TELit (_, LString v) -> Some (VString v)
+    | TELit (_, LChar v) -> Some (VChar v)
+    | TEOp (_, l, op, r) ->
         let v1 = eval tenv l
         let v2 = eval tenv r
         match v1, v2 with
         | Some v1, Some v2 -> binop v1 op v2
         | _ -> None
-    | EVar a -> lookup tenv a
-    | EApp (f, x) ->
+    | TEVar (_, a) -> lookup tenv a
+    | TEApp (_, f, x) ->
         let clos = eval tenv f
         let arg = eval tenv x
         match clos, arg with
         | Some (VUnionCtor a), Some v ->
             Some (VUnionCase (a, v))
         | Some (VClosure (a, body, env)), Some v ->
-            Option.bind (fun nenv -> eval nenv body) (matchPattern env a v )
+            Option.bind (fun nenv -> eval nenv body) (evalPattern env a v )
         | Some (VLazy e), Some v -> // deferred application
             match e.Value with
             | VClosure (a, body, env) ->
-                Option.bind (fun nenv -> eval nenv body) (matchPattern env a v)
+                Option.bind (fun nenv -> eval nenv body) (evalPattern env a v)
             | _ -> None
         | Some (VIntrinsic (name, args)), Some v ->
             let applied = v :: args
@@ -119,122 +164,147 @@ and eval tenv e =
                 if arity = List.length applied then impl (List.rev applied)
                 else Some (VIntrinsic (name, applied))
             | None -> None
+        | Some (VOverload (lst, arity, args)), Some v ->
+            let applied = x :: args
+            if arity = List.length applied then
+                let typs = List.map getExprType applied
+                let goal = resolveOverload lst typs
+                Option.bind (fun goal -> eval tenv (buildApp goal applied)) goal
+            else
+                Some (VOverload (lst, arity, applied))
         | _ -> None
-    | ELam (x, t) -> Some (VClosure (x, t, tenv))
-    | ELet (x, v, t) ->
+    | TELam (_, x, t) -> Some (VClosure (x, t, tenv))
+    | TELet (_, x, v, t) ->
         match eval tenv v with
         | Some ve ->
-            Option.bind (fun nenv -> eval nenv t) (matchPattern tenv x ve)
+            Option.bind (fun nenv -> eval nenv t) (evalPattern tenv x ve)
         | _ -> None
-    | EIf (c, tr, fl) ->
+    | TEIf (_, c, tr, fl) ->
         match eval tenv c with
         | Some (VBool v) ->
             if v 
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
-    | ETuple es ->
+    | TETuple (_, es) ->
         let ev = List.map (eval tenv) es
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | ERec e ->
-        lazy (eval tenv (EApp (e, (ERec e))) |> Option.get)
+    | TERec (ty, e) ->
+        lazy (eval tenv (TEApp (ty, e, (TERec (ty, e)))) |> Option.get) // TODO: Are the types right here?
         |> fun x -> Some (VLazy x)
-    | EUnion (_, _, cases, body) ->
-        let ctors = List.map fst cases
-        let nenv = List.fold (fun acc s -> extend acc s (VUnionCtor s)) tenv ctors
-        eval nenv body
-    | EMatch (e, xs) ->
+    | TEMatch (_, e, xs) ->
         match eval tenv e with
         | Some ev ->
             xs
-            |> List.map (fun (pat, res) -> Option.map (fun a -> a, res) (matchPattern tenv pat ev))
+            |> List.map (fun (pat, res) -> Option.map (fun a -> a, res) (evalPattern tenv pat ev))
             |> List.tryPick id
             |> Option.bind (fun (env, hit) -> eval env hit)
         | _ -> None
 
 // Repl start
-type ReplM<'t> = StateM<TypeEnv * TermEnv * UserEnv * int, 't>
+type InferState = TypeEnv * UserEnv * ClassEnv * int
+type ReplM<'t> = StateM<InferState * TermEnv, 't>
 let repl = state
-let setEnv f = repl {
-    let! a = get
-    do! set (f a)
-}
-let setTypeEnv env  = setEnv (fun (_, b, c, d) -> (env, b, c, d)) 
-let setTermEnv env  = setEnv (fun (a, _, c, d) -> (a, env, c, d)) 
-let setUserEnv env  = setEnv (fun (a, b, _, d) -> (a, b, env, d)) 
-let setFreshCount i = setEnv (fun (a, b, c, _) -> (a, b, c, i)) 
+let getTermEnv : ReplM<TermEnv> = fmap snd get
+let setTermEnv x : ReplM<unit> = fun (s, _) -> (Ok (), (s, x))
+let setFreshCount x : ReplM<unit> = fun ((a,b,c,d),e) -> (Ok (), ((a,b,c,x),e))
 
-let rec extendTypeEnv pat typ = repl {
-    let! (typeEnv, _, _, _) = get
-    match pat, typ with
-    | PName a, typ ->
-        do! setTypeEnv (extend typeEnv a (ftvType typ |> Set.toList, typ))
-        return true
-    | PTuple pats, TCtor (KProduct, typs) ->
-        let! _ = mapM (fun (pat, va) -> extendTypeEnv pat va) (List.zip pats typs)
-        return true
-    | _ ->
-        return false
-}
+let extendEnv env up =
+    List.fold (fun env (name, v) -> extend env name v) env up
 
-let rec extendTermEnv pat v = repl {
-    let! (typeEnv, termEnv, userEnv, freshCount) = get
-    match matchPattern termEnv pat v with
-    | Some nenv ->
-        do! setTermEnv nenv
-        return true
-    | _ ->
-        return false
-}
+let addClassInstance (cls: ClassEnv) (name: string, inst: Inst) : ClassEnv =
+    match lookup cls name with
+    | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
+    | None -> cls
 
-let handleExpr expr = repl {
-    let! (typeEnv, termEnv, userEnv, freshCount) = get
-    let typed, i = inferProgramRepl typeEnv freshCount expr
+let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
+    let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
+    let (typeUp, userUp, classUp, implUp) = up
+    let typeEnv = extendEnv typeEnv typeUp
+    let userEnv = extendEnv userEnv userUp
+    let classEnv = extendEnv classEnv classUp
+    let classEnv = List.fold addClassInstance classEnv implUp
+    do! set ((typeEnv, userEnv, classEnv, freshCount), termEnv)
+    }
+
+let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
+    let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
+    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv), (Map.empty, freshCount))
     do! setFreshCount i
-    match typed with
-    | Ok typ ->
-        let res = eval termEnv expr
-        match res with
-        | Some res -> return Ok (typ, res)
-        | None -> return Error "Evaluation error"
-    | Error err -> return Error err
-}
+    match res with
+    | Ok (update, tdecl) ->
+        do! applyEnvUpdate update
+        return update, Some tdecl
+    | Error err ->
+        printfn "Type error: %s" err
+        return ([], [], [], []), None
+    }
+
+let checkType (name: string) : ReplM<string option> = repl {
+    let! ((typeEnv, _, _, _), _) = get
+    match lookup typeEnv name with
+    | Some (_, typ) -> return Some (typ |> renameFreshQualType |> prettyQualType)
+    | None -> return None
+    }
+
+let rec extendTermEnv bindings = repl {
+    let! env = getTermEnv
+    let env = List.fold (fun acc (n, v) -> extend acc n v) env bindings
+    do! setTermEnv env
+    }
 
 let rec handleDecl silent decl = repl {
-    match decl with
-    | DExpr expr ->
-        match! handleExpr expr with
-        | Ok (typ, res) ->
-            let typ = typ |> renameFresh |> prettyType
-            if not silent then
-                printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res)
-        | Error err -> printfn "%s" err
-    | DLet (pat, expr) ->
-        let prettyName = prettyPattern pat
-        match! handleExpr expr with
-        | Ok (typ, res) ->
-            let ptyp = typ |> renameFresh |> prettyType
-            let! s1 = extendTypeEnv pat typ
-            let! s2 = extendTermEnv pat res
-            if not silent then
-                if s1 && s2 then
-                    printColor <| sprintf "$w%s : $b%s $w= $g%s" prettyName ptyp (prettyValue res) 
-                else
-                    printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" (prettyPattern pat) ptyp
-        | Error err -> printfn "%s" err
-    | DUnion (name, tvs, cases) ->
+    let! (varBindings, _, _, _), tdecl = runInfer decl
+    let! tenv = getTermEnv
+    match tdecl with
+    | Some (TDExpr expr) ->
+        match! checkType "it" with
+        | Some typ when not silent ->
+            let opt = 
+                eval tenv expr
+                |> Option.map (fun res -> printColor <| sprintf "$wit : $b%s $w= $g%s" typ (prettyValue res))
+            if Option.isNone opt then
+                printfn "Evaluation error"
+        | _ -> ()
+    | Some (TDLet (pat, expr)) ->
+        let vs = eval tenv expr |> Option.bind (matchPattern tenv pat)
+        match vs with
+        | Some vs ->
+            do! extendTermEnv vs
+            do! mapM_ (fun (name, res) -> repl {
+                match! checkType name with
+                | Some typ when not silent ->
+                    printColor <| sprintf "$w%s : $b%s $w= $g%s" name typ (prettyValue res)
+                | _ -> ()
+                }) vs
+        | None ->
+            printfn "Evaluation failure"//TODO: Print
+            //printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" prettyName ptyp
+    | Some (TDUnion (name, tvs, cases)) ->
+        let ctors = List.map fst cases
+        do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases
-        let! _ =
-            mapM (fun case -> repl {
-                let decl = DLet (PName case, EUnion (name, tvs, cases, EVar case))
-                return! handleDecl silent decl }) names
-        ()
-}
+        do! mapM_ (fun case -> repl {
+                let decl = DLet (PName case, EVar case)
+                return! handleDecl silent decl 
+                }) names
+    | Some (TDMember (blankets, pred, impls)) ->
+        let inst = blankets, pred
+        do! mapM_ (fun (s, e) -> repl {
+            let! env = getTermEnv
+            match lookup env s with
+            | Some (VOverload (lst, arity, v)) -> do! extendTermEnv [s, VOverload ((inst, e) :: lst, arity, v)]
+            | None -> do! extendTermEnv [s, VOverload ([inst, e], calcArity e, [])]
+            | _ -> ()
+            }) impls
+    | _ -> ()// TODO: Typeclasses
+    }
 
 let runExpr input = repl {
-    let ast = parseRepl input
+    let ast = parseDecl input
+    //printfn "%A" ast
     match ast with
     | Success (decl) -> do! handleDecl false decl
     | FailureWith err -> printfn "Parsing error: %A" err
@@ -250,18 +320,10 @@ let rec readUntilSemicolon (str: string) =
         let ns = System.Console.ReadLine()
         str + readUntilSemicolon ns
 
-let rec extractDeclarations expr =
-    match expr with
-    | ELet (name, init, rest) -> DLet (name, init) :: extractDeclarations rest
-    | EUnion (name, typs, cases, rest) -> DUnion (name, typs, cases) :: extractDeclarations rest
-    | _ -> []
-
 let loadLibrary silent input = repl {
-    let ast = parseRepl input
+    let ast = parseProgram input
     match ast with
-    | Success (DExpr e) ->
-        let! _ = mapM (handleDecl silent) (extractDeclarations e)
-        ()
+    | Success decls -> do! mapM_ (handleDecl silent) decls
     | _ -> printfn "Failed to load library."
 }
 
@@ -286,25 +348,22 @@ let runRepl : ReplM<unit> = repl {
             let ops = trimmed.Split(" ")
             match trimmed.[1] with
             | 't' when ops.Length > 1 -> 
-                let! (typeEnv, _, _, _) = get
-                match lookup typeEnv (ops.[1]) with
-                | Some (_, ty) -> printColor <| sprintf "$w%s : $b%s" (ops.[1]) (prettyType ty)
+                match! checkType (ops.[1]) with
+                | Some (ty) -> printColor <| sprintf "$w%s : $b%s" (ops.[1]) ty
                 | _ -> printfn "Invalid identifier!"
             | 'f' when ops.Length > 1 ->
-                do! runExpr (System.IO.File.ReadAllText ops.[1])
-            | 'l' when ops.Length > 1 ->
                 do! loadLibrary false (System.IO.File.ReadAllText ops.[1])
             | 's' ->
-                let! (typeEnv, termEnv, _, _) = get
+                let! ((typeEnv, _, _, _), termEnv) = get
                 let filter = if ops.Length > 1 then ops.[1] else ""
-                let names = Map.keys typeEnv
+                let names = Map.toList typeEnv |> List.map fst
                 names
                 |> Seq.filter (fun name -> name.Contains filter)
                 |> Seq.map (fun name -> name, lookup typeEnv name, lookup termEnv name)
                 |> Seq.iter (fun (name, ty, te) ->
                     match ty, te with
                     | Some (_, ty), Some te ->
-                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyType ty) (prettyValue te)
+                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyQualType (renameFreshQualType ty)) (prettyValue te)
                     | _ -> ())
             | 'q' ->
                 System.Environment.Exit 0
@@ -312,7 +371,6 @@ let runRepl : ReplM<unit> = repl {
                 printfn "Type an expression followed by a semicolon to evaluate it."
                 printfn "You can use the following commands:"
                 printfn ":f <path>            Load code from a path and evaluate it."
-                printfn ":l <path>            Load code from a path as a library."
                 printfn ":t <identifier>      Print the type of a bound variable."
                 printfn ":s <filter>          Show all bindings optionally filtered to a string."
                 printfn ":h                   Print this help message."
@@ -323,5 +381,11 @@ let runRepl : ReplM<unit> = repl {
             do! runExpr (readUntilSemicolon input)
 }
 
-runRepl (funSchemes, Map.map (fun k v -> VIntrinsic (k, [])) funSchemes, Map.empty, 0)
-|> ignore
+let runReplAction prelude action =
+    let funSchemes = if prelude then funSchemes else Map.empty
+    action ((funSchemes, Map.empty, classes, 0), Map.map (fun k v -> VIntrinsic (k, [])) funSchemes)
+    |> fst
+
+let startRepl() =
+    runReplAction true runRepl
+    |> ignore

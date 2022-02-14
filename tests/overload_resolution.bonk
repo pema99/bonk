@@ -1,0 +1,13 @@
+// Test overload resolution, choosing between multiple typeclass instances
+
+class Show =
+    | show : this -> string
+
+member bool of Show =
+    | show : [x] "Boolean!"
+
+member float of Show =
+    | show : [x] "Float!"
+
+let _ = print (show true) in
+let _ = print (show 3.5) in

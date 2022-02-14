@@ -62,7 +62,8 @@ let reserved = Set.ofList [
     "if"; "then"; "else"; "fn"
     "rec"; "sum"; "match"; "with"
     "int"; "bool"; "float"; "string";
-    "void"; "unit"
+    "void"; "unit"; "class"; "this"
+    "of"; "member"
     ]
 
 let notKeywordP : Com<string, char> =
@@ -145,7 +146,7 @@ let varP =
     |> attempt
     |>> EVar
 
-let lamP : Com<Expr, char> =
+let lamP =
     between (one '[') patP (one ']')
     <+> exprP
     |>> ELam
@@ -172,25 +173,27 @@ let recP =
     exprP
     |>> ERec
 
+let opFunP =
+    (operatorP
+    |>> fun op -> ELam (PName "x", ELam (PName "y", EOp (EVar "x", op, EVar "y"))))
+    |> whitespacedP
+    |> parens
+    |> attempt
+
 let nonAppP =
-    (literalP |>> ELit)
+    opFunP
+    <|> (literalP |>> ELit)
     <|> groupP
-    <|> lamP
+    <|> varP
+    |> whitespacedP
+
+let appP =
+    lamP
     <|> letP
     <|> matchP
     <|> recP
     <|> ifP
-    <|> varP
-    |> whitespacedP
-
-let appP = 
-    chainL1 nonAppP (just (curry EApp))
-
-// TODO: Unop
-(*let unOpP = 
-  (specificOperatorP Plus <|> specificOperatorP Minus <|> specificOperatorP Not)
-  <+> exprP // TODO: technically should be term
-  |>> UnOp*)
+    <|> chainL1 nonAppP (just (curry EApp))
 
 let specificBinOpP op =
   specificOperatorP op
@@ -203,6 +206,13 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
 
+let unOpP = 
+    (specificOperatorP Minus)
+    <+> exprP
+    |>> fun (_, e) -> EOp (EOp (e, Minus, e), Minus, e)
+
+exprPImpl := whitespacedP (boolOpP <|> unOpP)
+
 // User types
 let typeP, typePImpl = declParser()
 
@@ -212,6 +222,7 @@ let typeVarP =
 let primTypeP =
     (typeVarP |>> TVar)
     <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TConst)
+    <|> (keywordP "this" *> just (TVar "this"))
 
 let typeTermP =
     (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
@@ -225,18 +236,47 @@ let productP =
     |> attempt
 
 let arrowP =
-    chainL1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
+    chainR1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
 
 typePImpl := whitespacedP arrowP
 
-let sumDeclP =
+// Declarations
+let declLetP =
+    keywordP "let" *>
+    (patP)
+    <* one '=' <* whitespaceP
+    <+> exprP
+    <* keywordP "in"
+    |>> DLet
+
+let declSumP =
     (keywordP "sum" *> notKeywordP
     <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-    <* keywordP "in" <+> exprP
-    |>> (fun (((a,b),c),d) -> EUnion (a,b,c,d))
+    <* opt (keywordP "in")
+    |>> (fun ((a,b),c) -> DUnion (a,b,c))
 
-exprPImpl := whitespacedP (sumDeclP <|> boolOpP)
+let declClassP = // TODO: Requirements
+    (keywordP "class" *> notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
+    <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
+    <* opt (keywordP "in")
+    |>> (fun (a, b) -> DClass (a, [], b) )
+
+let declImplP = // TODO: Blanket impls
+    (keywordP "member" *> typeP <* keywordP "of")
+    <+> (notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
+    <+> (sepBy1 (notKeywordP <* (one ':') <+> exprP) (one '|'))
+    <* opt (keywordP "in")
+    |>> (fun (a, b) -> DMember ([],flip a,b))
+
+let declExprP =
+    exprP |>> DExpr
+
+let declP =
+    (attempt declExprP) <|> declLetP <|> declSumP <|> declClassP <|> declImplP
+
+let programP =
+    many declP
 
 let removeComments (txt: string) =
     txt.Split('\n')
@@ -244,36 +284,16 @@ let removeComments (txt: string) =
     |> Array.filter (fun s -> not <| s.StartsWith("//"))
     |> String.concat "\n"
 
+let parseDecl txt =
+    txt
+    |> removeComments
+    |> mkMultiLineParser
+    |> declP
+    |> fst
+
 let parseProgram txt =
     txt
     |> removeComments
     |> mkMultiLineParser
-    |> exprP
-    |> fst
-
-// Incomplete declarations for REPL
-let declLetP =
-    keywordP "let" *>
-    (patP)
-    <* one '=' <* whitespaceP
-    <+> exprP
-    |>> DLet
-
-let declSumP =
-    (keywordP "sum" *> notKeywordP
-    <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
-    <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-    |>> (fun ((a,b),c) -> DUnion (a,b,c))
-
-let declExprP =
-    exprP |>> DExpr
-
-let replP =
-    (attempt declExprP) <|> declLetP <|> declSumP
-
-let parseRepl txt =
-    txt
-    |> removeComments
-    |> mkMultiLineParser
-    |> replP
+    |> programP
     |> fst

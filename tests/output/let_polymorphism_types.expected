@@ -1,0 +1,4 @@
+id1 : ('a -> 'a)
+id2 : ('a -> 'a)
+test1 : (bool * int)
+test2 : int

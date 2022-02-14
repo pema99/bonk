@@ -1,0 +1,9 @@
+// Test that implementing a typeclass for a constructed type works
+
+class Add =
+    | add : this -> this -> this
+
+member (int * float) of Add =
+    | add : [(x,y)] [(z,w)] (x+z, y+w)
+
+let res = add (1, 2.5) (2, 1.3) in

@@ -1,0 +1,9 @@
+// Let bindings should allow polymorphic values
+
+// Both in type constructors
+let id1 = [x] x in 
+    let test1 = (id1 true, id1 3) in
+
+// And simple expressions
+let id2 = [x] x in
+    let test2 = if id2 true then id2 3 else id2 2 in

@@ -55,29 +55,59 @@ let prettyTypeName (i: int) : string =
     if i < 26 then string <| 'a' + char i
     else sprintf "t%A" i
 
-let renameFresh (t: Type) : Type =
-    let rec cont t subst count =
-        match t with
-        | TConst _ -> t, subst, count
-        | TArrow (l, r) ->
-            let (r1, subst1, count1) = cont l subst count
-            let (r2, subst2, count2) = cont r subst1 count1
-            TArrow (r1, r2), subst2, count2
-        | TVar a ->
-            match Map.tryFind a subst with
-            | Some v -> TVar v, subst, count
-            | None ->
-                let name = prettyTypeName count
-                let nt = TVar name
-                nt, Map.add a name subst, count + 1
-        | TCtor (kind, args) ->
-            let lst =
-                args
-                |> List.scan (fun (_, subst, count) x -> cont x subst count) (tVoid, subst, count)
-                |> List.tail
-            let args, substs, counts = List.unzip3 lst
-            TCtor (kind, args),
-            List.tryLast substs |> Option.defaultValue subst,
-            List.tryLast counts |> Option.defaultValue count
-    let (res, _, _) = cont t Map.empty 0
-    res 
+let rec renameFreshInner (t: Type) subst count =
+    match t with
+    | TConst _ -> t, subst, count
+    | TArrow (l, r) ->
+        let (r1, subst1, count1) = renameFreshInner l subst count
+        let (r2, subst2, count2) = renameFreshInner r subst1 count1
+        TArrow (r1, r2), subst2, count2
+    | TVar a ->
+        match Map.tryFind a subst with
+        | Some v -> TVar v, subst, count
+        | None ->
+            let name = prettyTypeName count
+            let nt = TVar name
+            nt, Map.add a name subst, count + 1
+    | TCtor (kind, args) ->
+        let lst =
+            args
+            |> List.scan (fun (_, subst, count) x -> renameFreshInner x subst count) (tVoid, subst, count)
+            |> List.tail
+        let args, substs, counts = List.unzip3 lst
+        TCtor (kind, args),
+        List.tryLast substs |> Option.defaultValue subst,
+        List.tryLast counts |> Option.defaultValue count
+
+let renameFreshType t =
+    renameFreshInner t Map.empty 0
+
+let prettyQualType (t: QualType) =
+    let a, b = t
+    let preds =
+        List.map (fun (c, d) -> c, prettyType d) a
+        |> List.map (fun (c, d) -> sprintf "%s %s" c d)
+        |> String.concat ", "
+    if List.length a > 0 then
+        sprintf "(%s) => %s" preds (b |> prettyType)
+    else
+        (b |> prettyType)
+
+let renameFreshQualType (t: QualType) =
+    let a, b = t
+    let b, s, c = renameFreshInner b Map.empty 0
+    let a = List.scan (fun (_, (_, s, c)) (ps, v) -> ps, renameFreshInner v s c) ("", (tVoid, s, c)) a
+    let a = List.map (fun (a, (b, _, _)) -> a, b) (List.tail a)
+    (a, b)
+
+let rec prettyValue v =
+    match v with
+    | VUnit -> "()"
+    | VInt v -> string v
+    | VBool v -> string v
+    | VFloat v -> string v
+    | VString v -> sprintf "%A" v
+    | VChar v -> sprintf "'%c'" v
+    | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
+    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
+    | VClosure _ | VUnionCtor _ | VLazy _ | VIntrinsic _ | VOverload _ -> "Closure"

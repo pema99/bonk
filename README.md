@@ -10,7 +10,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - Pattern matching both in `let` and `match` constructs.
 - Parametric polymorphism. Functions can be generic.
 - Recursion via a fixed-point combinator named `rec`.
-- _Everything_ is an expression. Thus, an entire program is a single expression.
+- A _very_ work-in-progress implementation of typeclasses.
 - An working interpreter/REPL that also provides type information.
 - A tiny standard library (see `lib/prelude.bonk`).
 
@@ -43,12 +43,20 @@ r2
 Check the examples folder for more examples.
 
 # How to build
-Requires dotnet core:
+To build, you need dotnet core installed. Then run:
 ```sh
 git clone https://github.com/pema99/bonk
 cd bonk
 git submodule update --init --recursive
 dotnet run
+```
+To run tests, you can do:
+```sh
+dotnet run test
+```
+And to bless tests (accept current output as correct), do:
+```sh
+dotnet run bless
 ```
 
 # To do (maybe, stuff I'm looking at)
