@@ -60,8 +60,8 @@ dotnet run bless
 ```
 
 # To do (maybe, stuff I'm looking at)
-- Exhaustiveness checking for pattern matching
 - Rust-style traits/typeclasses for ad-hoc polymorphism
+- Exhaustiveness checking for pattern matching
 - Type ascription
 
 # Fluff
