@@ -17,28 +17,31 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 # Example code
 The following program typechecks and runs. Syntax subject to change.
 ```fs
+// Bonk supports sum types.
 sum List 'a =
     | Cons 'a * List 'a
     | Nil unit
-in
 
-let map = rec [map] [f] [lst]
+// And recursive functions, though functions are just named lambdas.
+let rec map = [f] [lst]
     match lst with
     | Cons (h, t) -> Cons (f h, map f t)
     | Nil _       -> Nil () 
 in
 
-let fold = rec [fold] [f] [z] [lst]
+let rec fold = [f] [z] [lst]
     match lst with
     | Cons (h, t) -> f (h) (fold f z t)
     | Nil _       -> z
 in
 
-let myList = Cons (1, Cons (2, Cons (3, Nil ()))) in
-
-let r1 = map ([x] x * 5) myList in
-let r2 = fold ([x] [y] x + y) 0 r1 in
-r2
+// There is small standard library with functions like 'iota' and 'filter'.
+// Let's use them to calculate the sub of the 20 first square numbers which are even:
+let myList = iota 20 in
+let r1 = map ([x] x * x) myList in
+let r2 = filter ([x] x % 2 = 0) r1 in
+let r3 = fold (+) 0 r2 in
+r3
 ```
 Check the examples folder for more examples.
 
