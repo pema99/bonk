@@ -316,6 +316,19 @@ let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : TypedExpr =
     | TEMatch (pt, e, bs)     -> TEMatch (applyQualType s pt, applyTypedExpr s e, List.map (fun (a, b) -> a, applyTypedExpr s b) bs)
     | TERec (pt, e)           -> TERec (applyQualType s pt, applyTypedExpr s e)
 
+let getExprType ex = 
+    match ex with
+    | TELit (pt, v)           -> pt
+    | TEVar (pt, a)           -> pt
+    | TEApp (pt, f, x)        -> pt
+    | TELam (pt, x, e)        -> pt
+    | TELet (pt, x, e1, e2)   -> pt
+    | TEIf (pt, cond, tr, fl) -> pt
+    | TEOp (pt, l, op, r)     -> pt
+    | TETuple (pt, es)        -> pt
+    | TEMatch (pt, e, bs)     -> pt
+    | TERec (pt, e)           -> pt
+
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.

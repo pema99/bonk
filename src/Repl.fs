@@ -7,21 +7,9 @@ open Pretty
 open Combinator
 open Parse
 open Prelude
+open CodeGen
 
 // Evaluation
-let getExprType ex = 
-    match ex with
-    | TELit (pt, v)           -> pt
-    | TEVar (pt, a)           -> pt
-    | TEApp (pt, f, x)        -> pt
-    | TELam (pt, x, e)        -> pt
-    | TELet (pt, x, e1, e2)   -> pt
-    | TEIf (pt, cond, tr, fl) -> pt
-    | TEOp (pt, l, op, r)     -> pt
-    | TETuple (pt, es)        -> pt
-    | TEMatch (pt, e, bs)     -> pt
-    | TERec (pt, e)           -> pt
-
 let rec compatible (l: QualType) (r: QualType) : bool =
     match l, r with
     | l, r when l = r -> // precisely equall types
