@@ -36,7 +36,7 @@ let rec fold = [f] [z] [lst]
 in
 
 // There is small standard library with functions like 'iota' and 'filter'.
-// Let's use them to calculate the sub of the 20 first square numbers which are even:
+// Let's use them to calculate the sum of the 20 first square numbers which are even:
 let myList = iota 20 in
 let r1 = map ([x] x * x) myList in
 let r2 = filter ([x] x % 2 = 0) r1 in
