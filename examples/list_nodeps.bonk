@@ -1,0 +1,38 @@
+sum List 'a =
+    | Cons 'a * List 'a
+    | Nil unit
+
+let iota = [n]
+    let inner = rec [inner] [acc]
+        if acc >= n then Nil ()
+        else Cons (acc, inner (acc + 1))
+    in
+    inner 0
+in
+
+let rec map = [f] [lst]
+    match lst with
+    | Cons (h, t) -> Cons (f h, map f t)
+    | Nil _       -> Nil () 
+in
+
+let rec fold = [f] [z] [lst]
+    match lst with
+    | Cons (h, t) -> f (h) (fold f z t)
+    | Nil _       -> z
+in
+
+let filter = rec [filter] [f] [lst]
+    match lst with
+    | Cons (h, t) ->
+        if f h
+        then Cons (h, filter f t)
+        else filter f t
+    | Nil _       -> Nil _
+in
+
+let myList = iota 20 in
+let r1 = map ([x] x * x) myList in
+let r2 = filter ([x] x % 2 = 0) r1 in
+let r3 = fold (+) 0 r2 in
+r3
