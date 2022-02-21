@@ -1,6 +1,6 @@
 # Bonk
 Bonk, son of [Gunk](https://github.com/pema99/gunk), cousin of [Plonk](https://github.com/pema99/plonk).
-Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently only interpreted, but I might implement a bytecode VM at some point.
+Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently either intepreted (slow and with no tail-call optimizations) or compiled to JavaScript.
 
 # Features
 - Basic expressions. IE. `if`, `let`, function application and abstraction, arithmetic
@@ -11,6 +11,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - Parametric polymorphism. Functions can be generic.
 - Recursion via a fixed-point combinator named `rec`.
 - A _very_ work-in-progress implementation of typeclasses.
+- A _very_ work-in-progress [JavaScript backend](https://gist.github.com/pema99/935b915a3197b5222183bf6ac4bb8308).
 - An working interpreter/REPL that also provides type information.
 - A tiny standard library (see `lib/prelude.bonk`).
 
@@ -66,6 +67,7 @@ dotnet run bless
 - Rust-style traits/typeclasses for ad-hoc polymorphism
 - Exhaustiveness checking for pattern matching
 - Type ascription
+- JavaScript codegen
 
 # Fluff
 - Dependencies are cringe.
