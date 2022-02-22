@@ -92,6 +92,7 @@ let tests = [
     "Basic overload resolution works", fun () -> testValues true "overload_resolution"
     "Wrong typeclass implementation fails #1", fun () -> testValues false "typeclass_invalid"
     "Wrong typeclass implementation fails #2", fun () -> testValues false "typeclass_invalid_self"
+    "Outdated environment regression", fun () -> testTypes false "outdated_env_bug"
 ]
 
 let startTests() =

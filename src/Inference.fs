@@ -25,22 +25,6 @@ type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv, Substitution * int,
 let infer = state
 let fresh : InferM<Type> = fun ((te, ue, ce), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce), (s, c + 1))
 
-// Environment helpers
-let extend env x s = Map.add x s env
-let lookup env x = Map.tryFind x env
-let remove env x = Map.remove x env
-let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
-let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d)) 
-let getTypeEnv = fun ((a, b, c), s) -> Ok a, ((a, b, c), s)
-let getUserEnv = fun ((a, b, c), s) -> Ok b, ((a, b, c), s)
-let getClassEnv = fun ((a, b, c), s) -> Ok c, ((a, b, c), s)
-let inTypeEnv x m = local (fun (te, ue, ce) -> x, ue, ce) m
-let inUserEnv x m = local (fun (te, ue, ce) -> te, x, ce) m
-let inClassEnv x m = local (fun (te, ue, ce) -> te, ue, x) m
-let withTypeEnv x sc m = local (fun (te, ue, ce) -> extend te x sc, ue, ce) m
-let withUserEnv x sc m = local (fun (te, ue, ce) -> te, extend ue x sc, ce) m
-let withClassEnv x sc m = local (fun (te, ue, ce) -> te, ue, extend ce x sc) m
-
 // Substitution application up to fixed point
 let rec fixedPoint f s t =
     let subst = f s t
@@ -93,6 +77,27 @@ let applyEnv =
     let applyEnvFP (s: Substitution) (t: TypeEnv) : TypeEnv =
         Map.map (fun _ v -> applyScheme s v) t
     fixedPoint applyEnvFP
+
+// Environment helpers
+let extend env x s = Map.add x s env
+let lookup env x = Map.tryFind x env
+let remove env x = Map.remove x env
+let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
+let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d)) 
+let getTypeEnvRaw = fun ((a, b, c), s) -> Ok a, ((a, b, c), s)
+let getUserEnv = fun ((a, b, c), s) -> Ok b, ((a, b, c), s)
+let getClassEnv = fun ((a, b, c), s) -> Ok c, ((a, b, c), s)
+let inTypeEnv x m = local (fun (te, ue, ce) -> x, ue, ce) m
+let inUserEnv x m = local (fun (te, ue, ce) -> te, x, ce) m
+let inClassEnv x m = local (fun (te, ue, ce) -> te, ue, x) m
+let withTypeEnv x sc m = local (fun (te, ue, ce) -> extend te x sc, ue, ce) m
+let withUserEnv x sc m = local (fun (te, ue, ce) -> te, extend ue x sc, ce) m
+let withClassEnv x sc m = local (fun (te, ue, ce) -> te, ue, extend ce x sc) m
+let getTypeEnv = infer { // This just applies the current substitution whenever we get the environment
+    let! env = getTypeEnvRaw
+    let! subs = getSubstitution
+    return applyEnv subs env
+}
 
 // Instantiate a monotype from a polytype
 let instantiate (sc: Scheme) : InferM<QualType> = infer {
@@ -236,6 +241,13 @@ let reduce (ps: Pred list) : InferM<Pred list> = infer {
     return List.distinct res
     }
 
+// Check if a predicate tells us anything about a type
+let isRelevant (ty: Type) (p: Pred) : bool =
+    let tvs = ftvType ty
+    match p with
+    | (_, TVar a) -> Set.contains a tvs
+    | _ -> true
+
 // Unification, most general unifier
 let occurs (s: string) (t: Type) : bool =
     Set.exists ((=) s) (ftvType t)
@@ -303,19 +315,7 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
     | TERec (pt, e)           -> TERec (ty, e)
 
-let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : TypedExpr =
-    match ex with
-    | TELit (pt, v)           -> TELit (applyQualType s pt, v)
-    | TEVar (pt, a)           -> TEVar (applyQualType s pt, a)
-    | TEApp (pt, f, x)        -> TEApp (applyQualType s pt, applyTypedExpr s f, applyTypedExpr s x) 
-    | TELam (pt, x, e)        -> TELam (applyQualType s pt, x, applyTypedExpr s e)
-    | TELet (pt, x, e1, e2)   -> TELet (applyQualType s pt, x, applyTypedExpr s e1, applyTypedExpr s e2)
-    | TEIf (pt, cond, tr, fl) -> TEIf (applyQualType s pt, applyTypedExpr s cond, applyTypedExpr s tr, applyTypedExpr s fl)
-    | TEOp (pt, l, op, r)     -> TEOp (applyQualType s pt, applyTypedExpr s l, op, applyTypedExpr s r)
-    | TETuple (pt, es)        -> TETuple (applyQualType s pt, List.map (applyTypedExpr s) es)
-    | TEMatch (pt, e, bs)     -> TEMatch (applyQualType s pt, applyTypedExpr s e, List.map (fun (a, b) -> a, applyTypedExpr s b) bs)
-    | TERec (pt, e)           -> TERec (applyQualType s pt, applyTypedExpr s e)
-
+// Get type out of a typed expression
 let getExprType ex = 
     match ex with
     | TELit (pt, v)           -> pt
@@ -328,6 +328,59 @@ let getExprType ex =
     | TETuple (pt, es)        -> pt
     | TEMatch (pt, e, bs)     -> pt
     | TERec (pt, e)           -> pt
+
+// Traverse a typed AST and apply some transformation to each type
+let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : InferM<TypedExpr> = infer {
+    match ex with
+    | TELit (pt, v) ->
+        let! pt = s pt
+        return TELit (pt, v)
+    | TEVar (pt, a) ->
+        let! pt = s pt
+        return TEVar (pt, a)
+    | TEApp (pt, f, x) ->
+        let! pt = s pt
+        let! f = traverseTypedExpr s f
+        let! x = traverseTypedExpr s x
+        return TEApp (pt, f, x) 
+    | TELam (pt, x, e) ->
+        let! pt = s pt
+        let! e = traverseTypedExpr s e
+        return TELam (pt, x, e)
+    | TELet (pt, x, e1, e2) ->
+        let! pt = s pt
+        let! e1 = traverseTypedExpr s e1
+        let! e2 = traverseTypedExpr s e2
+        return TELet (pt, x, e1, e2)
+    | TEIf (pt, cond, tr, fl) ->
+        let! pt = s pt
+        let! cond = traverseTypedExpr s cond
+        let! tr = traverseTypedExpr s tr
+        let! fl = traverseTypedExpr s fl
+        return TEIf (pt, cond, tr, fl)
+    | TEOp (pt, l, op, r) ->
+        let! pt = s pt
+        let! l = traverseTypedExpr s l
+        let! r = traverseTypedExpr s r
+        return TEOp (pt, l, op, r)
+    | TETuple (pt, es) ->
+        let! pt = s pt
+        let! es = mapM (traverseTypedExpr s) es
+        return TETuple (pt, es)
+    | TEMatch (pt, e, bs) ->
+        let! pt = s pt
+        let! e = traverseTypedExpr s e
+        let bs1 = List.map fst bs
+        let! bs2 = mapM (snd >> traverseTypedExpr s) bs
+        return TEMatch (pt, e, List.zip bs1 bs2)
+    | TERec (pt, e) ->
+        let! pt = s pt
+        let! e = traverseTypedExpr s e
+        return TERec (pt, e)
+    }
+
+let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
+    traverseTypedExpr (applyQualType s >> just) ex
 
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
@@ -508,11 +561,27 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
 
 // Infer and expression and then solve constraints
 let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> = infer {
-    let! (ps, res), te = inferExpr e
-    let! ps = reduce ps
+    // Infer the type of the expression
+    let! qt, te = inferExpr e
+    // Get the final substitution and apply it to final list of predicates
     let! subs = getSubstitution
-    let qt = applyQualType subs (ps, res)
-    return qt, replaceType te qt
+    let ops = List.map (fun (q, t) -> q, applyType subs t) (fst qt)
+    // Use this function to get a final type
+    let fixType (ps, res) = infer {
+        let res = applyType subs res
+        let! nps = 
+            ps @ ops
+            |> List.map (fun (a, b) -> a, applyType subs b)
+            |> List.filter (isRelevant res)
+            |> reduce
+        return applyQualType subs (nps, res)
+        }
+    // Traverse the AST and get the most up to date type for each node
+    // I don't do this along the way since it is expensive
+    let! te = traverseTypedExpr fixType te
+    // Do the same for the single topmost returned type
+    let! qt = fixType qt
+    return qt, te
     }
 
 // Gather variable bindings from a type and pattern
@@ -610,7 +679,7 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         do! mapM_ (fun (a, b) -> unify a b) (List.zip etyps atyps)
         // Apply all substitutions thus far to the inferred types
         let! subs = getSubstitution
-        let aexprs = List.map (applyTypedExpr subs) aexprs
+        let! aexprs = mapM (applyTypedExpr subs) aexprs
         // TODO: Handle the collected predicates somehow here
         // let! ps = reduce (List.concat apreds @ List.concat epreds)
         // Make the implementation to extend the class environment with
