@@ -139,6 +139,10 @@ and eval tenv (e: TypedExpr) =
         | Some (VUnionCtor a), Some v ->
             Some (VUnionCase (a, v))
         | Some (VClosure (a, body, env)), Some v ->
+            let env = 
+                match f with
+                | TEVar (_, fn) -> extend env fn (VClosure (a, body, env))
+                | _ -> env
             Option.bind (fun nenv -> eval nenv body) (evalPattern env a v )
         | Some (VLazy e), Some v -> // deferred application
             match e.Value with

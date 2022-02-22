@@ -508,6 +508,11 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         | _->
             return! failure <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
         }
+    | ELet (PName x, e1, e2) -> infer {
+        let! tv = fresh
+        let! qt, te1, te2 = withTypeEnv x (toScheme tv) (inferBinding (PName x) e1 e2 true)
+        return qt, TELet (qt, (PName x), te1, te2)
+        }
     | ELet (x, e1, e2) -> infer {
         let! qt, te1, te2 = inferBinding x e1 e2 true
         return qt, TELet (qt, x, te1, te2)
