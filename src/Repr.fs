@@ -44,10 +44,12 @@ and Expr =
     | ETuple of Expr list
     | EMatch of Expr * (Pat * Expr) list
     | ERec   of Expr
+    | EGroup of (string * Expr) list * Expr 
 
 and Decl =
     | DExpr   of Expr
     | DLet    of Pat * Expr
+    | DGroup  of (string * Expr) list
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
     | DMember of Pred list * Pred * (string * Expr) list     // blankets, pred, impls
@@ -82,10 +84,12 @@ type TypedExpr =
     | TETuple of QualType * TypedExpr list
     | TEMatch of QualType * TypedExpr * (Pat * TypedExpr) list
     | TERec   of QualType * TypedExpr
+    | TEGroup of QualType * (string * TypedExpr) list * TypedExpr 
 
 type TypedDecl =
     | TDExpr   of TypedExpr
     | TDLet    of Pat * TypedExpr
+    | TDGroup  of (string * TypedExpr) list
     | TDUnion  of string * string list * (string * Type) list 
     | TDClass  of string * string list * (string * Type) list  // name, reqs, (fname, ftype)
     | TDMember of Pred list * Pred * (string * TypedExpr) list // blankets, pred, impls
@@ -126,7 +130,7 @@ type Value =
     | VTuple     of Value list
     | VUnionCase of string * Value
     | VUnionCtor of string
-    | VClosure   of Pat * TypedExpr * TermEnv
+    | VClosure   of string list * Pat * TypedExpr * TermEnv
     | VLazy      of Value Lazy
     | VIntrinsic of string * Value list
     | VOverload  of (Inst * TypedExpr) list * int * (TypedExpr) list

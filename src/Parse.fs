@@ -63,7 +63,7 @@ let reserved = Set.ofList [
     "rec"; "sum"; "match"; "with"
     "int"; "bool"; "float"; "string";
     "void"; "unit"; "class"; "this"
-    "of"; "member"
+    "of"; "member"; "and"
     ]
 
 let notKeywordP : Com<string, char> =
@@ -151,14 +151,21 @@ let lamP =
     <+> exprP
     |>> ELam
 
+let letGroupP =
+    (keywordP "rec" *> identP <* one '=' <* whitespaceP <+> exprP) <+>
+    (many (keywordP "and" *> identP <* one '=' <* whitespaceP <+> exprP))
+    <* keywordP "in" <* whitespaceP
+    <+> exprP
+    |>> fun ((a,b),c) ->
+        EGroup (a::b,c)
+
 let letP =
-    (keywordP "let" *> (maybe (keywordP "rec"))) 
-    <+> (patP) <* one '=' <* whitespaceP
+    (keywordP "let") 
+    *> (patP) <* one '=' <* whitespaceP
     <+> exprP <* keywordP "in" <* whitespaceP
     <+> exprP
-    |>> (fun (((a, b), c), d) ->
-        if a then ELet (b, ERec (ELam (b, c)), d)
-        else ELet (b, c, d))
+    |>> (fun ((a, b), c) ->
+        ELet (a, b, c))
 
 let matchP =
     keywordP "match" *> exprP <* keywordP "with" <* opt (one '|')
@@ -170,11 +177,6 @@ let ifP =
     <+> keywordP "then" *> exprP
     <+> keywordP "else" *> exprP
     |>> (fun ((a, b), c) -> EIf (a, b, c))
-
-let recP =
-    keywordP "rec" *>
-    exprP
-    |>> ERec
 
 let opFunP =
     (operatorP
@@ -192,9 +194,9 @@ let nonAppP =
 
 let appP =
     lamP
+    <|> letGroupP
     <|> letP
     <|> matchP
-    <|> recP
     <|> ifP
     <|> chainL1 nonAppP (just (curry EApp))
 
@@ -245,14 +247,19 @@ typePImpl := whitespacedP arrowP
 
 // Declarations
 let declLetP =
-    (keywordP "let" *> (maybe (keywordP "rec")))
-    <+> (patP) 
+    (keywordP "let")
+    *> (patP) 
     <* one '=' <* whitespaceP
     <+> exprP
     <* keywordP "in"
-    |>> fun ((a,b),c) ->
-        if a then DLet (b, ERec (ELam (b, c)))
-        else DLet (b, c)
+    |>> DLet
+
+let declLetGroupP =
+    (keywordP "rec" *> identP <* one '=' <* whitespaceP <+> exprP) <+>
+    (many (keywordP "and" *> identP <* one '=' <* whitespaceP <+> exprP))
+    <* keywordP "in"
+    |>> fun ((a,b)) ->
+        DGroup (a::b)
 
 let declSumP =
     (keywordP "sum" *> notKeywordP
@@ -278,7 +285,7 @@ let declExprP =
     exprP |>> DExpr
 
 let declP =
-    (attempt declExprP) <|> declLetP <|> declSumP <|> declClassP <|> declImplP
+    (attempt declExprP) <|> declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP
 
 let programP =
     many declP

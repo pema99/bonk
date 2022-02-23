@@ -314,6 +314,7 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TETuple (pt, es)        -> TETuple (ty, es)
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
     | TERec (pt, e)           -> TERec (ty, e)
+    | TEGroup (pt, a, b)         -> TEGroup (ty, a, b)
 
 // Get type out of a typed expression
 let getExprType ex = 
@@ -328,6 +329,7 @@ let getExprType ex =
     | TETuple (pt, es)        -> pt
     | TEMatch (pt, e, bs)     -> pt
     | TERec (pt, e)           -> pt
+    | TEGroup (pt, a, b)      -> pt
 
 // Traverse a typed AST and apply some transformation to each type
 let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : InferM<TypedExpr> = infer {
@@ -377,6 +379,12 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         let! pt = s pt
         let! e = traverseTypedExpr s e
         return TERec (pt, e)
+    | TEGroup (pt, bs, rest) ->
+        let! pt = s pt
+        let bs1 = List.map fst bs
+        let! bs2 = mapM (snd >> traverseTypedExpr s) bs
+        let! rest = traverseTypedExpr s rest
+        return TEGroup (pt, List.zip bs1 bs2, rest)
     }
 
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
@@ -558,6 +566,27 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let qt = (p1, tv)
         return qt, TERec (qt, te)
         }
+    | EGroup (bs, rest) -> infer {
+        // Generate fresh vars for each binding, and put then in the environment
+        let! tvs = mapM (fun _ -> fresh) bs
+        let! env = getTypeEnv
+        let names, inis = List.unzip bs
+        let env = List.fold (fun env (name, tv) ->
+            extend env name (toScheme tv)) env (List.zip names tvs) 
+        // Infer the types of the value being bound in the new environment and generalize them
+        let! res = inTypeEnv env (mapM inferExpr inis)
+        let qts, tes = List.unzip res
+        let! scs = inTypeEnv env (mapM generalize qts)
+        // Put them in the environment
+        let env = List.fold (fun env (name, sc) ->
+            extend env name sc) env (List.zip names scs) 
+        // Infer the body/rhs of the binding under the gathered constraints
+        let! (p2, t2), te2 = inTypeEnv env (inferExpr rest)
+        // Unify fresh tvs with inferred types // TODO: What about about predicates
+        do! mapM_ (fun (l, r) -> unify l r) (List.zip tvs (List.map (snd >> snd) scs))
+        let qt = (p2, t2)
+        return qt, TEGroup (qt, List.zip names tes, te2)
+        }
 
 // Infer and expression and then solve constraints
 let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> = infer {
@@ -605,6 +634,13 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let! qt, te = inferExprTop e
         let bindings = gatherVarBindings name qt
         return (bindings, [], [], []), TDLet (name, te)
+    | DGroup (ds) ->
+        let names, exs = List.unzip ds
+        // TODO: This is sort of a hack, should fix
+        let! res = mapM (fun name -> inferExprTop (EGroup (ds, EVar name))) names
+        let qts, tes = List.unzip res
+        let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
+        return (bindings, [], [], []), TDGroup (List.zip names tes)
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv

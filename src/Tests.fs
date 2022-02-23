@@ -93,6 +93,8 @@ let tests = [
     "Wrong typeclass implementation fails #1", fun () -> testValues false "typeclass_invalid"
     "Wrong typeclass implementation fails #2", fun () -> testValues false "typeclass_invalid_self"
     "Outdated environment regression", fun () -> testTypes false "outdated_env_bug"
+    "Mutual recursion values", fun () -> testValues true "mutual_recursion"
+    "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
 ]
 
 let startTests() =
