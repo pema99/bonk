@@ -112,8 +112,8 @@ and binop l op r =
     | VString l, LessEq, VString r -> Some <| VBool (l.Length <= r.Length)
     | VString l, Greater, VString r -> Some <| VBool (l.Length > r.Length)
     | VString l, Less, VString r -> Some <| VBool (l.Length < r.Length)
-    | VBool l, And, VBool r -> Some <| VBool (l && r)
-    | VBool l, Or, VBool r -> Some <| VBool (l || r)
+    | VBool l, BoolAnd, VBool r -> Some <| VBool (l && r)
+    | VBool l, BoolOr, VBool r -> Some <| VBool (l || r)
     
     | _ -> None
 

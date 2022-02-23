@@ -128,7 +128,7 @@ let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
     | TEGroup (pt, bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
 
 // Emit a literal
-let emitLit (lit: Lit) : string =
+let emitLit (lit: Literal) : string =
     match lit with
     | LFloat v -> string v
     | LString v -> sprintf "\"%s\"" v
@@ -138,7 +138,7 @@ let emitLit (lit: Lit) : string =
     | LUnit -> "\"<unit>\""
 
 // Emit a pattern
-let rec emitPat (pat: Pat) : string =
+let rec emitPat (pat: Pattern) : string =
     match pat with
     | PName x -> x
     | PTuple x -> sprintf "[%s]" (List.map emitPat x |> String.concat ", ")
@@ -159,8 +159,8 @@ let emitOp (op: BinOp) : string =
     | LessEq -> "<="
     | Greater -> ">"
     | Less -> "<"
-    | And -> "&&"
-    | Or -> "||"
+    | BoolAnd -> "&&"
+    | BoolOr -> "||"
 
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
@@ -300,7 +300,7 @@ and optimizeTailRecursion (name: string) (ex: TypedExpr) : JsExpr =
 
 // Emit a structure that matches a pattern and adds bindings as necessary
 // TODO: Optimize the constant re-scoping a bit
-and emitPatternMatch (res: JsStmt) (pat: Pat) (expr: TypedExpr) : JsStmt =
+and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) : JsStmt =
     let rec cont pat expr next =
         match pat with
         | PName a -> // name matches with anything

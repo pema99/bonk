@@ -387,7 +387,7 @@ let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
-let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly: bool) : InferM<TypeEnv> = infer {
+let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (poly: bool) : InferM<TypeEnv> = infer {
     match pat, ty with
     // Name patterns match with anything
     | PName a, ty ->
@@ -442,7 +442,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly:
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
-and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
+and inferBinding (pat: Pattern) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
     // Infer the type of the value being bound
     let! (p1, t1), te1 = inferExpr e1
     // Gather constraints (substitutions, bindings) from the pattern
@@ -601,7 +601,7 @@ let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> = infer {
     }
 
 // Gather variable bindings from a type and pattern
-let rec gatherVarBindings (pat: Pat) (typ: QualType) : VarBinding list =
+let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
     match pat, typ with
     | PName a, typ ->
         [a, (ftvQualType typ |> Set.toList, typ)]

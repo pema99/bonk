@@ -15,8 +15,8 @@ let opSchemes: Map<BinOp, Scheme> = Map.ofList [
     LessEq,     (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
     Greater,    (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
     Less,       (["a"], (["Ord", TVar "a"], TArrow (TVar "a", TArrow (TVar "a", tBool))))
-    And,        ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
-    Or,         ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
+    BoolAnd,    ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
+    BoolOr,     ([],    ([], TArrow (tBool, TArrow (tBool, tBool))))
     ]
 
 // Instrinsics

@@ -1,30 +1,12 @@
 module Repr
 
-// Binary operators
-type BinOp =
-    | Plus
-    | Minus
-    | Star
-    | Slash
-    | Modulo
-    | Equal
-    | NotEq
-    | GreaterEq
-    | LessEq
-    | Greater
-    | Less
-    | And
-    | Or
-
-// Patterns
-type Pat =
-    | PName     of string
-    | PTuple    of Pat list
-    | PUnion    of string * Pat
-    | PConstant of Lit
+// Spans
+type Loc = (int * int)
+type Span = (Loc * Loc)
+type Spanned<'t> = ('t * Span)
 
 // Literals
-and Lit =
+type Literal =
     | LFloat  of float
     | LString of string
     | LInt    of int
@@ -32,22 +14,57 @@ and Lit =
     | LChar   of char
     | LUnit
 
+// Operators
+type BinOp =
+    | Plus | Minus | Star | Slash
+    | Equal | NotEq
+    | Greater | GreaterEq
+    | Less | LessEq
+    | BoolAnd | BoolOr
+    | Modulo
+
+// Tokens
+type Token =
+    // Operators, literals, identifiers, types
+    | Op of BinOp
+    | Lit of Literal
+    | Ident of string
+    | TypeDesc of Type
+    // Keywords
+    | Let | In
+    | If | Then | Else
+    | Sum | Match | With
+    | Class | Of | Member
+    | Rec | And
+    // Symbols
+    | LParen | RParen
+    | LBrack | RBrack
+    | Comma | Pipe | Colon
+    | Arrow | Tick
+
+// Patterns
+and Pattern =
+    | PName     of string
+    | PTuple    of Pattern list
+    | PUnion    of string * Pattern
+    | PConstant of Literal
+
 // Expression AST
 and Expr =
     | EVar   of string
     | EApp   of Expr * Expr
-    | ELam   of Pat * Expr
-    | ELet   of Pat * Expr * Expr
-    | ELit   of Lit
+    | ELam   of Pattern * Expr
+    | ELet   of Pattern * Expr * Expr
+    | ELit   of Literal
     | EIf    of Expr * Expr * Expr
     | EOp    of Expr * BinOp * Expr
     | ETuple of Expr list
-    | EMatch of Expr * (Pat * Expr) list
+    | EMatch of Expr * (Pattern * Expr) list
     | EGroup of (string * Expr) list * Expr 
 
 and Decl =
     | DExpr   of Expr
-    | DLet    of Pat * Expr
+    | DLet    of Pattern * Expr
     | DGroup  of (string * Expr) list
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
@@ -75,18 +92,18 @@ and QualType = (Pred list * Type)
 type TypedExpr =
     | TEVar   of QualType * string
     | TEApp   of QualType * TypedExpr * TypedExpr
-    | TELam   of QualType * Pat * TypedExpr
-    | TELet   of QualType * Pat * TypedExpr * TypedExpr
-    | TELit   of QualType * Lit
+    | TELam   of QualType * Pattern * TypedExpr
+    | TELet   of QualType * Pattern * TypedExpr * TypedExpr
+    | TELit   of QualType * Literal
     | TEIf    of QualType * TypedExpr * TypedExpr * TypedExpr
     | TEOp    of QualType * TypedExpr * BinOp * TypedExpr
     | TETuple of QualType * TypedExpr list
-    | TEMatch of QualType * TypedExpr * (Pat * TypedExpr) list
+    | TEMatch of QualType * TypedExpr * (Pattern * TypedExpr) list
     | TEGroup of QualType * (string * TypedExpr) list * TypedExpr 
 
 type TypedDecl =
     | TDExpr   of TypedExpr
-    | TDLet    of Pat * TypedExpr
+    | TDLet    of Pattern * TypedExpr
     | TDGroup  of (string * TypedExpr) list
     | TDUnion  of string * string list * (string * Type) list 
     | TDClass  of string * string list * (string * Type) list  // name, reqs, (fname, ftype)
@@ -128,7 +145,7 @@ type Value =
     | VTuple     of Value list
     | VUnionCase of string * Value
     | VUnionCtor of string
-    | VClosure   of string list * Pat * TypedExpr * TermEnv
+    | VClosure   of string list * Pattern * TypedExpr * TermEnv
     | VIntrinsic of string * Value list
     | VOverload  of (Inst * TypedExpr) list * int * (TypedExpr) list
 
