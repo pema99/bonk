@@ -24,13 +24,14 @@ sum List 'a =
     | Nil unit
 
 // And recursive functions, though functions are just named lambdas.
-let rec map = [f] [lst]
+// The 'rec' keyword is used to denote that a function is recursive.
+rec map = [f] [lst]
     match lst with
     | Cons (h, t) -> Cons (f h, map f t)
     | Nil _       -> Nil () 
 in
 
-let rec fold = [f] [z] [lst]
+rec fold = [f] [z] [lst]
     match lst with
     | Cons (h, t) -> f (h) (fold f z t)
     | Nil _       -> z

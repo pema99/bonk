@@ -313,7 +313,6 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TEOp (pt, l, op, r)     -> TEOp (ty, l, op, r)
     | TETuple (pt, es)        -> TETuple (ty, es)
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
-    | TERec (pt, e)           -> TERec (ty, e)
     | TEGroup (pt, a, b)         -> TEGroup (ty, a, b)
 
 // Get type out of a typed expression
@@ -328,7 +327,6 @@ let getExprType ex =
     | TEOp (pt, l, op, r)     -> pt
     | TETuple (pt, es)        -> pt
     | TEMatch (pt, e, bs)     -> pt
-    | TERec (pt, e)           -> pt
     | TEGroup (pt, a, b)      -> pt
 
 // Traverse a typed AST and apply some transformation to each type
@@ -375,10 +373,6 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         let bs1 = List.map fst bs
         let! bs2 = mapM (snd >> traverseTypedExpr s) bs
         return TEMatch (pt, e, List.zip bs1 bs2)
-    | TERec (pt, e) ->
-        let! pt = s pt
-        let! e = traverseTypedExpr s e
-        return TERec (pt, e)
     | TEGroup (pt, bs, rest) ->
         let! pt = s pt
         let bs1 = List.map fst bs
@@ -559,13 +553,6 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let qt = (List.concat ps, List.head typs)
         return qt, TEMatch (qt, List.head te1, List.zip (List.map fst bs) te2)
         }
-    | ERec e -> infer {
-        let! (p1, t1), te = inferExpr e
-        let! tv = fresh
-        do! unify (TArrow (tv, tv)) t1
-        let qt = (p1, tv)
-        return qt, TERec (qt, te)
-        }
     | EGroup (bs, rest) -> infer {
         // Generate fresh vars for each binding, and put then in the environment
         let! tvs = mapM (fun _ -> fresh) bs
@@ -639,8 +626,14 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // TODO: This is sort of a hack, should fix
         let! res = mapM (fun name -> inferExprTop (EGroup (ds, EVar name))) names
         let qts, tes = List.unzip res
+        let tes =
+            List.zip names tes
+            |> List.collect (fun (name, te) ->
+                match te with
+                | TEGroup (pt, bs, rest) -> List.filter (fst >> (=) name) bs
+                | _ -> [])
         let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
-        return (bindings, [], [], []), TDGroup (List.zip names tes)
+        return (bindings, [], [], []), TDGroup (tes)
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv

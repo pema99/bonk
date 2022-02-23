@@ -4,13 +4,13 @@ sum List 'a =
     | Nil unit
 
 // And recursive functions, though functions are just named lambdas.
-let rec map = [f] [lst]
+rec map = [f] [lst]
     match lst with
     | Cons (h, t) -> Cons (f h, map f t)
     | Nil _       -> Nil () 
 in
 
-let rec fold = [f] [z] [lst]
+rec fold = [f] [z] [lst]
     match lst with
     | Cons (h, t) -> f (h) (fold f z t)
     | Nil _       -> z

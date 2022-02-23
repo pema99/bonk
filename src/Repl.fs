@@ -144,11 +144,6 @@ and eval tenv (e: TypedExpr) =
                 | Some v -> extend acc self v
                 | _ -> acc) env selfs
             Option.bind (fun nenv -> eval nenv body) (evalPattern env a v)
-        | Some (VLazy e), Some v -> // deferred application
-            match e.Value with
-            | VClosure (selfs, a, body, env) ->
-                Option.bind (fun nenv -> eval nenv body) (evalPattern env a v)
-            | _ -> None
         | Some (VIntrinsic (name, args)), Some v ->
             let applied = v :: args
             match lookup funImpls name with
@@ -197,9 +192,6 @@ and eval tenv (e: TypedExpr) =
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | TERec (ty, e) ->
-        lazy (eval tenv (TEApp (ty, e, (TERec (ty, e)))) |> Option.get) // TODO: Are the types right here?
-        |> fun x -> Some (VLazy x)
     | TEMatch (_, e, xs) ->
         match eval tenv e with
         | Some ev ->
@@ -290,7 +282,8 @@ let rec handleDecl silent decl = repl {
         | None -> printfn "Evaluation failure"
     | Some (TDGroup (es)) ->
         let vs = List.map (fun (name, ex) ->
-            eval tenv ex |> Option.bind (matchPattern tenv (PName name))) es
+            eval tenv (TEGroup (([], tVoid), es, TEVar (([], tVoid), name)))
+            |> Option.bind (matchPattern tenv (PName name))) es
         if List.exists Option.isNone vs then printfn "Evaluation failure"
         else do! handleBindings (List.choose id vs |> List.concat)
     | Some (TDUnion (name, tvs, cases)) ->

@@ -43,7 +43,6 @@ and Expr =
     | EOp    of Expr * BinOp * Expr
     | ETuple of Expr list
     | EMatch of Expr * (Pat * Expr) list
-    | ERec   of Expr
     | EGroup of (string * Expr) list * Expr 
 
 and Decl =
@@ -83,7 +82,6 @@ type TypedExpr =
     | TEOp    of QualType * TypedExpr * BinOp * TypedExpr
     | TETuple of QualType * TypedExpr list
     | TEMatch of QualType * TypedExpr * (Pat * TypedExpr) list
-    | TERec   of QualType * TypedExpr
     | TEGroup of QualType * (string * TypedExpr) list * TypedExpr 
 
 type TypedDecl =
@@ -131,7 +129,6 @@ type Value =
     | VUnionCase of string * Value
     | VUnionCtor of string
     | VClosure   of string list * Pat * TypedExpr * TermEnv
-    | VLazy      of Value Lazy
     | VIntrinsic of string * Value list
     | VOverload  of (Inst * TypedExpr) list * int * (TypedExpr) list
 
