@@ -142,7 +142,12 @@ let tokenP =
     whitespacedP (spannedP (literalP <|> wordP <|> symbolP <|> operatorTokP))
 
 let lex txt =
-    txt
-    |> mkMultiLineParser
-    |> many (tokenP)
-    |> fst
+    let (res, state) = 
+        txt
+        |> mkMultiLineParser
+        |> many (tokenP)
+    let state = state :?> MultiLineTextCombinatorState
+    match res with
+    | Success _ when state.Source.Trim() = "" -> ()
+    | _ -> printfn "Lexing error at line %i, column %i." state.Line state.Column
+    res

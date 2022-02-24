@@ -21,7 +21,7 @@ let compareOrBless name content =
             if res = content then Ok ()
             else
                 if List.length res = List.length content then
-                    let actual, expected =
+                    let expected, actual =
                         List.find (fun (a, b) -> a <> b) (List.zip res content)
                     Error (sprintf "Expected '%s' but got '%s'" expected actual)
                 else

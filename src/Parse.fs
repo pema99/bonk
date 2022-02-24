@@ -14,6 +14,25 @@ let tok tar = satisfy (fst >> (=) tar)
 let parens p =  between (tok LParen) p (tok RParen)
 let optParens p = parens p <|> p
 
+let constructSpan ((_, (start, _)): Spanned<'t>) ((_, (_, stop)): Spanned<'t>) : Span =
+    (start, stop)
+
+let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
+    // Get token about to be parsed
+    let! state = com.get()
+    let state = state :?> ArrayCombinatorState<Spanned<Token>>
+    let start = state.Toks.[min (state.Offset) (state.Toks.Length-1)]
+    // Run parser
+    let! res = p
+    // Get token that was parsed last
+    let! state = com.get()
+    let state = state :?> ArrayCombinatorState<Spanned<Token>>
+    let stop = state.Toks.[min (state.Offset-1) (state.Toks.Length-1)]
+    // Construct span
+    let spanned = (res, constructSpan start stop)
+    return spanned
+}
+
 let extract ex =
     satisfy (ex >> Option.isSome)
     |>> ex
@@ -26,9 +45,6 @@ let anyOpP    = extract (function (Op v, _) -> Some v | _ -> None)
 let identP    = extract (function (Ident v, _) -> Some v | _ -> None)
 let literalP  = extract (function (Lit v, _) -> Some v | _ -> None)
 let typeDescP = extract (function (TypeDesc v, _) -> Some v | _ -> None)
-
-// Expressions
-let exprP, exprPImpl = declParser()
 
 // Patterns
 let patP, patPImpl = declParser()
@@ -52,21 +68,26 @@ let patTupleP =
 patPImpl :=
     patTupleP <|> patNonTupleP
 
+// Expressions
+let exprP, exprPImpl = declParser()
+
 let groupP =
-    parens (sepBy1 exprP (tok Comma))
-    |>> fun s ->
-        if List.length s > 1 then ETuple s
+    spannedP (parens (sepBy1 exprP (tok Comma)))
+    |>> fun (s, sp) ->
+        if List.length s > 1 then (ETuple s, sp)
         else List.head s
 
 let varP =
     identP
     |> attempt
     |>> EVar
+    |> spannedP
 
 let lamP =
     between (tok LBrack) patP (tok RBrack)
     <+> exprP
     |>> ELam
+    |> spannedP
 
 let letGroupP =
     ((tok Rec *> identP <* opP Equal) <+> exprP) <+>
@@ -75,6 +96,7 @@ let letGroupP =
     <+> exprP
     |>> fun ((a,b),c) ->
         EGroup (a::b,c)
+    |> spannedP
 
 let letP =
     (tok Let) 
@@ -83,27 +105,32 @@ let letP =
     <+> exprP
     |>> (fun ((a, b), c) ->
         ELet (a, b, c))
+    |> spannedP
 
 let matchP =
     tok Match *> exprP <* tok With <* opt (tok Pipe)
     <+> sepBy1 (patP <* tok Arrow <+> exprP) (tok Pipe)
     |>> EMatch
+    |> spannedP
 
 let ifP =
     tok If *> exprP
     <+> tok Then *> exprP
     <+> tok Else *> exprP
     |>> (fun ((a, b), c) -> EIf (a, b, c))
+    |> spannedP
 
 let opFunP =
-    (anyOpP
-    |>> fun op -> ELam (PName "x", ELam (PName "y", EOp (EVar "x", op, EVar "y"))))
-    |> parens
+    (spannedP (parens (anyOpP))
+    |>> fun (op, s) ->
+        (ELam (PName "x",
+            (ELam (PName "y",
+                (EOp ((EVar "x", s), op, (EVar "y", s)), s)), s)), s))
     |> attempt
 
 let nonAppP =
     opFunP
-    <|> (literalP |>> ELit)
+    <|> (literalP |>> ELit |> spannedP)
     <|> groupP
     <|> varP
 
@@ -113,11 +140,11 @@ let appP =
     <|> letP
     <|> matchP
     <|> ifP
-    <|> chainL1 nonAppP (just (curry EApp))
+    <|> chainL1 nonAppP (just <| fun l r -> (EApp (l, r), constructSpan l r))
 
 let specificBinOpP op =
-  opP op
-  *> just (curry <| fun (l, r) -> EOp (l, op, r))
+    opP op
+    *> just (curry <| fun (l, r) -> (EOp (l, op, r), constructSpan l r))
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
 let termP = appP
@@ -129,7 +156,7 @@ let boolOpP = chainL1 comparisonP (chooseBinOpP [BoolAnd; BoolOr])
 let unOpP = 
     (opP Minus)
     <+> exprP
-    |>> fun (_, e) -> EOp (EOp (e, Minus, e), Minus, e)
+    |>> fun (_, e) -> (EOp ((EOp (e, Minus, e), snd e), Minus, e), snd e)
 
 exprPImpl := boolOpP <|> unOpP
 
@@ -203,24 +230,25 @@ let declP =
 let programP =
     many declP
 
-let parseDecl txt =
+let runParse (kind: Com<'t, Spanned<Token>>) txt =
     let lexed = lex txt
     match lexed with
     | Success v ->
-        v
-        |> List.toArray
-        |> mkArrayParser
-        |> declP
-        |> fst
+        let res, state =
+            v
+            |> List.toArray
+            |> mkArrayParser
+            |> kind
+        let state = state :?> ArrayCombinatorState<Spanned<Token>>
+        match res with
+        | Success v when state.Offset >= state.Toks.Length-1 -> ()
+        | _ ->
+            let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
+            let line = fst (fst span)
+            let col = snd (fst span)
+            printfn "Parsing error at line %i, column %i: Unexpected token '%A'." line col tok 
+        res
     | err -> copyFailure err
 
-let parseProgram txt =
-    let lexed = lex txt
-    match lexed with
-    | Success v ->
-        v
-        |> List.toArray
-        |> mkArrayParser
-        |> programP
-        |> fst
-    | err -> copyFailure err
+let parseDecl = runParse declP
+let parseProgram = runParse programP

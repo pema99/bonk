@@ -229,14 +229,14 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
 
 let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
-    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv), (Map.empty, freshCount))
+    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv, ((0,0),(0,0))), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
         do! applyEnvUpdate update
         return update, Some tdecl
     | Error err ->
-        printfn "Type error: %s" err
+        printfn "%s" err
         return ([], [], [], []), None
     }
 
@@ -291,7 +291,7 @@ let rec handleDecl silent decl = repl {
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases
         do! mapM_ (fun case -> repl {
-                let decl = DLet (PName case, EVar case)
+                let decl = DLet (PName case, (EVar case, ((0,0),(0,0))))
                 return! handleDecl silent decl 
                 }) names
     | Some (TDMember (blankets, pred, impls)) ->
@@ -308,12 +308,9 @@ let rec handleDecl silent decl = repl {
 
 let runExpr input = repl {
     let ast = parseDecl input
-    //printfn "%A" ast
     match ast with
     | Success (decl) -> do! handleDecl false decl
-    | FailureWith err -> printfn "Parsing error: %A" err
-    | CompoundFailure err -> printfn "Parsing error: %A" err
-    | Failure -> printfn "Parsing error: Unknown."
+    | _ -> ()
 }
 
 let rec readUntilSemicolon (str: string) =
@@ -322,7 +319,7 @@ let rec readUntilSemicolon (str: string) =
     else
         printf "- "
         let ns = System.Console.ReadLine()
-        str + readUntilSemicolon ns
+        str + "\n" + readUntilSemicolon ns
 
 let loadLibrary silent input = repl {
     let ast = parseProgram input

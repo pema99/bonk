@@ -52,23 +52,23 @@ and Pattern =
 // Expression AST
 and Expr =
     | EVar   of string
-    | EApp   of Expr * Expr
-    | ELam   of Pattern * Expr
-    | ELet   of Pattern * Expr * Expr
+    | EApp   of Spanned<Expr> * Spanned<Expr>
+    | ELam   of Pattern * Spanned<Expr>
+    | ELet   of Pattern * Spanned<Expr> * Spanned<Expr>
     | ELit   of Literal
-    | EIf    of Expr * Expr * Expr
-    | EOp    of Expr * BinOp * Expr
-    | ETuple of Expr list
-    | EMatch of Expr * (Pattern * Expr) list
-    | EGroup of (string * Expr) list * Expr 
+    | EIf    of Spanned<Expr> * Spanned<Expr> * Spanned<Expr>
+    | EOp    of Spanned<Expr> * BinOp * Spanned<Expr>
+    | ETuple of Spanned<Expr> list
+    | EMatch of Spanned<Expr> * (Pattern * Spanned<Expr>) list
+    | EGroup of (string * Spanned<Expr>) list * Spanned<Expr> 
 
 and Decl =
-    | DExpr   of Expr
-    | DLet    of Pattern * Expr
-    | DGroup  of (string * Expr) list
+    | DExpr   of Spanned<Expr>
+    | DLet    of Pattern * Spanned<Expr>
+    | DGroup  of (string * Spanned<Expr>) list
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | DMember of Pred list * Pred * (string * Expr) list     // blankets, pred, impls
+    | DMember of Pred list * Pred * (string * Spanned<Expr>) list     // blankets, pred, impls
 
 // Kinds of type constructors
 and Kind =
