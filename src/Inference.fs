@@ -117,39 +117,11 @@ let generalize (t: QualType) : InferM<Scheme> = infer {
 let toScheme (t: Type) : Scheme =
     ([], ([], t))
 
-// Type coercien is like unification but directional. Try to find a substitution that turns
-// type t1 into type t2 when applied.
-let rec coerce (t1: Type) (t2: Type) : Substitution option =
-    match t1, t2 with
-    | a, b when a = b -> Some (Map.empty)
-    | TVar a, b -> Some (Map.ofList [(a, b)])
-    | TArrow (l1, r1), TArrow (l2, r2) ->
-        let s1 = coerce l1 l2
-        let s2 = coerce r1 r2
-        Option.map2 compose s1 s2
-    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        let z = List.zip lts rts
-        let z = List.map (fun (a, b) -> coerce a b) z
-        if not <| List.forall Option.isSome z then None
-        else
-            let z = List.choose id z
-            Some (composeAll z)
-    | _ ->
-        None
-
 // Get the superclasses of a typeclass
 let supers (i: string) : InferM<string list> = infer {
     let! cls = getClassEnv
     match lookup cls i with
     | Some (is, its) -> return is
-    | None -> return []
-    }
-
-// Get the subclasses (instances) of a typeclass
-let insts (i: string) : InferM<Inst list> = infer {
-    let! cls = getClassEnv
-    match lookup cls i with
-    | Some (is, its) -> return its
     | None -> return []
     }
 
@@ -159,42 +131,6 @@ let rec bySuper (p: Pred) : InferM<Pred list> = infer {
     let! res = (supers i) >>= mapM (fun j -> bySuper (j, t))
     return List.concat res
     }
-
-// Given a predicate, which predicates must also hold by subclass relation?
-let rec byInst (p: Pred) : InferM<Pred list option> = infer {
-    let i, t = p
-    let tryInst (ps: Pred list, h) =
-        if fst h = fst p then
-            coerce (snd h) (snd p)
-            |> Option.map (fun u -> List.map (fun (j, k) -> j, applyType u k) ps)
-        else
-            None
-    let! res = insts i
-    return
-        res
-        |> List.map tryInst
-        |> List.tryPick id
-    }
-
-// Do the predicates ps semantically entail p? Ie: ps_1 .. ps_n |- p
-let rec entail (ps: Pred list) (p: Pred) : InferM<bool> = infer {
-    let! up = mapM bySuper ps
-    let byUp = List.exists (List.contains p) up
-    match! byInst p with
-    | Some qs ->
-        let! down = mapM (entail ps) qs
-        return byUp || List.forall id down
-    | None ->
-        return byUp
-    }
-
-// Does predicate p always hold?
-let axiom (p: Pred) : InferM<bool> =
-    entail [] p
-
-// Is type 't' definitely a member of the 'klass' typeclass?
-let instOf (klass: string) (t: Type) : InferM<bool> =
-    axiom (klass, t)
 
 // Is predicate in head normal form?
 let isHNF (p: Pred) : bool =
@@ -215,30 +151,13 @@ let rec toHNFs (ps: Pred list) : InferM<Pred list> = infer {
 // Convert a single predicate to head normal form if possible.
 and toHNF (p: Pred) : InferM<Pred list> = infer {
     if isHNF p then return [p]
-    else
-        match! byInst p with
-        | None -> return! failure <| sprintf "Failed to satisfy constraint, type '%s' is not in class '%s'." (prettyType (snd p)) (fst p)
-        | Some ps -> return! toHNFs ps
-    }
-
-// Simplify a list of head normal form predicates via reduction
-let simplify (p: Pred list) : InferM<Pred list> = infer {
-    let rec loop rs lst = infer {
-        match lst with
-        | [] -> return rs
-        | p :: ps ->
-            let! test = entail (rs @ ps) p
-            if test then return! loop rs ps
-            else return! loop (p :: rs) ps
-        }
-    return! loop [] p
+    else return! bySuper p >>= toHNFs
     }
 
 // Reduce a list of predicates via reduction. Solve typeclass constraints along the way.
 let reduce (ps: Pred list) : InferM<Pred list> = infer {
     let! qs = toHNFs ps
-    let! res = simplify qs
-    return List.distinct res
+    return List.distinct qs
     }
 
 // Check if a predicate tells us anything about a type
@@ -683,7 +602,6 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // TODO: Handle the collected predicates somehow here
         // let! ps = reduce (List.concat apreds @ List.concat epreds)
         // Make the implementation to extend the class environment with
-        let imp = name, (blankets, pred)
         // Return the class implementation and the type-annotated expression for each function
-        return ([], [], [], [imp]), TDMember (blankets, pred, List.zip names aexprs)
+        return ([], [], [], [pred]), TDMember (blankets, pred, List.zip names aexprs)
     }

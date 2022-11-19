@@ -1,0 +1,6 @@
+// Types should unify to the same predicate
+
+class Show =
+    | show : this -> string
+
+let a = [x] [y] (show x + show y, x - y) in

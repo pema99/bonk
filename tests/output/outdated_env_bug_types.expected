@@ -1,1 +1,1 @@
-it : (Ord 'b, Num 'a) => ('a -> ('b -> ('a * bool)))
+it : (Num 'a, Ord 'b) => ('a -> ('b -> ('a * bool)))

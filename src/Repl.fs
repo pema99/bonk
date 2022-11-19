@@ -33,9 +33,9 @@ let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
     | _, [] -> true 
     | _ -> false
 
-let resolveOverload (overloads: (Inst * TypedExpr) list) (args: QualType list) : TypedExpr option =
-    match List.tryFind (fun (_, ex) -> candidate ex args) overloads with
-    | Some (_, goal) -> Some goal
+let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExpr option =
+    match List.tryFind (fun ex -> candidate ex args) overloads with
+    | Some goal -> Some goal
     | None -> None
 
 let rec calcArity (ex: TypedExpr) : int =
@@ -202,7 +202,7 @@ let setFreshCount x : ReplM<unit> = fun ((a,b,c,d),e) -> (Ok (), ((a,b,c,x),e))
 let extendEnv env up =
     List.fold (fun env (name, v) -> extend env name v) env up
 
-let addClassInstance (cls: ClassEnv) (name: string, inst: Inst) : ClassEnv =
+let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
     match lookup cls name with
     | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
     | None -> cls
@@ -283,8 +283,8 @@ let rec handleDecl silent decl = repl {
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv
             match lookup env s with
-            | Some (VOverload (lst, arity, v)) -> do! extendTermEnv [s, VOverload ((inst, e) :: lst, arity, v)]
-            | None -> do! extendTermEnv [s, VOverload ([inst, e], calcArity e, [])]
+            | Some (VOverload (lst, arity, v)) -> do! extendTermEnv [s, VOverload (e :: lst, arity, v)]
+            | None -> do! extendTermEnv [s, VOverload ([e], calcArity e, [])]
             | _ -> ()
             }) impls
     | _ -> ()// TODO: Typeclasses

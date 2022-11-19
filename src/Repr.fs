@@ -67,8 +67,7 @@ and Type =
 
 // Type predicates, used to handle typeclasses
 and Pred = (string * Type)              // ie. (Num 'a)
-and Inst = Pred list * Pred             // ie. (Sub 'a, Zero 'a) |- (Num 'a), or |- (Num int)
-and Class = (string list * Inst list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
+and Class = (string list * Type list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
 and QualType = (Pred list * Type)
 
 type TypedExpr =
@@ -96,7 +95,7 @@ type Scheme = string list * QualType
 // Different kinds of environment
 type ClassEnv = Map<string, Class> // name -> typeclass data
 type ClassBinding = string * Class
-type ImplBinding = string * Inst
+type ImplBinding = string * Type
 
 type TypeEnv = Map<string, Scheme> // name -> scheme
 type VarBinding = string * Scheme
@@ -129,6 +128,6 @@ type Value =
     | VClosure   of Pat * TypedExpr * TermEnv
     | VLazy      of Value Lazy
     | VIntrinsic of string * Value list
-    | VOverload  of (Inst * TypedExpr) list * int * (TypedExpr) list
+    | VOverload  of TypedExpr list * int * (TypedExpr) list
 
 and TermEnv = Map<string, Value>

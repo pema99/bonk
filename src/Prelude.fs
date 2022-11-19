@@ -164,47 +164,47 @@ let funImpls = Map.ofList [
 
 let classes: ClassEnv = Map.ofList [
     "Num", ([], [
-        [], ("Num", tInt)
-        [], ("Num", tFloat)
-        [], ("Num", tChar)
-        [], ("Num", tString) // TODO: This is wrong!!
+        tInt
+        tFloat
+        tChar
+        tString // TODO: This is wrong!!
     ])
     "Eq", ([], [
-        [], ("Eq", tInt)
-        [], ("Eq", tBool)
-        [], ("Eq", tFloat)
-        [], ("Eq", tString)
-        [], ("Eq", tChar)
-        [], ("Eq", tUnit)
+        tInt
+        tBool
+        tFloat
+        tString
+        tChar
+        tUnit
     ])
     "Ord", (["Eq"], [
-        [], ("Ord", tInt)
-        [], ("Ord", tFloat)
-        [], ("Ord", tChar)
+        tInt
+        tFloat
+        tChar
     ])
     "ToString", ([], [
-        [], ("ToString", tInt)
-        [], ("ToString", tBool)
-        [], ("ToString", tFloat)
-        [], ("ToString", tChar)
-        [], ("ToString", tUnit)
-        [], ("ToString", tString)
+        tInt
+        tBool
+        tFloat
+        tChar
+        tUnit
+        tString
     ])
     "ToFloat", ([], [
-        [], ("ToFloat", tInt)
-        [], ("ToFloat", tString)
-        [], ("ToFloat", tChar)
+        tInt
+        tString
+        tChar
     ])
     "ToBool", ([], [
-        [], ("ToBool", tString)
+        tString
     ])
     "ToChar", ([], [
-        [], ("ToChar", tInt)
-        [], ("ToChar", tString)
+        tInt
+        tString
     ])
     "ToInt", ([], [
-        [], ("ToInt", tFloat)
-        [], ("ToInt", tString)
-        [], ("ToInt", tChar)
+        tFloat
+        tString
+        tChar
     ])
 ]

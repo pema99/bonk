@@ -1,0 +1,2 @@
+a : (Show 'a) => ('a -> (string * ('b -> string)))
+show : (Show 'a) => ('a -> string)
