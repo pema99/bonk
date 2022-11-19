@@ -16,6 +16,7 @@ let printHelp() =
     printfn ""
     printfn "Options"
     printfn "   -h  --help <cmd>    Print help and exit."
+    printfn ""
 
 let printReplHelp() =
     printfn "Usage: bonk repl options..."
@@ -23,6 +24,7 @@ let printReplHelp() =
     printfn "Options:"
     printfn "   --nobuiltins        Don't load builtin bindings / intrinsics."
     printfn "   --nostdlib          Don't load the standard library."
+    printfn ""
 
 let printCompileHelp() =
     printfn "Usage: bonk compile options... <files>"
@@ -30,6 +32,7 @@ let printCompileHelp() =
     printfn "Options:"
     printfn "   --nobuiltins        Don't load builtin bindings / intrinsics."
     printfn "   --nostdlib          Don't load the standard library."
+    printfn ""
 
 [<EntryPoint>]
 let main args =
