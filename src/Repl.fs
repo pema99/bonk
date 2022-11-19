@@ -325,8 +325,9 @@ let stdLib =
     res.Read(out, 0, int res.Length) |> ignore
     System.Text.Encoding.Default.GetString(out)
 
-let runRepl : ReplM<unit> = repl {
-    do! loadLibrary true stdLib
+let runRepl stdlib : ReplM<unit> = repl {
+    if stdlib then
+        do! loadLibrary true stdLib
     printfn "Welcome to the Bonk REPL, type ':h' for help."
     while true do
         printf "> "
@@ -374,6 +375,6 @@ let runReplAction prelude action =
     action ((funSchemes, Map.empty, classes, 0), Map.map (fun k v -> VIntrinsic (k, [])) funSchemes)
     |> fst
 
-let startRepl() =
-    runReplAction true runRepl
+let startRepl builtins stdlib =
+    runReplAction builtins (runRepl stdlib)
     |> ignore

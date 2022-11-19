@@ -267,7 +267,7 @@ let declClassP = // TODO: Requirements
     <* opt (keywordP "in")
     |>> (fun (a, b) -> DClass (a, [], b) )
 
-let declImplP = // TODO: Blanket impls
+let declImplP =
     (keywordP "member" *> typeP <* keywordP "of")
     <+> (notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
     <+> (sepBy1 (notKeywordP <* (one ':') <+> exprP) (one '|'))
