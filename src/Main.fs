@@ -14,7 +14,7 @@ let printHelp() =
     printfn "   bless               Bless current output of tests as correct."
     printfn "   help <command>      Print help about a command and exit."
     printfn ""
-    printfn "Options"
+    printfn "Options:"
     printfn "   -h  --help <cmd>    Print help and exit."
     printfn ""
 
