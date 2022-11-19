@@ -38,7 +38,7 @@ let main args =
     else if args.[0] = "help" || args.[0] = "-h" || args.[0] = "--help" then
         if args.Length > 1 && args.[1] = "repl" then
             printReplHelp()
-        else if args.Length > 1 && args.[1] = "repl" then
+        else if args.Length > 1 && args.[1] = "compile" then
             printCompileHelp()
         else
             printHelp()
