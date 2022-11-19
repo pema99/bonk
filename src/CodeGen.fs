@@ -398,8 +398,11 @@ let emitDecl (d: TypedDecl) : JsStmt list =
         | TDMember (blankets, pred, exprs) ->
             [JsIgnore (JsVar "TODO TYPECLASS MEMBER")]
     List.map (optimizeStmt) res
-    
+
 let startCompile builtins stdlib files =
+    let files =
+        if stdlib then Seq.append ["lib/prelude.bonk"] files 
+        else files
     let ast =
         files
         |> Seq.map (File.ReadAllText)
