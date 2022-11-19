@@ -1,8 +1,11 @@
 module CodeGen
 
+open System.IO
 open Repr
-open Monad
+open Parse
+open Combinator
 open Inference
+open Prelude
 
 // JS AST
 type JsBlock = JsStmt list
@@ -395,3 +398,24 @@ let emitDecl (d: TypedDecl) : JsStmt list =
         | TDMember (blankets, pred, exprs) ->
             [JsIgnore (JsVar "TODO TYPECLASS MEMBER")]
     List.map (optimizeStmt) res
+    
+let startCompile builtins stdlib files =
+    let ast =
+        files
+        |> Seq.map (File.ReadAllText)
+        |> String.concat "\n"
+        |> parseProgram
+    let funSchemes = if builtins then funSchemes else Map.empty
+    match ast with
+    | Success decls ->
+        let res, ((_,_,_,loc),_) = inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
+        match res with
+        | Ok decls ->
+            let jsAst = List.collect emitDecl decls
+            let jsOutput = pprJsBlock 0 jsAst
+            File.WriteAllText("out.js", jsOutput)
+        | Error err -> printfn "Typing error(%A): %s" loc err
+    | Failure -> printfn "Parsing error: Unknown"
+    | FailureWith (err, loc) -> printfn "Parsing error (%A): %s" loc err
+    | CompoundFailure errs -> Seq.iter (fun (err, loc) -> printfn "Parsing error (%A): %s" loc err) errs
+    ()

@@ -640,3 +640,28 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // Return the class implementation and the type-annotated expression for each function
         return ([], [], [], [pred]), TDMember (blankets, pred, List.zip names aexprs)
     }
+
+// TODO: Deduplicate some of the code in Repl
+let inferDecls (decls: Decl list) : InferM<TypedDecl list> = infer {
+    let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
+        match lookup cls name with
+        | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
+        | None -> cls
+    let extendEnv env up =
+        List.fold (fun env (name, v) -> extend env name v) env up
+    let applyEnvUpdate (up: EnvUpdate) : InferM<unit> = infer {
+        let! (typeEnv, userEnv, classEnv, span), other = get
+        let (typeUp, userUp, classUp, implUp) = up
+        let typeEnv = extendEnv typeEnv typeUp
+        let userEnv = extendEnv userEnv userUp
+        let classEnv = extendEnv classEnv classUp
+        let classEnv = List.fold addClassInstance classEnv implUp
+        do! set ((typeEnv, userEnv, classEnv, span), other)
+        }
+    let inferDeclAndUpdate decl = infer {
+        let! envUpdate, typedDecl = inferDecl decl
+        do! applyEnvUpdate envUpdate
+        return typedDecl
+    }
+    return! mapM inferDeclAndUpdate decls
+}

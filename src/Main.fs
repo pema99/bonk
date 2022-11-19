@@ -24,6 +24,13 @@ let printReplHelp() =
     printfn "   --nobuiltins        Don't load builtin bindings / intrinsics."
     printfn "   --nostdlib          Don't load the standard library."
 
+let printCompileHelp() =
+    printfn "Usage: bonk compile options... <files>"
+    printfn ""
+    printfn "Options:"
+    printfn "   --nobuiltins        Don't load builtin bindings / intrinsics."
+    printfn "   --nostdlib          Don't load the standard library."
+
 [<EntryPoint>]
 let main args =
     if args.Length = 0 then
@@ -31,6 +38,8 @@ let main args =
     else if args.[0] = "help" || args.[0] = "-h" || args.[0] = "--help" then
         if args.Length > 1 && args.[1] = "repl" then
             printReplHelp()
+        else if args.Length > 1 && args.[1] = "repl" then
+            printCompileHelp()
         else
             printHelp()
     else if args.[0] = "repl" then
@@ -46,8 +55,11 @@ let main args =
         let builtins = not <| Seq.contains "--nobuiltins" args
         let stdlib = not <| Seq.contains "--nostdlib" args
         let files = args |> Seq.tail |> Seq.filter (fun str -> str.[0] <> '-')
-        //startCompile builtins (stdlib && builtins) files
-        ()
+        if Seq.isEmpty files then
+            printfn "Error: No files provided!"
+            printCompileHelp()
+        else
+            startCompile builtins (stdlib && builtins) files
     else
         printHelp()
     0

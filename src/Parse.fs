@@ -225,7 +225,7 @@ let declExprP =
     exprP |>> DExpr
 
 let declP =
-    (attempt declExprP) <|> declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP
+    declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP
 
 let programP =
     many declP
