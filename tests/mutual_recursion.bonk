@@ -1,0 +1,14 @@
+rec even = [n]
+	not (odd n)
+and odd = [n]
+	if n = 0 then false
+	else if n = 1 then true 
+	else even (n-1) 
+in
+
+let _ = print (toString (even 1)) in
+let _ = print (toString (even 2)) in
+let _ = print (toString (even 3)) in
+let _ = print (toString (odd 1)) in
+let _ = print (toString (odd 2)) in
+let _ = print (toString (odd 3)) in

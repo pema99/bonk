@@ -21,9 +21,10 @@ let composeAll lst = List.fold compose Map.empty lst
 // Inference monad is a reader and state monad transformed with a result monad
 // The reader environment contains the known typed variables. 
 // The state is the current set of substitutions as well as an integer for generatin fresh names.
-type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv, Substitution * int, 't>
+// The span is the last known good position.
+type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv * Span, Substitution * int, 't>
 let infer = state
-let fresh : InferM<Type> = fun ((te, ue, ce), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce), (s, c + 1))
+let fresh : InferM<Type> = fun ((te, ue, ce, err), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce, err), (s, c + 1))
 
 // Substitution application up to fixed point
 let rec fixedPoint f s t =
@@ -83,21 +84,32 @@ let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env
 let remove env x = Map.remove x env
 let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
-let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d)) 
-let getTypeEnvRaw = fun ((a, b, c), s) -> Ok a, ((a, b, c), s)
-let getUserEnv = fun ((a, b, c), s) -> Ok b, ((a, b, c), s)
-let getClassEnv = fun ((a, b, c), s) -> Ok c, ((a, b, c), s)
-let inTypeEnv x m = local (fun (te, ue, ce) -> x, ue, ce) m
-let inUserEnv x m = local (fun (te, ue, ce) -> te, x, ce) m
-let inClassEnv x m = local (fun (te, ue, ce) -> te, ue, x) m
-let withTypeEnv x sc m = local (fun (te, ue, ce) -> extend te x sc, ue, ce) m
-let withUserEnv x sc m = local (fun (te, ue, ce) -> te, extend ue x sc, ce) m
-let withClassEnv x sc m = local (fun (te, ue, ce) -> te, ue, extend ce x sc) m
+let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
+let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
+let withSpan x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x) m
+let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
+let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
+let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
+let inTypeEnv x m = local (fun (te, ue, ce, sp) -> x, ue, ce, sp) m
+let inUserEnv x m = local (fun (te, ue, ce, sp) -> te, x, ce, sp) m
+let inClassEnv x m = local (fun (te, ue, ce, sp) -> te, ue, x, sp) m
+let withTypeEnv x sc m = local (fun (te, ue, ce, sp) -> extend te x sc, ue, ce, sp) m
+let withUserEnv x sc m = local (fun (te, ue, ce, sp) -> te, extend ue x sc, ce, sp) m
+let withClassEnv x sc m = local (fun (te, ue, ce, sp) -> te, ue, extend ce x sc, sp) m
 let getTypeEnv = infer { // This just applies the current substitution whenever we get the environment
     let! env = getTypeEnvRaw
     let! subs = getSubstitution
     return applyEnv subs env
 }
+
+// Errors
+let typeError str = infer {
+    let! f, _ = getCurrSpan
+    if f = (0, 0) then
+        return! failure <| sprintf "Typing error: %s" str
+    else
+        return! failure <| sprintf "Typing error at line %i, column %i: %s" (fst f) (snd f) str
+    }
 
 // Instantiate a monotype from a polytype
 let instantiate (sc: Scheme) : InferM<QualType> = infer {
@@ -180,7 +192,7 @@ let rec mguList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer
         return compose s2 s1
     | _ ->
         let prettyConcat = List.map (prettyType) >> String.concat ", "
-        return! failure <| sprintf "Failed to unify types [%s] and [%s]." (prettyConcat t1) (prettyConcat t2)
+        return! typeError <| sprintf "Failed to unify types [%s] and [%s]." (prettyConcat t1) (prettyConcat t2)
     }
 
 and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
@@ -192,7 +204,7 @@ and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
         return! mguList lts rts
     | _ ->
-        return! failure <| sprintf "Failed to unify types '%s' and '%s'." (prettyType t1) (prettyType t2)
+        return! typeError <| sprintf "Failed to unify types '%s' and '%s'." (prettyType t1) (prettyType t2)
     }
 
 // Unify two types and store the resulting substitution
@@ -232,7 +244,7 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TEOp (pt, l, op, r)     -> TEOp (ty, l, op, r)
     | TETuple (pt, es)        -> TETuple (ty, es)
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
-    | TERec (pt, e)           -> TERec (ty, e)
+    | TEGroup (pt, a, b)         -> TEGroup (ty, a, b)
 
 // Get type out of a typed expression
 let getExprType ex = 
@@ -246,7 +258,7 @@ let getExprType ex =
     | TEOp (pt, l, op, r)     -> pt
     | TETuple (pt, es)        -> pt
     | TEMatch (pt, e, bs)     -> pt
-    | TERec (pt, e)           -> pt
+    | TEGroup (pt, a, b)      -> pt
 
 // Traverse a typed AST and apply some transformation to each type
 let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : InferM<TypedExpr> = infer {
@@ -292,10 +304,12 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         let bs1 = List.map fst bs
         let! bs2 = mapM (snd >> traverseTypedExpr s) bs
         return TEMatch (pt, e, List.zip bs1 bs2)
-    | TERec (pt, e) ->
+    | TEGroup (pt, bs, rest) ->
         let! pt = s pt
-        let! e = traverseTypedExpr s e
-        return TERec (pt, e)
+        let bs1 = List.map fst bs
+        let! bs2 = mapM (snd >> traverseTypedExpr s) bs
+        let! rest = traverseTypedExpr s rest
+        return TEGroup (pt, List.zip bs1 bs2, rest)
     }
 
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
@@ -304,7 +318,7 @@ let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
 // flag is set false, bindings will not be polymorphized.
-let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly: bool) : InferM<TypeEnv> = infer {
+let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (poly: bool) : InferM<TypeEnv> = infer {
     match pat, ty with
     // Name patterns match with anything
     | PName a, ty ->
@@ -313,7 +327,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly:
     // Constants match with anything that matches the type
     | PConstant v, (_, ty) ->
         // This is fine since literals are always unambiguous. No new predicates can occur.
-        let! (_, t1), _ = inTypeEnv env (inferExpr (ELit v))
+        let! (_, t1), _ = inTypeEnv env (inferExpr (ELit v, ((0,0),(0,0))))
         do! unify ty t1
         return env
     // Tuple patterns match with same-sized tuples
@@ -350,16 +364,16 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pat) (ty: QualType) (poly:
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
                 do! unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
                 return env
-            | _ -> return! failure <| sprintf "Invalid union variant used '%s'." case
-        | _ -> return! failure <| sprintf "Invalid union variant used '%s'." case
-    | a, b -> return! failure <| sprintf "Could not match pattern '%A' with type '%s'." a (prettyQualType b)
+            | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
+        | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
+    | a, b -> return! typeError <| sprintf "Could not match pattern '%A' with type '%s'." a (prettyQualType b)
     }
 
 
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
-and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
+and inferBinding (pat: Pattern) (e1: Spanned<Expr>) (e2: Spanned<Expr>) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
     // Infer the type of the value being bound
     let! (p1, t1), te1 = inferExpr e1
     // Gather constraints (substitutions, bindings) from the pattern
@@ -372,7 +386,7 @@ and inferBinding (pat: Pat) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType
     }
 
 // Main inference
-and inferExpr (e: Expr) : InferM<QualType * TypedExpr> = infer {
+and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
     // Before we infer a type, apply the current substitution to the environment
     let! env = getTypeEnv
     let! subs1 = getSubstitution
@@ -385,31 +399,31 @@ and inferExpr (e: Expr) : InferM<QualType * TypedExpr> = infer {
     return ty, (replaceType ex ty)
     }
 
-and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
+and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
+    let e, span = e
+    withSpan span <| infer {
     match e with
-    | ELit (LUnit)     -> let ty = ([], tUnit)   in just (ty, TELit (ty, LUnit))
-    | ELit (LInt v)    -> let ty = ([], tInt)    in just (ty, TELit (ty, LInt v))
-    | ELit (LBool v)   -> let ty = ([], tBool)   in just (ty, TELit (ty, LBool v))
-    | ELit (LFloat v)  -> let ty = ([], tFloat)  in just (ty, TELit (ty, LFloat v))
-    | ELit (LString v) -> let ty = ([], tString) in just (ty, TELit (ty, LString v))
-    | ELit (LChar v)   -> let ty = ([], tChar)   in just (ty, TELit (ty, LChar v))
-    | EVar a -> infer {
+    | ELit (LUnit)     -> return let ty = ([], tUnit)   in ty, TELit (ty, LUnit)
+    | ELit (LInt v)    -> return let ty = ([], tInt)    in ty, TELit (ty, LInt v)
+    | ELit (LBool v)   -> return let ty = ([], tBool)   in ty, TELit (ty, LBool v)
+    | ELit (LFloat v)  -> return let ty = ([], tFloat)  in ty, TELit (ty, LFloat v)
+    | ELit (LString v) -> return let ty = ([], tString) in ty, TELit (ty, LString v)
+    | ELit (LChar v)   -> return let ty = ([], tChar)   in ty, TELit (ty, LChar v)
+    | EVar a ->
         let! env = getTypeEnv
         match lookup env a with
         | Some s ->
             let! res = instantiate s
             return res, (TEVar (res, a))
-        | None -> return! failure <| sprintf "Use of unbound variable '%s'." a
-        }
-    | EApp (f, x) -> infer {
+        | None -> return! typeError <| sprintf "Use of unbound variable '%s'." a
+    | EApp (f, x) ->
         let! tv = fresh
         let! (p1, t1), tf = inferExpr f
         let! (p2, t2), tx = inferExpr x
         do! unify t1 (TArrow (t2, tv))
         let qt = (p1 @ p2, tv)
         return qt, TEApp (qt, tf, tx)
-        }
-    | ELam (x, e) -> infer {
+    | ELam (x, e) ->
         match x with
         | PName x ->
             let! tv = fresh
@@ -425,13 +439,11 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
             let qt = (p1, TArrow (TCtor (KProduct, tvs), t1))
             return qt, TELam (qt, PTuple x, te)
         | _->
-            return! failure <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
-        }
-    | ELet (x, e1, e2) -> infer {
+            return! typeError <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
+    | ELet (x, e1, e2) ->
         let! qt, te1, te2 = inferBinding x e1 e2 true
         return qt, TELet (qt, x, te1, te2)
-        }
-    | EIf (cond, tr, fl) -> infer {
+    | EIf (cond, tr, fl) ->
         let! (p1, t1), tc = inferExpr cond
         let! (p2, t2), tt = inferExpr tr
         let! (p3, t3), tf = inferExpr fl
@@ -439,8 +451,7 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! s5 = unify t2 t3
         let qt = (p1 @ p2 @ p3, t2)
         return qt, TEIf (qt, tc, tt, tf)
-        }
-    | EOp (l, op, r) -> infer {
+    | EOp (l, op, r) ->
         let! (p1, t1), tl = inferExpr l
         let! (p2, t2), tr = inferExpr r
         let! tv = fresh
@@ -449,15 +460,13 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
         let qt = (p1 @ p2 @ p3, tv)
         return qt, TEOp (qt, tl, op, tr)
-        }
-    | ETuple es -> infer {
+    | ETuple es ->
         let! res = mapM inferExpr es
         let scs, xs = List.unzip res
         let ps, typs = List.unzip scs
         let qt = (List.concat ps, TCtor (KProduct, typs))
         return (qt, TETuple (qt, xs))
-        }
-    | EMatch (e, bs) -> infer {
+    | EMatch (e, bs) ->
         // Scan over all match branches gathering constraints from pattern matching along the way
         let! res = mapM (fun (pat, expr) -> infer {
             return! inferBinding pat e expr false }) bs
@@ -469,17 +478,30 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         // Compose all intermediate substitutions
         let qt = (List.concat ps, List.head typs)
         return qt, TEMatch (qt, List.head te1, List.zip (List.map fst bs) te2)
-        }
-    | ERec e -> infer {
-        let! (p1, t1), te = inferExpr e
-        let! tv = fresh
-        do! unify (TArrow (tv, tv)) t1
-        let qt = (p1, tv)
-        return qt, TERec (qt, te)
-        }
+    | EGroup (bs, rest) ->
+        // Generate fresh vars for each binding, and put then in the environment
+        let! tvs = mapM (fun _ -> fresh) bs
+        let! env = getTypeEnv
+        let names, inis = List.unzip bs
+        let env = List.fold (fun env (name, tv) ->
+            extend env name (toScheme tv)) env (List.zip names tvs) 
+        // Infer the types of the value being bound in the new environment and generalize them
+        let! res = inTypeEnv env (mapM inferExpr inis)
+        let qts, tes = List.unzip res
+        let! scs = inTypeEnv env (mapM generalize qts)
+        // Put them in the environment
+        let env = List.fold (fun env (name, sc) ->
+            extend env name sc) env (List.zip names scs) 
+        // Infer the body/rhs of the binding under the gathered constraints
+        let! (p2, t2), te2 = inTypeEnv env (inferExpr rest)
+        // Unify fresh tvs with inferred types // TODO: What about about predicates
+        do! mapM_ (fun (l, r) -> unify l r) (List.zip tvs (List.map (snd >> snd) scs))
+        let qt = (p2, t2)
+        return qt, TEGroup (qt, List.zip names tes, te2)
+    }
 
 // Infer and expression and then solve constraints
-let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> = infer {
+let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
     // Infer the type of the expression
     let! qt, te = inferExpr e
     // Get the final substitution and apply it to final list of predicates
@@ -504,7 +526,7 @@ let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> = infer {
     }
 
 // Gather variable bindings from a type and pattern
-let rec gatherVarBindings (pat: Pat) (typ: QualType) : VarBinding list =
+let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
     match pat, typ with
     | PName a, typ ->
         [a, (ftvQualType typ |> Set.toList, typ)]
@@ -524,6 +546,19 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let! qt, te = inferExprTop e
         let bindings = gatherVarBindings name qt
         return (bindings, [], [], []), TDLet (name, te)
+    | DGroup (ds) ->
+        let names, exs = List.unzip ds
+        // TODO: This is sort of a hack, should fix
+        let! res = mapM (fun name -> inferExprTop ((EGroup (ds, (EVar name, ((0,0),(0,0))))), ((0,0),(0,0)))) names
+        let qts, tes = List.unzip res
+        let tes =
+            List.zip names tes
+            |> List.collect (fun (name, te) ->
+                match te with
+                | TEGroup (pt, bs, rest) -> List.filter (fst >> (=) name) bs
+                | _ -> [])
+        let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
+        return (bindings, [], [], []), TDGroup (tes)
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
@@ -537,7 +572,7 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
                 Set.filter (checkUserTypeUsage nusr >> not) usages
                 |> Set.map fst
                 |> String.concat ", "
-            return! failure <| sprintf "Use of undeclared type constructors in union declaration: %s." bad
+            return! typeError <| sprintf "Use of undeclared type constructors in union declaration: %s." bad
         // Gather all free type vars in each union variant
         let ftvs = List.map (snd >> ftvType) cases
         let ftvs = List.fold Set.union Set.empty ftvs
@@ -545,7 +580,7 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // If any of them are not explicitly declared, error
         if not <| Set.isEmpty udecl then
             let fmt = udecl |> Set.map ((+) "'" ) |> String.concat ", "
-            return! failure <| sprintf "Use of undeclared type variables in union declaration: %s." fmt
+            return! typeError <| sprintf "Use of undeclared type variables in union declaration: %s." fmt
         // Guess an inferred type
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
@@ -573,7 +608,7 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let name, typ = pred
         let klass = lookup cls name
         if not <| Option.isSome klass then
-            return! failure <| sprintf "Typeclass '%s' does not exist." name
+            return! typeError <| sprintf "Typeclass '%s' does not exist." name
         let (reqs, instances) = Option.get klass
         // TODO: Next, check that the names of the member match exactly
         // TODO: Then, check that the requirements are satisfied
@@ -584,7 +619,7 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
             mapM (fun (fname, impl) -> infer {
                 match lookup env fname with
                 | Some (_, qt) -> return applyQualType (Map.ofList ["this", tv]) qt
-                | None -> return! failure <| sprintf "Couldn't find typeclass member '%s'." name
+                | None -> return! typeError <| sprintf "Couldn't find typeclass member '%s'." name
             }) exprs
         let epreds, etyps = List.unzip eqtypes
         // Infer the actual function types from their implementations

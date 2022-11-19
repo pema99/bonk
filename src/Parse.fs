@@ -7,111 +7,44 @@ open System
 open System.Globalization
 
 open Repr
+open Lex
 
 // Helpers
-let isAlpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
-let isNumeric c = (c >= '0' && c <= '9')
-let isAlphaNumeric c = isAlpha c || isNumeric c || (c = '_')
-let mkString = List.toArray >> String
-let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
-let whitespacedP p = between whitespaceP p whitespaceP
-let parens p = whitespacedP (between (one '(') p (one ')'))
-let optParens p = parens p <|> whitespacedP p
+let tok tar = satisfy (fst >> (=) tar)
+let parens p =  between (tok LParen) p (tok RParen)
+let optParens p = parens p <|> p
 
-let sepBy2 (p: Com<'T, 'S>) (sep: Com<'U, 'S>) : Com<'T list, 'S> =
-    p <+> (sep *> p) <+> many (sep *> p)
-    |>> fun ((a, b), c) -> a :: b :: c
+let constructSpan ((_, (start, _)): Spanned<'t>) ((_, (_, stop)): Spanned<'t>) : Span =
+    (start, stop)
 
-// Operators
-let operatorP = com {
-    let! l = item
-    let! r = look
-    match l, r with
-    | '!', '=' -> return! item *> just NotEq
-    | '>', '=' -> return! item *> just GreaterEq
-    | '<', '=' -> return! item *> just LessEq
-    | '&', '&' -> return! item *> just And
-    | '|', '|' -> return! item *> just Or
-    | '=', _ -> return Equal
-    | '>', _ -> return Greater
-    | '<', _ -> return Less
-    | '+', _ -> return Plus
-    | '-', _ -> return Minus
-    | '*', _ -> return Star
-    | '/', _ -> return Slash
-    | '%', _ -> return Modulo
-    | _ -> return! fail()
+let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
+    // Get token about to be parsed
+    let! state = com.get()
+    let state = state :?> ArrayCombinatorState<Spanned<Token>>
+    let start = state.Toks.[min (state.Offset) (state.Toks.Length-1)]
+    // Run parser
+    let! res = p
+    // Get token that was parsed last
+    let! state = com.get()
+    let state = state :?> ArrayCombinatorState<Spanned<Token>>
+    let stop = state.Toks.[min (state.Offset-1) (state.Toks.Length-1)]
+    // Construct span
+    let spanned = (res, constructSpan start stop)
+    return spanned
 }
-let specificOperatorP op =
-    guard ((=) op) operatorP
-    |> attempt
-    |> whitespacedP
 
-// Identifiers
-let identP = 
-    eatWhile1 isAlphaNumeric
-    |>> mkString
-    |> whitespacedP
+let extract ex =
+    satisfy (ex >> Option.isSome)
+    |>> ex
+    >>= function
+        | Some x -> just x
+        | _ -> fail()
 
-let keywordP target = 
-    guard ((=) target) identP
-    |> attempt
-
-let reserved = Set.ofList [
-    "in"; "let"; "true"; "false"
-    "if"; "then"; "else"; "fn"
-    "rec"; "sum"; "match"; "with"
-    "int"; "bool"; "float"; "string";
-    "void"; "unit"; "class"; "this"
-    "of"; "member"
-    ]
-
-let notKeywordP : Com<string, char> =
-    identP
-    |> guard (fun x -> not <| Set.contains x reserved)
-
-// Literals
-let floatP = 
-    eatWhile (fun x -> isNumeric x || x = '.')
-    |>> mkString
-    |> guard (fun x -> x.Contains ".")
-    >>= fun s -> let (succ, num) =
-                     Double.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-                 if succ then num |> LFloat |> just
-                 else fail()
-
-let intP = 
-    eatWhile (fun x -> isNumeric x)
-    |>> mkString
-    >>= fun s -> let (succ, num) =
-                     Int32.TryParse (s, NumberStyles.Any, CultureInfo.InvariantCulture)
-                 if succ then num |> LInt |> just
-                 else fail()
-
-let boolP =
-    keywordP "true" *> just (LBool true)
-    <|> keywordP "false" *> just (LBool false)
-
-let stringP =
-    within (one '"') (eatWhile ((<>) '"'))
-    |>> mkString
-    |>> LString
-
-let charP =
-    within (one ''') item
-    |>> LChar
-
-let literalP =
-    (attempt (one '(' *> one ')' *> just LUnit))
-    <|> stringP
-    <|> boolP
-    <|> attempt floatP
-    <|> intP
-    <|> charP
-    |> whitespacedP
-
-// Expressions
-let exprP, exprPImpl = declParser()
+let opP op    = extract (function (Op v, _) when v = op -> Some v | _ -> None)
+let anyOpP    = extract (function (Op v, _) -> Some v | _ -> None)
+let identP    = extract (function (Ident v, _) -> Some v | _ -> None)
+let literalP  = extract (function (Lit v, _) -> Some v | _ -> None)
+let typeDescP = extract (function (TypeDesc v, _) -> Some v | _ -> None)
 
 // Patterns
 let patP, patPImpl = declParser()
@@ -129,176 +62,193 @@ let patNonTupleP =
     patUnionP <|> patLiteralP <|> patNameP
 
 let patTupleP =
-    parens (sepBy2 patP (one ','))
+    parens (sepBy2 patP (tok Comma))
     |>> PTuple
 
 patPImpl :=
     patTupleP <|> patNonTupleP
 
+// Expressions
+let exprP, exprPImpl = declParser()
+
 let groupP =
-    parens (sepBy1 exprP (one ','))
-    |>> fun s ->
-        if List.length s > 1 then ETuple s
+    spannedP (parens (sepBy1 exprP (tok Comma)))
+    |>> fun (s, sp) ->
+        if List.length s > 1 then (ETuple s, sp)
         else List.head s
 
 let varP =
-    notKeywordP
+    identP
     |> attempt
     |>> EVar
+    |> spannedP
 
 let lamP =
-    between (one '[') patP (one ']')
+    between (tok LBrack) patP (tok RBrack)
     <+> exprP
     |>> ELam
+    |> spannedP
+
+let letGroupP =
+    ((tok Rec *> identP <* opP Equal) <+> exprP) <+>
+    (many (tok And *> identP <* opP Equal <+> exprP))
+    <* tok In
+    <+> exprP
+    |>> fun ((a,b),c) ->
+        EGroup (a::b,c)
+    |> spannedP
 
 let letP =
-    (keywordP "let" *> (maybe (keywordP "rec"))) 
-    <+> (patP) <* one '=' <* whitespaceP
-    <+> exprP <* keywordP "in" <* whitespaceP
+    (tok Let) 
+    *> (patP) <* opP Equal
+    <+> exprP <* tok In
     <+> exprP
-    |>> (fun (((a, b), c), d) ->
-        if a then ELet (b, ERec (ELam (b, c)), d)
-        else ELet (b, c, d))
+    |>> (fun ((a, b), c) ->
+        ELet (a, b, c))
+    |> spannedP
 
 let matchP =
-    keywordP "match" *> exprP <* keywordP "with" <* opt (one '|')
-    <+> sepBy1 (patP <* one '-' <* one '>' <+> exprP) (one '|')
+    tok Match *> exprP <* tok With <* opt (tok Pipe)
+    <+> sepBy1 (patP <* tok Arrow <+> exprP) (tok Pipe)
     |>> EMatch
+    |> spannedP
 
 let ifP =
-    keywordP "if" *> exprP
-    <+> keywordP "then" *> exprP
-    <+> keywordP "else" *> exprP
+    tok If *> exprP
+    <+> tok Then *> exprP
+    <+> tok Else *> exprP
     |>> (fun ((a, b), c) -> EIf (a, b, c))
-
-let recP =
-    keywordP "rec" *>
-    exprP
-    |>> ERec
+    |> spannedP
 
 let opFunP =
-    (operatorP
-    |>> fun op -> ELam (PName "x", ELam (PName "y", EOp (EVar "x", op, EVar "y"))))
-    |> whitespacedP
-    |> parens
+    (spannedP (parens (anyOpP))
+    |>> fun (op, s) ->
+        (ELam (PName "x",
+            (ELam (PName "y",
+                (EOp ((EVar "x", s), op, (EVar "y", s)), s)), s)), s))
     |> attempt
 
 let nonAppP =
     opFunP
-    <|> (literalP |>> ELit)
+    <|> (literalP |>> ELit |> spannedP)
     <|> groupP
     <|> varP
-    |> whitespacedP
 
 let appP =
     lamP
+    <|> letGroupP
     <|> letP
     <|> matchP
-    <|> recP
     <|> ifP
-    <|> chainL1 nonAppP (just (curry EApp))
+    <|> chainL1 nonAppP (just <| fun l r -> (EApp (l, r), constructSpan l r))
 
 let specificBinOpP op =
-  specificOperatorP op
-  *> just (curry <| fun (l, r) -> EOp (l, op, r))
+    opP op
+    *> just (curry <| fun (l, r) -> (EOp (l, op, r), constructSpan l r))
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
 let termP = appP
 let mulDivP = chainL1 termP (chooseBinOpP [Star; Slash; Modulo])
 let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
-let boolOpP = chainL1 comparisonP (chooseBinOpP [And; Or])
+let boolOpP = chainL1 comparisonP (chooseBinOpP [BoolAnd; BoolOr])
 
 let unOpP = 
-    (specificOperatorP Minus)
+    (opP Minus)
     <+> exprP
-    |>> fun (_, e) -> EOp (EOp (e, Minus, e), Minus, e)
+    |>> fun (_, e) -> (EOp ((EOp (e, Minus, e), snd e), Minus, e), snd e)
 
-exprPImpl := whitespacedP (boolOpP <|> unOpP)
+exprPImpl := boolOpP <|> unOpP
 
 // User types
 let typeP, typePImpl = declParser()
 
 let typeVarP = 
-    one ''' *> notKeywordP
+    tok Tick *> identP
 
 let primTypeP =
     (typeVarP |>> TVar)
-    <|> (choice (List.map keywordP ["int"; "bool"; "float"; "string"; "void"; "unit"]) |>> TConst)
-    <|> (keywordP "this" *> just (TVar "this"))
+    <|> typeDescP
 
 let typeTermP =
-    (attempt <| notKeywordP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+    (attempt <| identP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
     <|> primTypeP
     <|> parens typeP
-    |> whitespacedP
 
 let productP =
-    sepBy2 typeTermP (one '*')
+    sepBy2 typeTermP (opP Star)
     |>> fun lst -> TCtor (KProduct, lst)
     |> attempt
 
 let arrowP =
-    chainR1 (productP <|> typeTermP) (one '-' *> one '>' *> just (curry TArrow))
+    chainR1 (productP <|> typeTermP) (tok Arrow *> just (curry TArrow))
 
-typePImpl := whitespacedP arrowP
+typePImpl := arrowP
 
 // Declarations
 let declLetP =
-    (keywordP "let" *> (maybe (keywordP "rec")))
-    <+> (patP) 
-    <* one '=' <* whitespaceP
+    (tok Let)
+    *> (patP) 
+    <* opP Equal
     <+> exprP
-    <* keywordP "in"
-    |>> fun ((a,b),c) ->
-        if a then DLet (b, ERec (ELam (b, c)))
-        else DLet (b, c)
+    <* tok In
+    |>> DLet
+
+let declLetGroupP =
+    (tok Rec *> identP <* opP Equal <+> exprP) <+>
+    (many (tok And *> identP <* opP Equal <+> exprP))
+    <* tok In
+    |>> fun ((a,b)) ->
+        DGroup (a::b)
 
 let declSumP =
-    (keywordP "sum" *> notKeywordP
-    <+> (many typeVarP) <* one '=' <* whitespaceP <* opt (one '|'))
-    <+> (sepBy1 (notKeywordP <+> typeP) (one '|'))
-    <* opt (keywordP "in")
+    (tok Sum *> identP
+    <+> (many typeVarP) <* opP Equal <* opt (tok Pipe))
+    <+> (sepBy1 (identP <+> typeP) (tok Pipe))
+    <* opt (tok In)
     |>> (fun ((a,b),c) -> DUnion (a,b,c))
 
 let declClassP = // TODO: Requirements
-    (keywordP "class" *> notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
-    <+> (sepBy1 (notKeywordP <* one ':' <+> typeP) (one '|'))
-    <* opt (keywordP "in")
+    (tok Class *> identP <* opP Equal <* opt (tok Pipe))
+    <+> (sepBy1 (identP <* tok Colon <+> typeP) (tok Pipe))
+    <* opt (tok In)
     |>> (fun (a, b) -> DClass (a, [], b) )
 
 let declImplP =
-    (keywordP "member" *> typeP <* keywordP "of")
-    <+> (notKeywordP <* one '=' <* whitespaceP <* opt (one '|'))
-    <+> (sepBy1 (notKeywordP <* (one ':') <+> exprP) (one '|'))
-    <* opt (keywordP "in")
+    (tok Member *> typeP <* tok Of)
+    <+> (identP <* opP Equal <* opt (tok Pipe))
+    <+> (sepBy1 (identP <* (tok Colon) <+> exprP) (tok Pipe))
+    <* opt (tok In)
     |>> (fun (a, b) -> DMember ([],flip a,b))
 
 let declExprP =
     exprP |>> DExpr
 
 let declP =
-    (attempt declExprP) <|> declLetP <|> declSumP <|> declClassP <|> declImplP
+    (attempt declExprP) <|> declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP
 
 let programP =
     many declP
 
-let removeComments (txt: string) =
-    txt.Split('\n')
-    |> Array.map (fun s -> s.Trim())
-    |> Array.filter (fun s -> not <| s.StartsWith("//"))
-    |> String.concat "\n"
+let runParse (kind: Com<'t, Spanned<Token>>) txt =
+    let lexed = lex txt
+    match lexed with
+    | Success v ->
+        let res, state =
+            v
+            |> List.toArray
+            |> mkArrayParser
+            |> kind
+        let state = state :?> ArrayCombinatorState<Spanned<Token>>
+        match res with
+        | Success v when state.Offset >= state.Toks.Length-1 -> ()
+        | _ ->
+            let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
+            let line = fst (fst span)
+            let col = snd (fst span)
+            printfn "Parsing error at line %i, column %i: Unexpected token '%A'." line col tok 
+        res
+    | err -> copyFailure err
 
-let parseDecl txt =
-    txt
-    |> removeComments
-    |> mkMultiLineParser
-    |> declP
-    |> fst
-
-let parseProgram txt =
-    txt
-    |> removeComments
-    |> mkMultiLineParser
-    |> programP
-    |> fst
+let parseDecl = runParse declP
+let parseProgram = runParse programP

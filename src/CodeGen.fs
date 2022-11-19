@@ -110,7 +110,7 @@ let rec containsCall (name: string) (ex: TypedExpr) : bool =
     | TEOp (pt, l, op, r)     -> containsCall name l || containsCall name r
     | TETuple (pt, es)        -> List.exists (containsCall name) es
     | TEMatch (pt, e, bs)     -> List.exists (containsCall name) (List.map snd bs)
-    | TERec (pt, e)           -> containsCall name e
+    | TEGroup (pt, bs, rest)  -> List.exists (snd >> containsCall name) bs || containsCall name rest
 
 // Is a function tail recursive given its name (all recursive calls in tail position)
 let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
@@ -125,20 +125,20 @@ let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
     | TEOp (pt, l, op, r)     -> not (containsCall name l) && not (containsCall name r)
     | TETuple (pt, es)        -> List.forall (containsCall name >> not) es
     | TEMatch (pt, e, bs)     -> List.forall (isTailRecursive name) (List.map snd bs) && not (containsCall name e)
-    | TERec (pt, e)           -> false
+    | TEGroup (pt, bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
 
 // Emit a literal
-let emitLit (lit: Lit) : string =
+let emitLit (lit: Literal) : string =
     match lit with
     | LFloat v -> string v
     | LString v -> sprintf "\"%s\"" v
     | LInt v -> string v
-    | LBool v -> string v
+    | LBool v -> (string v).ToLower()
     | LChar v -> sprintf "\'%c\'" v
     | LUnit -> "\"<unit>\""
 
 // Emit a pattern
-let rec emitPat (pat: Pat) : string =
+let rec emitPat (pat: Pattern) : string =
     match pat with
     | PName x -> x
     | PTuple x -> sprintf "[%s]" (List.map emitPat x |> String.concat ", ")
@@ -159,8 +159,8 @@ let emitOp (op: BinOp) : string =
     | LessEq -> "<="
     | Greater -> ">"
     | Less -> "<"
-    | And -> "&&"
-    | Or -> "||"
+    | BoolAnd -> "&&"
+    | BoolOr -> "||"
 
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
@@ -223,12 +223,23 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                     [sw]
                 )
             )
-    | TERec (pt, e) ->
-        match e with
-        | TELam(ty, PName x, i) when isTailRecursive x i ->
-            optimizeTailRecursion x i
-        | TELam(ty, x, i) -> emitExpr i
-        | _ -> emitExpr e
+    | TEGroup (pt, [x, i], rest) when isTailRecursive x i -> 
+        let optim = optimizeTailRecursion x i
+        JsDefer (
+            JsScope (
+                [ JsDecl (x, optim)
+                  JsReturn (emitExpr rest)
+                ]
+            )
+        )
+    | TEGroup (pt, bs, rest) ->
+        let emitted = List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
+        JsDefer (
+            JsScope (
+                emitted @
+                [ JsReturn (emitExpr rest) ]
+            )
+        )
 
 // Instead of emitting a normal function, emit a trampolined version
 // assuming the function is recusive. Input is the function name and expression.
@@ -289,7 +300,7 @@ and optimizeTailRecursion (name: string) (ex: TypedExpr) : JsExpr =
 
 // Emit a structure that matches a pattern and adds bindings as necessary
 // TODO: Optimize the constant re-scoping a bit
-and emitPatternMatch (res: JsStmt) (pat: Pat) (expr: TypedExpr) : JsStmt =
+and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) : JsStmt =
     let rec cont pat expr next =
         match pat with
         | PName a -> // name matches with anything
@@ -366,6 +377,9 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 let matcher = emitPatternMatch (JsScope []) x e
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
                 [ matcher ]
+
+        | TDGroup (bs) ->
+            List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
 
         | TDUnion (name, typs, cases) ->
             let case n =

@@ -96,6 +96,8 @@ let tests = [
     "Outdated environment regression", fun () -> testTypes false "outdated_env_bug"
     "Duplicate typeclass mentions", fun () -> testTypes false "duplicate_classes"
     "Two types, same typeclass", fun () -> testTypes false "two_types_same_typeclass"
+    "Mutual recursion values", fun () -> testValues true "mutual_recursion"
+    "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
 ]
 
 let startTests() =

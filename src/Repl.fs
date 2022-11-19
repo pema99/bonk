@@ -112,8 +112,8 @@ and binop l op r =
     | VString l, LessEq, VString r -> Some <| VBool (l.Length <= r.Length)
     | VString l, Greater, VString r -> Some <| VBool (l.Length > r.Length)
     | VString l, Less, VString r -> Some <| VBool (l.Length < r.Length)
-    | VBool l, And, VBool r -> Some <| VBool (l && r)
-    | VBool l, Or, VBool r -> Some <| VBool (l || r)
+    | VBool l, BoolAnd, VBool r -> Some <| VBool (l && r)
+    | VBool l, BoolOr, VBool r -> Some <| VBool (l || r)
     
     | _ -> None
 
@@ -138,13 +138,12 @@ and eval tenv (e: TypedExpr) =
         match clos, arg with
         | Some (VUnionCtor a), Some v ->
             Some (VUnionCase (a, v))
-        | Some (VClosure (a, body, env)), Some v ->
-            Option.bind (fun nenv -> eval nenv body) (evalPattern env a v )
-        | Some (VLazy e), Some v -> // deferred application
-            match e.Value with
-            | VClosure (a, body, env) ->
-                Option.bind (fun nenv -> eval nenv body) (evalPattern env a v)
-            | _ -> None
+        | Some (VClosure (selfs, a, body, env)), Some v ->
+            let env = List.fold (fun acc self ->
+                match lookup tenv self with
+                | Some v -> extend acc self v
+                | _ -> acc) env selfs
+            Option.bind (fun nenv -> eval nenv body) (evalPattern env a v)
         | Some (VIntrinsic (name, args)), Some v ->
             let applied = v :: args
             match lookup funImpls name with
@@ -161,12 +160,26 @@ and eval tenv (e: TypedExpr) =
             else
                 Some (VOverload (lst, arity, applied))
         | _ -> None
-    | TELam (_, x, t) -> Some (VClosure (x, t, tenv))
+    | TELam (_, x, t) -> Some (VClosure ([], x, t, tenv))
     | TELet (_, x, v, t) ->
         match eval tenv v with
         | Some ve ->
             Option.bind (fun nenv -> eval nenv t) (evalPattern tenv x ve)
         | _ -> None
+    | TEGroup (_, bs, rest) ->
+        let bootstrap selfs v =
+            match v with
+            | VClosure (_, x, t, env) ->
+                VClosure (List.map fst selfs, x, t, env)
+            | _ -> v
+        let evals = List.map (fun (name, body) -> name, eval tenv body) bs
+        if List.exists (snd >> Option.isNone) evals then None
+        else
+            evals
+            |> List.map (fun (name, body) -> name, Option.get body)
+            |> fun selfs -> List.map (fun (name, body) -> name, bootstrap selfs body) selfs
+            |> List.fold (fun acc (name, body) -> extend acc name body) tenv
+            |> fun nenv -> eval nenv rest
     | TEIf (_, c, tr, fl) ->
         match eval tenv c with
         | Some (VBool v) ->
@@ -179,9 +192,6 @@ and eval tenv (e: TypedExpr) =
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | TERec (ty, e) ->
-        lazy (eval tenv (TEApp (ty, e, (TERec (ty, e)))) |> Option.get) // TODO: Are the types right here?
-        |> fun x -> Some (VLazy x)
     | TEMatch (_, e, xs) ->
         match eval tenv e with
         | Some ev ->
@@ -219,14 +229,14 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
 
 let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
-    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv), (Map.empty, freshCount))
+    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv, ((0,0),(0,0))), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
         do! applyEnvUpdate update
         return update, Some tdecl
     | Error err ->
-        printfn "Type error: %s" err
+        printfn "%s" err
         return ([], [], [], []), None
     }
 
@@ -246,6 +256,15 @@ let rec extendTermEnv bindings = repl {
 let rec handleDecl silent decl = repl {
     let! (varBindings, _, _, _), tdecl = runInfer decl
     let! tenv = getTermEnv
+    let handleBindings vs = repl {
+        do! extendTermEnv vs
+        do! mapM_ (fun (name, res) -> repl {
+            match! checkType name with
+            | Some typ when not silent ->
+                printColor <| sprintf "$w%s : $b%s $w= $g%s" name typ (prettyValue res)
+            | _ -> ()
+            }) vs
+        }
     match tdecl with
     | Some (TDExpr expr) ->
         match! checkType "it" with
@@ -259,23 +278,20 @@ let rec handleDecl silent decl = repl {
     | Some (TDLet (pat, expr)) ->
         let vs = eval tenv expr |> Option.bind (matchPattern tenv pat)
         match vs with
-        | Some vs ->
-            do! extendTermEnv vs
-            do! mapM_ (fun (name, res) -> repl {
-                match! checkType name with
-                | Some typ when not silent ->
-                    printColor <| sprintf "$w%s : $b%s $w= $g%s" name typ (prettyValue res)
-                | _ -> ()
-                }) vs
-        | None ->
-            printfn "Evaluation failure"//TODO: Print
-            //printfn "Evaluation error: Failed to match pattern '%s' with type '%s'" prettyName ptyp
+        | Some vs -> do! handleBindings vs
+        | None -> printfn "Evaluation failure"
+    | Some (TDGroup (es)) ->
+        let vs = List.map (fun (name, ex) ->
+            eval tenv (TEGroup (([], tVoid), es, TEVar (([], tVoid), name)))
+            |> Option.bind (matchPattern tenv (PName name))) es
+        if List.exists Option.isNone vs then printfn "Evaluation failure"
+        else do! handleBindings (List.choose id vs |> List.concat)
     | Some (TDUnion (name, tvs, cases)) ->
         let ctors = List.map fst cases
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases
         do! mapM_ (fun case -> repl {
-                let decl = DLet (PName case, EVar case)
+                let decl = DLet (PName case, (EVar case, ((0,0),(0,0))))
                 return! handleDecl silent decl 
                 }) names
     | Some (TDMember (blankets, pred, impls)) ->
@@ -292,12 +308,9 @@ let rec handleDecl silent decl = repl {
 
 let runExpr input = repl {
     let ast = parseDecl input
-    //printfn "%A" ast
     match ast with
     | Success (decl) -> do! handleDecl false decl
-    | FailureWith err -> printfn "Parsing error: %A" err
-    | CompoundFailure err -> printfn "Parsing error: %A" err
-    | Failure -> printfn "Parsing error: Unknown."
+    | _ -> ()
 }
 
 let rec readUntilSemicolon (str: string) =
@@ -306,7 +319,7 @@ let rec readUntilSemicolon (str: string) =
     else
         printf "- "
         let ns = System.Console.ReadLine()
-        str + readUntilSemicolon ns
+        str + "\n" + readUntilSemicolon ns
 
 let loadLibrary silent input = repl {
     let ast = parseProgram input

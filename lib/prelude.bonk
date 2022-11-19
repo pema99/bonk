@@ -1,13 +1,13 @@
 // --- Basics module ---
-let fst = [(a, b)] a in
-let snd = [(a, b)] b in
-let compose = [f] [g] [l] f (g l) in
-let flip = [(a, b)] (b, a) in
-let const = [k] [_] k in
-let ignore = [k] () in
-let curry = [f] [a] [b] f (a, b) in
-let uncurry = [f] [(a, b)] f a b in
-let not = [b] if b then false else true in
+let fst = [(a, b)] a in 
+let snd = [(a, b)] b in 
+let compose = [f] [g] [l] f (g l) in 
+let flip = [(a, b)] (b, a) in 
+let const = [k] [_] k in 
+let ignore = [k] () in 
+let curry = [f] [a] [b] f (a, b) in 
+let uncurry = [f] [(a, b)] f a b in 
+let not = [b] if b then false else true in 
 
 // --- Numbers module ---
 let negi = [i] 0 - i in
@@ -56,24 +56,24 @@ let isNone = [o]
 in
 
 // --- List module ---
-sum List 'a =
-    | Cons 'a * List 'a
-    | Nil unit
-in
+sum List 'a = 
+    | Cons 'a * List 'a 
+    | Nil unit 
+in 
 
-let map = rec [map] [f] [lst]
-    match lst with
-    | Cons (h, t) -> Cons (f h, map f t)
-    | Nil _       -> Nil () 
-in
+rec map = [f] [lst] 
+    match lst with 
+    | Cons (h, t) -> Cons (f h, map f t) 
+    | Nil _       -> Nil ()  
+in 
 
-let fold = rec [fold] [f] [z] [lst]
+rec fold = [f] [z] [lst]
     match lst with
     | Cons (h, t) -> f (h) (fold f z t)
     | Nil _       -> z
 in
 
-let filter = rec [filter] [f] [lst]
+rec filter = [f] [lst]
     match lst with
     | Cons (h, t) ->
         if f h
@@ -82,32 +82,32 @@ let filter = rec [filter] [f] [lst]
     | Nil _       -> Nil _
 in
 
-let length = rec [length] [lst]
+rec length = [lst]
     match lst with
     | Cons (h, t) -> 1 + length t
     | Nil _       -> 0
 in
 
 let iota = [n]
-    let inner = rec [inner] [acc]
+    rec inner = [acc]
         if acc >= n then Nil ()
         else Cons (acc, inner (acc + 1))
     in
     inner 0
 in
 
-let replicate = rec [replicate] [i] [n]
+rec replicate = [i] [n]
     if n > 0 then Cons (i, replicate i (n - 1))
     else Nil ()
 in
 
-let append = rec [append] [a] [b]
+rec append = [a] [b]
     match a with
     | Cons (h, t) -> Cons (h, append t b)
     | Nil _       -> b
 in
 
-let nth = rec [nth] [n] [lst]
+rec nth = [n] [lst]
     match lst with
     | Cons (h, t) ->
         if n < 0 then None ()
@@ -120,7 +120,7 @@ let exists = [f] [lst]
     length (filter f lst) > 0
 in
 
-let forall = rec [forall] [f] [lst]
+rec forall = [f] [lst]
     match lst with
     | Cons (h, t) -> (f h) && (forall f t)
     | Nil _       -> true
@@ -142,13 +142,13 @@ let find = [f] [lst]
     head (filter f lst)
 in
 
-let stringToList = rec [stringToList] [str]
+rec stringToList = [str]
     let len = lengthString str in
     if len = 0 then Nil ()
     else Cons (indexString str 0, stringToList (substring str 1 (len - 1)))
 in
 
-let listToString = rec [listToString] [lst]
+rec listToString = [lst]
     match lst with
     | Cons (h, t) -> (toString h) + listToString t
     | Nil _       -> ""
