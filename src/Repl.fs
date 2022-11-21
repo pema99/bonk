@@ -209,14 +209,6 @@ let getTermEnv : ReplM<TermEnv> = fmap snd get
 let setTermEnv x : ReplM<unit> = fun (s, _) -> (Ok (), (s, x))
 let setFreshCount x : ReplM<unit> = fun ((a,b,c,d),e) -> (Ok (), ((a,b,c,x),e))
 
-let extendEnv env up =
-    List.fold (fun env (name, v) -> extend env name v) env up
-
-let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
-    match lookup cls name with
-    | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
-    | None -> cls
-
 let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
     let (typeUp, userUp, classUp, implUp) = up
@@ -229,7 +221,7 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
 
 let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
-    let res, (_, (_, i)) = inferDecl decl ((typeEnv, userEnv, classEnv, ((0,0),(0,0))), (Map.empty, freshCount))
+    let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, ((0,0),(0,0))), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
@@ -254,7 +246,7 @@ let rec extendTermEnv bindings = repl {
     }
 
 let rec handleDecl silent decl = repl {
-    let! (varBindings, _, _, _), tdecl = runInfer decl
+    let! (_, _, _, _), tdecl = runInfer decl
     let! tenv = getTermEnv
     let handleBindings vs = repl {
         do! extendTermEnv vs

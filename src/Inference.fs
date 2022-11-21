@@ -101,6 +101,11 @@ let getTypeEnv = infer { // This just applies the current substitution whenever 
     let! subs = getSubstitution
     return applyEnv subs env
 }
+let extendEnv env up = List.fold (fun env (name, v) -> extend env name v) env up
+let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
+    match lookup cls name with
+    | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
+    | None -> cls
 
 // Errors
 let typeError str = infer {
@@ -537,7 +542,7 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
     | _ -> [] // TODO
 
 // Infer a declaration. Returns an update to the environment.
-let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
+let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
     match d with
     | DExpr e ->
         let! qt, te = inferExprTop e
@@ -642,13 +647,8 @@ let rec inferDecl (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
     }
 
 // TODO: Deduplicate some of the code in Repl
-let inferDecls (decls: Decl list) : InferM<TypedDecl list> = infer {
-    let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
-        match lookup cls name with
-        | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
-        | None -> cls
-    let extendEnv env up =
-        List.fold (fun env (name, v) -> extend env name v) env up
+// Infer a decl, update the environment underways
+let rec inferDecl (d: Decl) : InferM<TypedDecl> = infer {
     let applyEnvUpdate (up: EnvUpdate) : InferM<unit> = infer {
         let! (typeEnv, userEnv, classEnv, span), other = get
         let (typeUp, userUp, classUp, implUp) = up
@@ -658,10 +658,11 @@ let inferDecls (decls: Decl list) : InferM<TypedDecl list> = infer {
         let classEnv = List.fold addClassInstance classEnv implUp
         do! set ((typeEnv, userEnv, classEnv, span), other)
         }
-    let inferDeclAndUpdate decl = infer {
-        let! envUpdate, typedDecl = inferDecl decl
-        do! applyEnvUpdate envUpdate
-        return typedDecl
+    let! envUpdate, typedDecl = inferDeclImmediate d
+    do! applyEnvUpdate envUpdate
+    return typedDecl
     }
-    return! mapM inferDeclAndUpdate decls
-}
+
+// Infer multiple decls, update the environment underways
+let inferDecls (decls: Decl list) : InferM<TypedDecl list> =
+    mapM inferDecl decls
