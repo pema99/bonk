@@ -7,6 +7,7 @@ open Pretty
 
 type AbstractValue =
     | AVType of QualType
+    // TODO: Have 2 types: AVPartialTemplate and AVPartialApplied. AVPartialTemplate instiates to AVPartialApplied
     | AVPartial of int list * int * QualType list // ids, arity, already applied 
     | AVTuple of AbstractValue list
     | AVUnionCase of string * AbstractValue
@@ -107,7 +108,7 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
         let! arg, argval = gatherOverloadsExpr x
         match closval with
         | AVPartial (ids, arity, args) ->
-            let applied = (getExprType x) :: args // TODO: Get overload
+            let applied = (getExprType x) :: args
             if arity = List.length applied then
                 let! (a, (overloads, b)) = get
                 let mangled = mangleOverload applied
