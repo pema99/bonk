@@ -19,6 +19,7 @@
     <Compile Include="src/Lex.fs" />
     <Compile Include="src/Parse.fs" />
     <Compile Include="src/Inference.fs" />
+    <Compile Include="src/Lower.fs" />
     <Compile Include="src/CodeGen.fs" />
     <Compile Include="src/Repl.fs" />
     <Compile Include="src/Tests.fs" />

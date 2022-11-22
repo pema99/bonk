@@ -6,6 +6,7 @@ open Parse
 open Combinator
 open Inference
 open Prelude
+open Lower
 
 // JS AST
 type JsBlock = JsStmt list
@@ -414,6 +415,7 @@ let startCompile builtins stdlib files =
         let res, ((_,_,_,loc),_) = inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
         match res with
         | Ok decls ->
+            let decls = monomorphizeDecls Map.empty decls
             let jsAst = List.collect emitDecl decls
             let jsOutput = pprJsBlock 0 jsAst
             File.WriteAllText("out.js", jsOutput)
