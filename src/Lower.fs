@@ -4,9 +4,6 @@ open Repr
 open Inference
 open Monad
 open Pretty
-open Combinator
-open Parse
-open Prelude
 
 type AbstractValue =
     | AVType of QualType
