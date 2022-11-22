@@ -394,10 +394,12 @@ let emitDecl (d: TypedDecl) : JsStmt list =
             List.map (fun (n, _) -> case n) cases
         
         | TDClass (name, reqs, mems) ->
-            [JsIgnore (JsVar "TODO TYPECLASS")]
+            [JsIgnore (JsVar "// TODO TYPECLASS")]
         
-        | TDMember (blankets, pred, exprs) ->
-            [JsIgnore (JsVar "TODO TYPECLASS MEMBER")]
+        | TDMember (blankets, pred, impls) ->
+            List.map (fun (name, body) ->
+                let mangled = mangleOverload name (getExprType body)
+                JsDecl (mangled, emitExpr body)) impls
     List.map (optimizeStmt) res
 
 let startCompile builtins stdlib files =

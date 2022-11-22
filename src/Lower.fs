@@ -5,22 +5,23 @@ open Inference
 open Monad
 open Pretty
 
+// TODO: Maybe don't use a list inside the templates. Just reference the class metadata by name.
 type AbstractValue =
     | AVType of QualType
-    | AVPartialTemplate of int // arity
-    | AVPartialApplied of int * int Set * QualType list // arity, ids, already applied
+    | AVPartialTemplate of string * int * TypedExpr list // name, arity, overloads
+    | AVPartialApplied of string * int * TypedExpr list * int Set * QualType list // name, arity, ids, already applied
     | AVTuple of AbstractValue list
     | AVUnionCase of string * AbstractValue
 
 let combinePartials a b =
     match a, b with
-    | AVPartialApplied (a1, ids1, t1), AVPartialApplied (a2, ids2, t2) ->
+    | AVPartialApplied (n1, a1, o1, ids1, t1), AVPartialApplied (n2, a2, o2, ids2, t2) ->
         if List.length t1 > List.length t2 then // TODO: Check equality
-            AVPartialApplied (a1, Set.union ids1 ids2, t1)
+            AVPartialApplied (n1, a1, o1, Set.union ids1 ids2, t1)
         else
-            AVPartialApplied (a2, Set.union ids1 ids2, t2)
-    | _, AVPartialApplied (a, ids, t) | AVPartialApplied (a, ids, t), _ ->
-        AVPartialApplied (a, ids, t)
+            AVPartialApplied (n2, a2, o2, Set.union ids1 ids2, t2)
+    | _, AVPartialApplied (n, a, o, ids, t) | AVPartialApplied (n, a, o,ids, t), _ ->
+        AVPartialApplied (n, a, o, ids, t)
     | a, _ ->
         a // TODO: Check equality
 
@@ -33,37 +34,81 @@ let getAbtractTermEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setAbtractTermEnv env = fun (ate, s) -> Ok (), (env, s)
 let freshId = fun (ate, (overloads, id)) -> Ok id, (ate, (overloads, id + 1))
 
-let rec mangleType (t: QualType) : string =
-    match t with
-    | _, TConst v -> v
-    | _, TVar v -> sprintf "_t%s" v
-    | _, TArrow (l, r) -> sprintf "%s_%s" (prettyType l) (prettyType r) 
-    | _, TCtor (kind, args) ->
-        match kind with
-        | KProduct _ ->
-            args
-            |> List.map prettyType
-            |> List.toArray
-            |> String.concat "_"
-            |> sprintf "_tup%s_"
-        | KSum name ->
-            let fmt =
-                args
-                |> List.map prettyType
-                |> List.toArray
-                |> String.concat "_"
-            if fmt = "" then name
-            else sprintf "_sum%s_name%s_" name fmt
-        | _ -> "_invalid"
+let zEncode: string -> string = 
+    String.collect (function
+        | '(' -> "zlp"
+        | ')' -> "zrp"
+        | '*' -> "zst"
+        | 'z' -> "zz"
+        | ''' -> "zq"
+        | '<' -> "zl"
+        | '>' -> "zg"
+        | '_' -> "zu"
+        | ' ' -> "zs"
+        | ',' -> "zc"
+        | '-' -> "zm"
+        | '=' -> "ze"
+        | '.' -> "zd"
+        | c -> string c)
 
-let mangleOverload (ts: QualType list) : string =
+let zDecode: string -> string =
+    let rec loop acc = function
+        | 'z' :: 'l' :: 'p' :: rest -> loop ('(' :: acc) rest
+        | 'z' :: 'r' :: 'p' :: rest -> loop (')' :: acc) rest
+        | 'z' :: 's' :: 't' :: rest -> loop ('*' :: acc) rest
+        | 'z' :: 'z' :: rest -> loop ('z' :: acc) rest
+        | 'z' :: 'q' :: rest -> loop ('\'' :: acc) rest
+        | 'z' :: 'l' :: rest -> loop ('<' :: acc) rest
+        | 'z' :: 'g' :: rest -> loop ('>' :: acc) rest
+        | 'z' :: 'u' :: rest -> loop ('_' :: acc) rest
+        | 'z' :: 's' :: rest -> loop (' ' :: acc) rest
+        | 'z' :: 'c' :: rest -> loop (',' :: acc) rest
+        | 'z' :: 'm' :: rest -> loop ('-' :: acc) rest
+        | 'z' :: 'e' :: rest -> loop ('=' :: acc) rest
+        | 'z' :: 'd' :: rest -> loop ('.' :: acc) rest
+        | c :: rest -> loop (c :: acc) rest
+        | [] -> List.rev acc
+    Seq.toList >> loop [] >> List.toArray >> System.String
+
+let mangleOverload (func: string) (ts: QualType) : string =
     ts
-    |> List.map mangleType
-    |> String.concat "_"
+    |> renameFreshQualType
+    |> prettyQualType
+    |> sprintf "%s_%s" func
+    |> zEncode
+    |> sprintf "_%s" // Add underscore for reserved name
 
 let monomorphPrefix = "_monomorph"
 let getMonomorphizedName id : string =
     monomorphPrefix + string id
+
+let rec compatible (l: QualType) (r: QualType) : bool =
+    match l, r with
+    | l, r when l = r -> // precisely equall types
+        true
+    | (_, TConst a), (_, TConst b) when a = b -> // same typed constants
+        true
+    | (qs, TVar a), b | b, (qs, TVar a) ->
+        true // TODO!!!
+    | (ql, TArrow (lf, lt)), (qr, TArrow (rf, rt)) -> // arrow types, check both sides
+        compatible (ql, lf) (qr, rf) && compatible (ql, lt) (qr, rt)
+    | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
+        let qls = List.map (fun a -> ql, a) ls
+        let qrs = List.map (fun a -> qr, a) rs
+        List.forall (fun (a, b) -> compatible a b) (List.zip qls qrs)
+    | _ -> false
+
+let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
+    match overload, args with
+    | TELam ((qt, TArrow (a, _)), x, rest), h :: t ->
+        compatible (qt, a) h && candidate rest t
+    | _, [] -> true 
+    | _ -> false
+
+let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExpr option =
+    match List.tryFind (fun ex -> candidate ex args) overloads with
+    | Some goal -> Some goal
+    | None -> None
 
 let rec calcArity (ex: TypedExpr) : int =
     match ex with
@@ -101,23 +146,29 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
     | TEVar (qt, a) ->
         let! tenv = getAbtractTermEnv
         match lookup tenv a with
-        | Some (AVPartialTemplate arity) ->
+        | Some (AVPartialTemplate (name, arity, overloads)) ->
             let! id = freshId
-            return TEVar (qt, getMonomorphizedName id), AVPartialApplied (arity, Set.singleton id, [])
+            return TEVar (qt, getMonomorphizedName id), AVPartialApplied (name, arity, overloads, Set.singleton id, [])
         | Some v -> return e, v
         | _ -> return e, AVType qt
     | TEApp (qt, f, x) ->
         let! clos, closval = gatherOverloadsExpr f
         let! arg, argval = gatherOverloadsExpr x
         match closval with
-        | AVPartialApplied (arity, ids, args) ->
+        | AVPartialApplied (name, arity, overloads, ids, args) ->
             let applied = (getExprType x) :: args
             if arity = List.length applied then
-                let! (a, (overloads, b)) = get
-                let mangled = mangleOverload applied
-                let overloads = Set.fold (fun acc id -> extend acc id mangled) overloads ids
-                do! set (a, (overloads, b))
-            return TEApp (qt, clos, arg), AVPartialApplied (arity, ids, applied)
+                let! (a, (resolved, b)) = get
+                match resolveOverload overloads applied with
+                | Some overload ->
+                    let mangled =
+                        overload
+                        |> getExprType
+                        |> mangleOverload name 
+                    let resolved = Set.fold (fun acc id -> extend acc id mangled) resolved ids
+                    do! set (a, (resolved, b))
+                | _ -> () // TODO: Handle error!
+            return TEApp (qt, clos, arg), AVPartialApplied (name, arity, overloads, ids, applied)
         | _ ->
             return TEApp (qt, clos, arg), AVType qt
     | TELam (qt, x, t) ->
@@ -183,12 +234,16 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
     | TDUnion (name, tvs, cases) ->
         return TDUnion (name, tvs, cases)
     | TDClass (blankets, pred, impls) ->
-        return TDClass (blankets, pred, impls) // TODO: Checking
+        return TDClass (blankets, pred, impls) // TODO: Checking?
     | TDMember (blankets, pred, impls) ->
         let addMember (s, e) = lower {
             let! tenv = getAbtractTermEnv
-            if lookup tenv s = None then
-                let tenv = extend tenv s (AVPartialTemplate (calcArity e))
+            match lookup tenv s with
+            | Some (AVPartialTemplate (name, arity, overloads)) ->
+                let tenv = extend tenv s (AVPartialTemplate (name, arity, e :: overloads))
+                do! setAbtractTermEnv tenv
+            | _ ->
+                let tenv = extend tenv s (AVPartialTemplate (s, calcArity e, [e]))
                 do! setAbtractTermEnv tenv
         }
         do! mapM_ addMember impls
