@@ -7,19 +7,22 @@ open Pretty
 
 type AbstractValue =
     | AVType of QualType
-    // TODO: Have 2 types: AVPartialTemplate and AVPartialApplied. AVPartialTemplate instiates to AVPartialApplied
-    | AVPartial of int list * int * QualType list // ids, arity, already applied 
+    | AVPartialTemplate of int // arity
+    | AVPartialApplied of int * int Set * QualType list // arity, ids, already applied
     | AVTuple of AbstractValue list
     | AVUnionCase of string * AbstractValue
 
 let combinePartials a b =
     match a, b with
-    | AVPartial (ids1, l1, r1), AVPartial (ids2, l2, r2) ->
-        AVPartial (ids1 @ ids2, l1, r1) // Check equality
-    | _, AVPartial (ids, l, r) | AVPartial (ids, l, r), _ ->
-        AVPartial (ids, l, r)
-    | a, b ->
-        a // Check equality
+    | AVPartialApplied (a1, ids1, t1), AVPartialApplied (a2, ids2, t2) ->
+        if List.length t1 > List.length t2 then // TODO: Check equality
+            AVPartialApplied (a1, Set.union ids1 ids2, t1)
+        else
+            AVPartialApplied (a2, Set.union ids1 ids2, t2)
+    | _, AVPartialApplied (a, ids, t) | AVPartialApplied (a, ids, t), _ ->
+        AVPartialApplied (a, ids, t)
+    | a, _ ->
+        a // TODO: Check equality
 
 type AbstractTermEnv = Map<string, AbstractValue>
 type ResolvedOverloads = Map<int, string>
@@ -98,23 +101,23 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
     | TEVar (qt, a) ->
         let! tenv = getAbtractTermEnv
         match lookup tenv a with
-        | Some (AVPartial ([], b, c)) ->
+        | Some (AVPartialTemplate arity) ->
             let! id = freshId
-            return TEVar (qt, getMonomorphizedName id), AVPartial ([id], b, c)
+            return TEVar (qt, getMonomorphizedName id), AVPartialApplied (arity, Set.singleton id, [])
         | Some v -> return e, v
         | _ -> return e, AVType qt
     | TEApp (qt, f, x) ->
         let! clos, closval = gatherOverloadsExpr f
         let! arg, argval = gatherOverloadsExpr x
         match closval with
-        | AVPartial (ids, arity, args) ->
+        | AVPartialApplied (arity, ids, args) ->
             let applied = (getExprType x) :: args
             if arity = List.length applied then
                 let! (a, (overloads, b)) = get
                 let mangled = mangleOverload applied
-                let overloads = List.fold (fun acc id -> extend acc id mangled) overloads ids
+                let overloads = Set.fold (fun acc id -> extend acc id mangled) overloads ids
                 do! set (a, (overloads, b))
-            return TEApp (qt, clos, arg), AVPartial (ids, arity, applied)
+            return TEApp (qt, clos, arg), AVPartialApplied (arity, ids, applied)
         | _ ->
             return TEApp (qt, clos, arg), AVType qt
     | TELam (qt, x, t) ->
@@ -184,12 +187,8 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
     | TDMember (blankets, pred, impls) ->
         let addMember (s, e) = lower {
             let! tenv = getAbtractTermEnv
-            match lookup tenv s with
-            | Some (AVPartial (ids, arity, v)) ->
-                let tenv = extend tenv s (AVPartial (ids, arity, v))
-                do! setAbtractTermEnv tenv
-            | _ ->
-                let tenv = extend tenv s (AVPartial ([], calcArity e, []))
+            if lookup tenv s = None then
+                let tenv = extend tenv s (AVPartialTemplate (calcArity e))
                 do! setAbtractTermEnv tenv
         }
         do! mapM_ addMember impls
