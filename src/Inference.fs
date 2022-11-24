@@ -249,7 +249,8 @@ let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
     | TEOp (pt, l, op, r)     -> TEOp (ty, l, op, r)
     | TETuple (pt, es)        -> TETuple (ty, es)
     | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
-    | TEGroup (pt, a, b)         -> TEGroup (ty, a, b)
+    | TEGroup (pt, a, b)      -> TEGroup (ty, a, b)
+    | TERaw (pt, body)        -> TERaw (ty, body)
 
 // Get type out of a typed expression
 let getExprType ex = 
@@ -264,6 +265,7 @@ let getExprType ex =
     | TETuple (pt, es)        -> pt
     | TEMatch (pt, e, bs)     -> pt
     | TEGroup (pt, a, b)      -> pt
+    | TERaw (pt, body)        -> pt
 
 // Traverse a typed AST and apply some transformation to each type
 let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : InferM<TypedExpr> = infer {
@@ -315,6 +317,9 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         let! bs2 = mapM (snd >> traverseTypedExpr s) bs
         let! rest = traverseTypedExpr s rest
         return TEGroup (pt, List.zip bs1 bs2, rest)
+    | TERaw (pt, body) ->
+        let! pt = s pt
+        return TERaw (pt, body)
     }
 
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
@@ -503,6 +508,21 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         do! mapM_ (fun (l, r) -> unify l r) (List.zip tvs (List.map (snd >> snd) scs))
         let qt = (p2, t2)
         return qt, TEGroup (qt, List.zip names tes, te2)
+    | ERaw (typ, body) ->
+        match typ with
+        | Some typ ->
+            // TODO: Check typeclasses when I am able to parse QualTypes for raw blocks
+            let! usr = getUserEnv
+            let usages = gatherUserTypesUsages typ
+            if not <| Set.forall (checkUserTypeUsage usr) usages then
+                let bad =
+                    Set.filter (checkUserTypeUsage usr >> not) usages
+                    |> Set.map fst
+                    |> String.concat ", "
+                return! typeError <| sprintf "Use of undeclared type constructors in raw block: %s." bad
+            return ([], typ), TERaw (([], typ), body)
+        | None ->
+            return ([], tOpaque), TERaw (([], tOpaque), body)
     }
 
 // Infer and expression and then solve constraints

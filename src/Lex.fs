@@ -81,6 +81,7 @@ let wordP =
         | "string" -> TypeDesc (TConst "string")
         | "void"   -> TypeDesc (TConst "void")
         | "unit"   -> TypeDesc (TConst "unit")
+        | "opaque" -> TypeDesc (TConst "opaque")
         | "this"   -> TypeDesc (TVar "this")
         | ident    -> Ident (ident)
 
@@ -137,9 +138,18 @@ let spannedP p : Com<Spanned<'t>, char> = com {
     return spanned
 }
 
-let tokenP =
+let tokenP, tokenPImpl = declParser()
+
+// Raw JS blocks
+let rawBlockP =
+    (one '$' *> many (tokenP) <* one '$')
+    <+> (eatWhile ((<>) '$') |>> mkString)
+    <* (one '$' *> one '$')
+    |>> RawBlock
+
+tokenPImpl :=
     many (commentP <* whitespaceP) *>
-    whitespacedP (spannedP (literalP <|> wordP <|> symbolP <|> operatorTokP))
+    whitespacedP (spannedP (literalP <|> wordP <|> symbolP <|> attempt operatorTokP <|> attempt rawBlockP))
 
 let lex txt =
     let (res, state) = 
@@ -148,6 +158,6 @@ let lex txt =
         |> many (tokenP)
     let state = state :?> MultiLineTextCombinatorState
     match res with
-    | Success _ when state.Source.Trim() = "" -> ()
+    | Success _ when Seq.forall ((=) ';') (state.Source.Trim()) -> ()
     | _ -> printfn "Lexing error at line %i, column %i." state.Line state.Column
     res

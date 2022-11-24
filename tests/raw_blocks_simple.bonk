@@ -1,0 +1,12 @@
+// Typed raw block
+// console_log :: 'a -> unit
+let console_log = [x] $unit$ console.log(x) $$ in
+
+// Untyped raw block
+// console_log_untyped :: 'a -> opaque
+let console_log_untyped = [x] $$ console.log(x) $$ in
+
+// Use them it!
+let _ = console_log "hello world" in
+let _ = console_log 1337 in
+let _ = console_log_untyped 420 in

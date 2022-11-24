@@ -115,6 +115,7 @@ let rec containsCall (name: string) (ex: TypedExpr) : bool =
     | TETuple (pt, es)        -> List.exists (containsCall name) es
     | TEMatch (pt, e, bs)     -> List.exists (containsCall name) (List.map snd bs)
     | TEGroup (pt, bs, rest)  -> List.exists (snd >> containsCall name) bs || containsCall name rest
+    | TERaw (pt, v)           -> false
 
 // Is a function tail recursive given its name (all recursive calls in tail position)
 let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
@@ -130,6 +131,7 @@ let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
     | TETuple (pt, es)        -> List.forall (containsCall name >> not) es
     | TEMatch (pt, e, bs)     -> List.forall (isTailRecursive name) (List.map snd bs) && not (containsCall name e)
     | TEGroup (pt, bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
+    | TERaw (pt, v)           -> true
 
 // Emit a literal
 let emitLit (lit: Literal) : string =
@@ -244,6 +246,8 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                 [ JsReturn (emitExpr rest) ]
             )
         )
+    | TERaw (pt, body) ->
+        JsVar body
 
 // Instead of emitting a normal function, emit a trampolined version
 // assuming the function is recusive. Input is the function name and expression.

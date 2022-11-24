@@ -68,6 +68,31 @@ let patTupleP =
 patPImpl :=
     patTupleP <|> patNonTupleP
 
+// User types
+let typeP, typePImpl = declParser()
+
+let typeVarP = 
+    tok Tick *> identP
+
+let primTypeP =
+    (typeVarP |>> TVar)
+    <|> typeDescP
+
+let typeTermP =
+    (attempt <| identP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+    <|> primTypeP
+    <|> parens typeP
+
+let productP =
+    sepBy2 typeTermP (opP Star)
+    |>> fun lst -> TCtor (KProduct, lst)
+    |> attempt
+
+let arrowP =
+    chainR1 (productP <|> typeTermP) (tok Arrow *> just (curry TArrow))
+
+typePImpl := arrowP
+
 // Expressions
 let exprP, exprPImpl = declParser()
 
@@ -158,32 +183,26 @@ let unOpP =
     <+> exprP
     |>> fun (_, e) -> (EOp ((EOp (e, Minus, e), snd e), Minus, e), snd e)
 
-exprPImpl := boolOpP <|> unOpP
+let rawP =
+    com {
+        let! toks, body =
+            extract (function (RawBlock (v, u), _) -> Some (v, u) | _ -> None)
+        if Seq.isEmpty toks then
+            return ERaw (None, body)
+        else
+            // Parser inner type in new context
+            let typ =
+                toks
+                |> List.toArray
+                |> mkArrayParser
+                |> typeP
+                |> fst
+            match typ with
+            | Success typ -> return ERaw (Some typ, body)
+            | _ -> return! fail()
+    } |> spannedP
 
-// User types
-let typeP, typePImpl = declParser()
-
-let typeVarP = 
-    tok Tick *> identP
-
-let primTypeP =
-    (typeVarP |>> TVar)
-    <|> typeDescP
-
-let typeTermP =
-    (attempt <| identP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
-    <|> primTypeP
-    <|> parens typeP
-
-let productP =
-    sepBy2 typeTermP (opP Star)
-    |>> fun lst -> TCtor (KProduct, lst)
-    |> attempt
-
-let arrowP =
-    chainR1 (productP <|> typeTermP) (tok Arrow *> just (curry TArrow))
-
-typePImpl := arrowP
+exprPImpl := boolOpP <|> unOpP <|> rawP
 
 // Declarations
 let declLetP =

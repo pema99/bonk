@@ -98,6 +98,7 @@ let tests = [
     "Two types, same typeclass", fun () -> testTypes false "two_types_same_typeclass"
     "Mutual recursion values", fun () -> testValues true "mutual_recursion"
     "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
+    "Simple raw black usage", fun () -> testTypes false "raw_blocks_simple"
 ]
 
 let startTests() =

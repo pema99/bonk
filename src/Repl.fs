@@ -200,6 +200,8 @@ and eval tenv (e: TypedExpr) =
             |> List.tryPick id
             |> Option.bind (fun (env, hit) -> eval env hit)
         | _ -> None
+    | TERaw (_, body) ->
+        None
 
 // Repl start
 type InferState = TypeEnv * UserEnv * ClassEnv * int

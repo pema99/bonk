@@ -210,6 +210,8 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
             else
                 List.fold combinePartials (List.head restvals) restvals
         return TEMatch (qt, e, List.zip pats rest), restvals 
+    | TERaw (qt, body) ->
+        return e, AVType qt
     }
 
 let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
@@ -263,6 +265,7 @@ let rec mapTypedExpr fe ex : TypedExpr =
     | TETuple (pt, es)        -> fe <| TETuple (pt, List.map (mapTypedExpr fe) es)
     | TEMatch (pt, e, bs)     -> fe <| TEMatch (pt, mapTypedExpr fe e, List.map (fun (a, b) -> a, mapTypedExpr fe b) bs)
     | TEGroup (pt, a, b)      -> fe <| TEGroup (pt, List.map (fun (a, b) -> a, mapTypedExpr fe b) a, mapTypedExpr fe b)
+    | TERaw (pt, body)        -> fe <| TERaw (pt, body)
 
 // Map over typed decl
 let mapTypedDecl fe fd decl = 

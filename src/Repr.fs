@@ -30,6 +30,7 @@ type Token =
     | Lit of Literal
     | Ident of string
     | TypeDesc of Type
+    | RawBlock of Spanned<Token> list * string
     // Keywords
     | Let | In
     | If | Then | Else
@@ -61,6 +62,7 @@ and Expr =
     | ETuple of Spanned<Expr> list
     | EMatch of Spanned<Expr> * (Pattern * Spanned<Expr>) list
     | EGroup of (string * Spanned<Expr>) list * Spanned<Expr> 
+    | ERaw   of Type option * string // TODO: This should be QualType, not Type
 
 and Decl =
     | DExpr   of Spanned<Expr>
@@ -99,6 +101,7 @@ type TypedExpr =
     | TETuple of QualType * TypedExpr list
     | TEMatch of QualType * TypedExpr * (Pattern * TypedExpr) list
     | TEGroup of QualType * (string * TypedExpr) list * TypedExpr 
+    | TERaw   of QualType * string
 
 type TypedDecl =
     | TDExpr   of TypedExpr
@@ -132,6 +135,7 @@ let tString = TConst "string"
 let tChar = TConst "char"
 let tVoid = TConst "void"
 let tUnit = TConst "unit"
+let tOpaque = TConst "opaque"
 
 // Just for REPL
 type Value =
