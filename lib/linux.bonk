@@ -1,0 +1,21 @@
+// Contains linux-specific bindings
+
+// Opaque type for dealing with Linux specific stuff
+sum LinuxFFIHandle = LinuxFFIHandle unit
+
+let initOS = $unit -> LinuxFFIHandle$
+    function initOS(_) {
+        var ffi = require('ffi');
+        var lib = ffi.Library(null, {
+            'fork': [ 'int', [ ] ],
+            'getpid': [ 'int', [ ] ]
+        });
+        return lib;
+    }
+$$ in
+
+let fork = $LinuxFFIHandle -> int$
+    function fork(lib) {
+        return lib.fork();
+    }
+$$ in

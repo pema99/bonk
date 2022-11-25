@@ -1,0 +1,13 @@
+// Contains useful bindings that work on any platform
+
+let consoleLog = $string -> unit$
+    function (msg) {
+        console.log(msg)
+    }
+$$ in
+
+let readInput = $string -> string$
+    function (msg) {
+        return prompt(msg)
+    }
+$$ in
