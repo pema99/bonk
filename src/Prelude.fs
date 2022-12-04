@@ -208,3 +208,23 @@ let classes: ClassEnv = Map.ofList [
         tChar
     ])
 ]
+
+// Attempt to load std lib
+let stdLib = 
+    use res =
+        System.Reflection.Assembly
+            .GetExecutingAssembly()
+            .GetManifestResourceStream("bonk.lib.bonk.prelude.bonk")
+    let out = Array.create (int res.Length) (byte 0)
+    res.Read(out, 0, int res.Length) |> ignore
+    System.Text.Encoding.Default.GetString(out)
+
+// And JS intrinsics
+let jsInstrincs =
+    use res =
+        System.Reflection.Assembly
+            .GetExecutingAssembly()
+            .GetManifestResourceStream("bonk.lib.js.intrinsics.js")
+    let out = Array.create (int res.Length) (byte 0)
+    res.Read(out, 0, int res.Length) |> ignore
+    System.Text.Encoding.Default.GetString(out)

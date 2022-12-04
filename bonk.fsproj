@@ -11,7 +11,8 @@
     <Compile Include="plonk/src/Common.fs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="lib/prelude.bonk" />
+    <EmbeddedResource Include="lib/bonk/prelude.bonk" />
+    <EmbeddedResource Include="lib/js/intrinsics.js" />
     <Compile Include="src/Repr.fs" />
     <Compile Include="src/Prelude.fs" />
     <Compile Include="src/Pretty.fs" />

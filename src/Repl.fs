@@ -322,16 +322,6 @@ let loadLibrary silent input = repl {
     | _ -> printfn "Failed to load library."
 }
 
-// Attempt to load std lib
-let stdLib = 
-    use res =
-        System.Reflection.Assembly
-            .GetExecutingAssembly()
-            .GetManifestResourceStream("bonk.lib.prelude.bonk")
-    let out = Array.create (int res.Length) (byte 0)
-    res.Read(out, 0, int res.Length) |> ignore
-    System.Text.Encoding.Default.GetString(out)
-
 let runRepl stdlib : ReplM<unit> = repl {
     if stdlib then
         do! loadLibrary true stdLib

@@ -13,7 +13,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - A _very_ work-in-progress implementation of typeclasses.
 - A _very_ work-in-progress [JavaScript backend](https://gist.github.com/pema99/935b915a3197b5222183bf6ac4bb8308).
 - An working interpreter/REPL that also provides type information.
-- A tiny standard library (see `lib/prelude.bonk`).
+- A tiny standard library (see `lib/bonk/prelude.bonk`).
 
 # Example code
 The following program typechecks and runs. Syntax subject to change.

@@ -407,13 +407,13 @@ let emitDecl (d: TypedDecl) : JsStmt list =
     List.map (optimizeStmt) res
 
 let startCompile builtins stdlib files =
-    let files =
-        if stdlib then Seq.append ["lib/prelude.bonk"] files 
-        else files
+    let stdlib = if not builtins then false else stdlib
     let ast =
         files
         |> Seq.map (File.ReadAllText)
         |> String.concat "\n"
+        |> fun str -> if stdlib then stdLib + str else str
+        //|> fun str -> if builtins then jsInstrincs + str else str
         |> parseProgram
     let funSchemes = if builtins then funSchemes else Map.empty
     match ast with
@@ -424,6 +424,7 @@ let startCompile builtins stdlib files =
             let decls = monomorphizeDecls Map.empty decls
             let jsAst = List.collect emitDecl decls
             let jsOutput = pprJsBlock 0 jsAst
+            let jsOutput = if builtins then jsInstrincs + jsOutput else jsOutput
             File.WriteAllText("out.js", jsOutput)
         | Error err -> printfn "Typing error(%A): %s" loc err
     | Failure -> printfn "Parsing error: Unknown"
