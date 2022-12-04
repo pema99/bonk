@@ -47,6 +47,11 @@ let read v =
     | [VUnit] -> Some (VString (System.Console.ReadLine()))
     | _ -> None
 
+let readFile v =
+    match v with
+    | [VString v] -> Some (VString (System.IO.File.ReadAllText v))
+    | _ -> None
+
 let toFloat v =
     match v with
     | [VFloat v] -> Some (VFloat (float v))
@@ -115,6 +120,7 @@ let funSchemes: Map<string, Scheme> = Map.ofList [
     "substring",    ([],    ([], TArrow (tString, TArrow (tInt, TArrow (tInt, tString)))))
     "print",        ([],    ([], TArrow (tString, tUnit)))
     "read",         ([],    ([], TArrow (tUnit, tString)))
+    "readFile",     ([],    ([], TArrow (tString, tString)))
     "toFloat",      (["a"], (["ToFloat", TVar "a"], TArrow (TVar "a", tFloat)) )
     "toString",     (["a"], (["ToString", TVar "a"], TArrow (TVar "a", tString)) )
     "toBool",       (["a"], (["ToBool", TVar "a"], TArrow (TVar "a", tBool)) )

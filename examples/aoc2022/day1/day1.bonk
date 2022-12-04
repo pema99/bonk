@@ -1,0 +1,69 @@
+let content = readFile "examples/aoc2022/day1/input.txt" in
+
+let reverse = [lst]
+    rec reverseInner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> reverseInner t (Cons (h, acc))
+        | Nil () -> acc
+    in
+    reverseInner lst (Nil ())
+in
+
+let split = [sep] [str]
+    rec splitInner = [f] [s] [acc]
+        if (f + s) >= lengthString str then
+            Cons (substring str f s, acc)
+        else
+            let next = indexString str (f + s) in
+            if next = sep then
+                let lst = (Cons (substring str f s, acc)) in
+                splitInner (f+s+1) 0 lst
+            else
+                splitInner f (s + 1) acc
+    in reverse (splitInner 0 0 (Nil ()))
+in
+
+let lines = split (indexString "\n" 0) content in
+
+rec solution = [lst] [curr] [totals]
+    match lst with
+    | Cons (line, tail) ->
+        if line = "" then
+            solution tail 0 (Cons (curr, totals))
+        else
+            let num = toInt line in
+            let add = curr + num in
+            solution tail add totals
+    | Nil () -> totals
+in
+
+let totals = solution lines 0 (Nil ()) in
+
+rec findMax = [lst] [m] [mi] [i]
+    match lst with
+    | Cons (h, t) -> if h > m then findMax t h i (i+1) else findMax t m mi (i+1)
+    | Nil () -> mi
+in
+
+rec remove = [lst] [i] [curr]
+    match lst with
+    | Cons (h, t) -> if curr = i then t else Cons (h, remove t i (curr+1))
+    | Nil () -> Nil ()
+in
+
+// Part 1
+let max1i = findMax totals 0 0 0 in
+let max1v = nth max1i totals in
+let _ = print (toString (getOption 0 max1v)) in
+let _ = print "\n" in
+
+// Part 2
+let totals = remove totals max1i 0 in
+let max2i = findMax totals 0 0 0 in
+let max2v = nth max2i totals in
+let totals = remove totals max2i 0 in
+let max3i = findMax totals 0 0 0 in
+let max3v = nth max3i totals in
+let totals = remove totals max3i 0 in
+let _ = print (toString ((getOption 0 max1v) + (getOption 0 max2v) + (getOption 0 max3v))) in
+let _ = print "\n" in
