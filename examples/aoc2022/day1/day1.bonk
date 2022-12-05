@@ -1,29 +1,5 @@
 let content = readFile "examples/aoc2022/day1/input.txt" in
-
-let reverse = [lst]
-    rec reverseInner = [lst] [acc]
-        match lst with
-        | Cons (h, t) -> reverseInner t (Cons (h, acc))
-        | Nil () -> acc
-    in
-    reverseInner lst (Nil ())
-in
-
-let split = [sep] [str]
-    rec splitInner = [f] [s] [acc]
-        if (f + s) >= lengthString str then
-            Cons (substring str f s, acc)
-        else
-            let next = indexString str (f + s) in
-            if next = sep then
-                let lst = (Cons (substring str f s, acc)) in
-                splitInner (f+s+1) 0 lst
-            else
-                splitInner f (s + 1) acc
-    in reverse (splitInner 0 0 (Nil ()))
-in
-
-let lines = split (indexString "\n" 0) content in
+let lines = splitString (indexString "\n" 0) content in
 
 rec solution = [lst] [curr] [totals]
     match lst with

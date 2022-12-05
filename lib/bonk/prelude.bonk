@@ -142,6 +142,15 @@ let find = [f] [lst]
     head (filter f lst)
 in
 
+let reverse = [lst]
+    rec reverseInner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> reverseInner t (Cons (h, acc))
+        | Nil () -> acc
+    in
+    reverseInner lst (Nil ())
+in
+
 rec stringToList = [str]
     let len = lengthString str in
     if len = 0 then Nil ()
@@ -206,4 +215,19 @@ let getRight = [def] [o]
     match o with
     | Left _ -> def
     | Right a -> a
+in
+
+// --- String module ---
+let splitString = [sep] [str]
+    rec splitInner = [f] [s] [acc]
+        if (f + s) >= lengthString str then
+            Cons (substring str f s, acc)
+        else
+            let next = indexString str (f + s) in
+            if next = sep then
+                let lst = (Cons (substring str f s, acc)) in
+                splitInner (f+s+1) 0 lst
+            else
+                splitInner f (s + 1) acc
+    in reverse (splitInner 0 0 (Nil ()))
 in
