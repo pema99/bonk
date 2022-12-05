@@ -1,0 +1,75 @@
+let content = readFile "examples/aoc2022/day2/input.txt" in
+
+let reverse = [lst]
+    rec reverseInner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> reverseInner t (Cons (h, acc))
+        | Nil () -> acc
+    in
+    reverseInner lst (Nil ())
+in
+
+let split = [sep] [str]
+    rec splitInner = [f] [s] [acc]
+        if (f + s) >= lengthString str then
+            Cons (substring str f s, acc)
+        else
+            let next = indexString str (f + s) in
+            if next = sep then
+                let lst = (Cons (substring str f s, acc)) in
+                splitInner (f+s+1) 0 lst
+            else
+                splitInner f (s + 1) acc
+    in reverse (splitInner 0 0 (Nil ()))
+in
+
+let lines = split (indexString "\n" 0) content in
+
+// Part 1
+let choiceScore = [c]
+    match c with
+    | 'X' -> 1
+    | 'Y' -> 2
+    | 'Z' -> 3
+in
+
+rec solution = [lst] [chooser] [curr]
+    match lst with
+    | Cons (line, tail) ->
+        let parts = split ' ' line in
+        let theirs = indexString (getOption "" (nth 0 parts)) 0 in
+        let mine = indexString (getOption "" (nth 1 parts)) 0 in
+        let mine = chooser theirs mine in
+        let score = choiceScore mine in
+        (match (theirs, mine) with
+        | ('A', 'X') -> solution tail chooser (curr + score + 3)
+        | ('B', 'Y') -> solution tail chooser (curr + score + 3)
+        | ('C', 'Z') -> solution tail chooser (curr + score + 3)
+        | ('A', 'Y') -> solution tail chooser (curr + score + 6)
+        | ('B', 'Z') -> solution tail chooser (curr + score + 6)
+        | ('C', 'X') -> solution tail chooser (curr + score + 6)
+        | ('A', 'Z') -> solution tail chooser (curr + score + 0)
+        | ('B', 'X') -> solution tail chooser (curr + score + 0)
+        | ('C', 'Y') -> solution tail chooser (curr + score + 0))
+    | Nil () -> curr
+in
+
+let _ = print "Part 1 solution: " in
+let _ = print (toString (solution lines ([x] [y] y) 0) + "\n") in
+
+// Part 2
+let makeChoice = [theirs] [outcome]
+    match (theirs, outcome) with
+    | ('A', 'X') -> 'Z'
+    | ('A', 'Y') -> 'X'
+    | ('A', 'Z') -> 'Y'
+    | ('B', 'X') -> 'X'
+    | ('B', 'Y') -> 'Y'
+    | ('B', 'Z') -> 'Z'
+    | ('C', 'X') -> 'Y'
+    | ('C', 'Y') -> 'Z'
+    | ('C', 'Z') -> 'X'
+in
+
+let _ = print "Part 2 solution: " in
+let _ = print (toString (solution lines makeChoice 0) + "\n") in
