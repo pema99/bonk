@@ -18,16 +18,3 @@ let b = add 3 in
 let c = if true then add 3 5 else 5 in
 let d = b 7 in
 let e = add (Nil ()) (Nil ()) in
-
-// Typed raw block
-// console_log :: 'a -> unit
-let console_log = [x] $unit$ console.log(x) $$ in
-
-// Untyped raw block
-// console_log_untyped :: 'a -> opaque
-let console_log_untyped = [x] $unit$ console.log(x) $$ in
-
-// Use them it!
-let _ = console_log "hello world" in
-let _ = console_log 1337 in
-let _ = console_log_untyped 420 in
