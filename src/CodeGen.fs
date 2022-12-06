@@ -140,7 +140,7 @@ let emitLit (lit: Literal) : string =
     | LString v -> sprintf "\"%s\"" v
     | LInt v -> string v
     | LBool v -> (string v).ToLower()
-    | LChar v -> sprintf "\'%c\'" v
+    | LChar v -> sprintf "\'%c\'.charCodeAt(0)" v
     | LUnit -> "\"<unit>\""
 
 // Emit a pattern
