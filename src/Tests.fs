@@ -99,6 +99,7 @@ let tests = [
     "Mutual recursion values", fun () -> testValues true "mutual_recursion"
     "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
     "Simple raw black usage", fun () -> testTypes false "raw_blocks_simple"
+    "Wide operators parse correctly", fun () -> testTypes false "wide_operator"
 ]
 
 let startTests() =

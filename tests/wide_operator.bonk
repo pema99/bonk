@@ -1,0 +1,12 @@
+// Ensure that most wide operators work as expected
+
+// Arrow is a wide operator
+class Show =
+    | show : this -> string
+
+// And some bool ops
+let foo = true || false in
+let bar = true && false in
+let baz = true != false in
+let bom = 1 >= 2 in
+let boo = 2 <= 1 in

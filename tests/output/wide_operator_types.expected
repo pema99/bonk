@@ -1,0 +1,6 @@
+bar : bool
+baz : bool
+bom : bool
+boo : bool
+foo : bool
+show : (Show 'a) => ('a -> string)
