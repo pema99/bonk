@@ -1,0 +1,37 @@
+let content = readFile "examples/aoc2022/day4/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+let parseRanges = [line]
+    // Infallible matches, do I want to keep them? Hmm... not sure yet
+    let Cons (l, Cons(r, _)) = splitString ',' line in
+    let Cons (l1, Cons(l2, _)) = splitString '-' l in
+    let Cons (r1, Cons(r2, _)) = splitString '-' r in
+    ((toInt l1, toInt l2), (toInt r1, toInt r2))
+in
+
+let intervalContains = [(l1, l2)] [(r1, r2)]
+    (l1 >= r1 && l2 <= r2) || (l1 <= r1 && l2 >= r2)
+in
+
+// Part 1 
+rec solution = [lst] [check] [curr]
+    match lst with
+    | Cons (line, tail) ->
+        let ((l1, l2), (r1, r2)) = parseRanges line in
+        if check (l1, l2) (r1, r2) then
+            solution tail check (curr + 1)
+        else
+            solution tail check curr
+    | Nil () -> curr
+in
+
+let _ = print (toString (solution lines intervalContains 0)) in
+let _ = print "\n" in
+
+// Part 2
+let intervalOverlaps = [(l1, l2)] [(r1, r2)]
+    ((l2 >= r1 && l1 <= r2) || (r2 <= l1 && r1 >= l2))
+in
+
+let _ = print (toString (solution lines intervalOverlaps 0)) in
+let _ = print "\n" in

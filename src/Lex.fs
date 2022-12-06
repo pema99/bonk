@@ -30,7 +30,7 @@ let operatorP = com {
     | '>', _ -> return Greater
     | '<', _ -> return Less
     | '+', _ -> return Plus
-    | '-', _ -> return Minus
+    | '-', _ when r <> '>' -> return Minus
     | '*', _ -> return Star
     | '/', _ -> return Slash
     | '%', _ -> return Modulo
@@ -49,7 +49,7 @@ let symbolP =
     <|> (one '|' *> just Pipe)
     <|> (one ''' *> just Tick)
     <|> (one ':' *> just Colon)
-    <|> attempt (one '-' *> one '>' *> just Arrow)
+    <|> (one '-' *> one '>' *> just Arrow)
 
 // Identifiers
 let identP = 
@@ -149,7 +149,7 @@ let rawBlockP =
 
 tokenPImpl :=
     many (attempt commentP <* whitespaceP) *>
-    whitespacedP (spannedP (literalP <|> wordP <|> symbolP <|> attempt operatorTokP <|> attempt rawBlockP))
+    whitespacedP (spannedP (literalP <|> wordP <|> attempt operatorTokP <|> symbolP <|> attempt rawBlockP))
 
 let lex txt =
     let (res, state) = 
