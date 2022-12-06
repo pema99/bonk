@@ -1,0 +1,63 @@
+let content = readFile "examples/aoc2022/day5/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+rec parseCrates = [stacks] [line]
+    rec cont = [stacks] [i]
+        match stacks with
+        | Cons (h, t) ->
+            let chr = indexString line i in
+            if chr = ' ' then
+                Cons(h, cont t (i + 4))
+            else
+                Cons(Cons(chr, h), cont t (i + 4))
+        | Nil () -> Nil ()
+    in
+    cont stacks 1
+in
+
+let parseCommand = [line]
+    let parts = splitString ' ' line in
+    let num = toInt (getOption "" (nth 1 parts)) in
+    let f = toInt (getOption "" (nth 3 parts)) in
+    let t = toInt (getOption "" (nth 5 parts)) in
+    (num, f-1, t-1)
+in
+
+let runCommand = [stacks] [line]
+    let (num, f, t) = parseCommand line in
+    let fstack = getOption (Nil ()) (nth f stacks) in
+    let tstack = getOption (Nil ()) (nth t stacks) in
+    let (fafter, tafter) =
+        fold ([acc] [_]
+            match fst acc with
+            | Cons (fh, ft) -> (ft, Cons (fh, snd acc))
+            | _ -> (fstack, tstack)
+        ) (fstack, tstack) (replicate 0 num)
+    in
+    replace f fafter (replace t tafter stacks)
+in
+
+// Part 1
+let header = reverse (take 8 lines) in
+let crates = fold parseCrates (replicate (Nil ()) 9) header in
+
+let commands = skip 10 lines in
+let crates1 = fold runCommand crates commands in
+let _ = map ([x] print (toString (getOption ' ' (head x)) + " ")) crates1 in
+let _ = print "\n" in
+
+// Part 2
+let runCommandMulti = [stacks] [line]
+    let (num, f, t) = parseCommand line in
+    let fstack = getOption (Nil ()) (nth f stacks) in
+    let tstack = getOption (Nil ()) (nth t stacks) in
+    let items = take num fstack in
+    let fafter = skip num fstack in
+    let tafter = append items tstack in
+    replace f fafter (replace t tafter stacks)
+in
+
+let commands = skip 10 lines in
+let crates2 = fold runCommandMulti crates commands in
+let _ = map ([x] print (toString (getOption ' ' (head x)) + " ")) crates2 in
+let _ = print "\n" in

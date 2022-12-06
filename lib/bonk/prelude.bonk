@@ -69,7 +69,7 @@ in
 
 rec fold = [f] [z] [lst]
     match lst with
-    | Cons (h, t) -> f (h) (fold f z t)
+    | Cons (h, t) -> fold f (f z h) (t)
     | Nil _       -> z
 in
 
@@ -149,6 +149,36 @@ let reverse = [lst]
         | Nil () -> acc
     in
     reverseInner lst (Nil ())
+in
+
+let take = [n] [lst]
+    rec takeInner = [n] [lst] [acc]
+        if n = 0 then
+            acc
+        else
+            match lst with
+            | Cons (h, t) -> takeInner (n - 1) t (Cons (h, acc))
+            | Nil () -> Nil ()
+    in
+    reverse (takeInner n lst (Nil ()))
+in
+
+rec skip = [n] [lst]
+    if n = 0 then
+        lst
+    else
+        match lst with
+        | Cons (h, t) -> skip (n - 1) t
+        | Nil () -> Nil ()
+in
+
+let replace = [n] [v] [lst]
+    rec replaceInner = [lst] [i] [acc]
+        match lst with
+        | Cons (h, t) -> replaceInner t (i + 1) (Cons (if i = n then v else h, acc))
+        | Nil () -> acc
+    in
+    reverse (replaceInner lst 0 (Nil ()))
 in
 
 rec stringToList = [str]
