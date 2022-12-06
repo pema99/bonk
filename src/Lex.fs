@@ -148,7 +148,7 @@ let rawBlockP =
     |>> RawBlock
 
 tokenPImpl :=
-    many (commentP <* whitespaceP) *>
+    many (attempt commentP <* whitespaceP) *>
     whitespacedP (spannedP (literalP <|> wordP <|> symbolP <|> attempt operatorTokP <|> attempt rawBlockP))
 
 let lex txt =

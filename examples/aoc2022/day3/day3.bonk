@@ -1,0 +1,58 @@
+let content = readFile "examples/aoc2022/day3/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+// This is terrible but I don't yet have the ability to subtract characters to so oh well
+let getPriority = [c]
+    match c with
+    | 'a' -> 1  | 'b' -> 2  | 'c' -> 3  | 'd' -> 4
+    | 'e' -> 5  | 'f' -> 6  | 'g' -> 7  | 'h' -> 8
+    | 'i' -> 9  | 'j' -> 10 | 'k' -> 11 | 'l' -> 12
+    | 'm' -> 13 | 'n' -> 14 | 'o' -> 15 | 'p' -> 16
+    | 'q' -> 17 | 'r' -> 18 | 's' -> 19 | 't' -> 20
+    | 'u' -> 21 | 'v' -> 22 | 'w' -> 23 | 'x' -> 24
+    | 'y' -> 25 | 'z' -> 26
+    | 'A' -> 27 | 'B' -> 28 | 'C' -> 29  | 'D' -> 30
+    | 'E' -> 31 | 'F' -> 32 | 'G' -> 33  | 'H' -> 34
+    | 'I' -> 35 | 'J' -> 36 | 'K' -> 37  | 'L' -> 38
+    | 'M' -> 39 | 'N' -> 40 | 'O' -> 41 | 'P' -> 42
+    | 'Q' -> 43 | 'R' -> 44 | 'S' -> 45 | 'T' -> 46
+    | 'U' -> 47 | 'V' -> 48 | 'W' -> 49 | 'X' -> 50
+    | 'Y' -> 51 | 'Z' -> 52
+in
+
+// Part 1 
+rec solution1 = [lst] [curr]
+    match lst with
+    | Cons (line, tail) ->
+        let halflen = (lengthString line) / 2 in
+        let half1 = stringToList (substring line 0 halflen) in
+        let half2 = stringToList (substring line halflen halflen) in
+        let ex = find ([x] exists ([y] x = y) half2) half1 in
+        let exo = getOption ' ' ex in
+        let prio = getPriority exo in
+        solution1 tail (curr + prio)
+    | Nil () -> curr
+in
+
+let _ = print (toString (solution1 lines 0)) in
+let _ = print "\n" in
+
+// Part 2
+rec solution2 = [lst] [curr]
+    match lst with
+    | Cons (line1, Cons (line2, Cons (line3, tail))) ->
+        let lst1 = stringToList line1 in
+        let lst2 = stringToList line2 in
+        let lst3 = stringToList line3 in
+        let ex = filter ([x] exists ([y] x = y) lst1) lst2 in
+        let ex = filter ([x] exists ([y] x = y) lst3) ex in
+        let exo = getOption ' ' (head ex) in
+        let prio = getPriority exo in
+        solution2 tail (curr + prio)
+    | _ -> curr
+in
+
+let _ = print (toString (solution2 lines 0)) in
+let _ = print "\n" in
+
+let (a, b) = (1, 2) in

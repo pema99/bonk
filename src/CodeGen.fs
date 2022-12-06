@@ -183,7 +183,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         | x ->
             let fvName = "__tmp"
             let hoisted = hoist x
-            let matcher = emitPatternMatch (JsScope []) x (TEVar (([], tVoid), fvName))
+            let matcher = emitPatternMatch (JsScope []) x (TEVar (([], tVoid), fvName)) false
             JsFunc (fvName, 
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @ [
                     matcher
@@ -201,7 +201,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
             )
         | x ->
             let hoisted = hoist x
-            let matcher = emitPatternMatch (JsScope []) x e1
+            let matcher = emitPatternMatch (JsScope []) x e1 false
             JsDefer (
                 JsScope (
                     List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
@@ -219,12 +219,12 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         match snd pt with
         | _ ->
             let hoisted = List.collect (fun (p, _) -> hoist p) bs |> List.distinct
-            let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("matched", JsConst (string i))) p ex) bs
+            let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("matched", JsConst (string i))) p ex true) bs
             let sw = JsSwitch (JsVar "matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
             JsDefer (
                 JsScope (
                     List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
-                    [ JsDecl ("matched", JsConst "0") ] @
+                    [ JsDecl ("matched", JsConst "null") ] @
                     beg @
                     [sw]
                 )
@@ -284,7 +284,7 @@ and optimizeTailRecursion (name: string) (ex: TypedExpr) : JsExpr =
             | x ->
                 let fvName = "__tmp"
                 let hoisted = hoist x
-                let matcher = emitPatternMatch (JsScope []) x (TEVar (([], tVoid), fvName))
+                let matcher = emitPatternMatch (JsScope []) x (TEVar (([], tVoid), fvName)) false
                 JsFunc (fvName, 
                     List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @ [matcher] @ rest)
         | ex -> emitExpr ex
@@ -308,14 +308,21 @@ and optimizeTailRecursion (name: string) (ex: TypedExpr) : JsExpr =
 
 // Emit a structure that matches a pattern and adds bindings as necessary
 // TODO: Optimize the constant re-scoping a bit
-and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) : JsStmt =
+and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternatives: bool) : JsStmt =
     let rec cont pat expr next =
         match pat with
-        | PName a -> // name matches with anything
-            JsScope [
-                JsAssign (a, expr)
-                next
-            ]
+        | PName a -> // name matches with anything // TODO: Don't use hardcoded match name, generate a unique one
+            if hasAlternatives then
+                JsIf (JsOp (JsVar "matched", "===", JsConst "null" ),
+                    [ JsAssign (a, expr)
+                      next
+                    ],
+                    None)
+            else
+                JsScope [
+                    JsAssign (a, expr)
+                    next
+                ]
         | PConstant a ->
             JsIf (
                 JsOp (JsConst (emitLit a), "===", expr),
@@ -382,7 +389,7 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 [ JsDecl (x, emitExpr e) ]
             | x ->
                 let hoisted = hoist x
-                let matcher = emitPatternMatch (JsScope []) x e
+                let matcher = emitPatternMatch (JsScope []) x e false
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
                 [ matcher ]
 
