@@ -4,7 +4,7 @@
 Contains solutions to Advent of Code 2022
 
 ## bugrepros
-Contains files reproducing various bugs. A to do list of sorts.
+Contains files reproducing various bugs. A to do list of sorts
 
 ## loose examples
 - expr.bonk: Basic expression evaluator
