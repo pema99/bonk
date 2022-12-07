@@ -1,0 +1,23 @@
+let parseCommand = [line]
+    let parts = splitString ' ' line in
+    let num = toInt (getOption "" (nth 1 parts)) in
+    let f = toInt (getOption "" (nth 3 parts)) in
+    let t = toInt (getOption "" (nth 5 parts)) in
+    (num, f-1, t-1)
+in
+
+let runCommand = [stacks] [line]
+    let (num, f, t) = parseCommand line in
+    let fstack = getOption (Nil ()) (nth f stacks) in
+    let tstack = getOption (Nil ()) (nth t stacks) in
+    // BUG!
+    // On this line, fstack and tstack are shadowed too early, so they become null immediately!
+    let (fstack, tstack) =
+        fold ([acc] [_]
+            match fst acc with
+            | Cons (fh, ft) -> (ft, Cons (fh, snd acc))
+            | _ -> (fstack, tstack)
+        ) (fstack, tstack) (replicate 0 num)
+    in
+    replace f fstack (replace t tstack stacks)
+in
