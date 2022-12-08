@@ -1,0 +1,109 @@
+let content = readFile "examples/aoc2022/day7/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+sum Node =
+    | Dir string * List Node
+    | File string * int
+
+let getPathName = [path]
+    match path with
+    | Dir(name, _) -> name
+    | File(name, _) -> name
+in
+
+rec addNode = [cd] [node] [tree]
+    match (cd, tree) with
+    | (Cons (go, tail), Dir (dir, contents)) ->
+        let nextTree = map ([x]
+            match x with
+            | Dir (nextDir, _) ->
+                if nextDir = go then
+                    addNode tail node x
+                else x
+            | _ -> x) contents in
+        Dir (dir, nextTree)
+    | (Nil (), Dir (dir, contents)) ->
+        if exists ([x] getPathName x = getPathName node) contents then
+            tree
+        else
+            Dir (dir, Cons (node, contents))
+    | _ ->
+        tree
+in
+
+rec buildFileTree = [lines] [cd] [tree]
+    match lines with
+    | Cons(line, t) ->
+        //let _ = print (line + ": " + listToString cd + "\n") in
+        let start = substring line 0 4 in
+        if start = "$ cd" then
+            let path = substring line 5 (lengthString line - 5) in
+            if path = "/" then
+                buildFileTree t (Nil ()) tree
+            else if path = ".." then
+                buildFileTree t (getOption cd (tail cd)) tree
+            else
+                buildFileTree t (Cons (path, cd)) tree
+        else if start = "$ ls" then
+            buildFileTree t cd tree
+        else if start = "dir " then
+            let dir = substring line 4 (lengthString line - 4) in
+            let dnode = Dir (dir, Nil()) in
+            buildFileTree t cd (addNode (reverse cd) dnode tree)
+        else
+            let Cons(size, Cons(name, _)) = splitString ' ' line in
+            let fnode = File (name, toInt size) in 
+            buildFileTree t cd (addNode (reverse cd) fnode tree)
+    | Nil () -> tree
+in
+
+// Part 1
+rec getDirSize = [tree]
+    match tree with
+    | Dir (_, contents) ->
+        fold (+) 0 (map getDirSize contents) 
+    | File (_, size) -> size
+in
+
+let collect = [f] [lst]
+    fold append (Nil ()) (map f lst)
+in
+
+rec getDirsMatching = [matcher] [tree]
+    match tree with
+    | Dir (name, contents) ->
+        let next = collect ([x] getDirsMatching matcher x) contents in
+        if matcher tree then
+            Cons (tree, next)
+        else
+            next
+    | _ -> Nil ()
+in
+
+let tree = buildFileTree lines (Nil ()) (Dir("/", Nil())) in
+
+let smallDirs = getDirsMatching ([x] getDirSize x <= 100000) tree in
+let _ = print (toString (fold ([acc] [x] acc + getDirSize x) 0 smallDirs) + "\n") in
+
+// Part 2
+let totalUsed = getDirSize tree in
+let totalFree = 70000000 - totalUsed in
+let totalRequired = 30000000 - totalFree in
+
+let smallEnoughDirs = getDirsMatching ([x] getDirSize x >= totalRequired) tree in
+let dirSizes = map getDirSize smallEnoughDirs in
+let smallestDirSize = fold min 70000000 dirSizes in
+let _ = print (toString smallestDirSize + "\n") in
+
+// For debugging
+rec printDirs = [tree] [indent]
+    let is = listToString (replicate " " indent) in
+    match tree with
+    | Dir (name, contents) ->
+        let _ = print (is + name + "/\n") in
+        let _ = map ([x] printDirs x (indent + 1)) contents in
+        ()
+    | File (name, size) ->
+        let _ = print (is + name + " (" + (toString size) + ")\n") in
+        ()
+in
