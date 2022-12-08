@@ -1,0 +1,89 @@
+let content = readFile "examples/aoc2022/day8/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+// Need this hack right now since I don't really support chars yet
+let splitChars = [str]
+    rec splitCharsInner = [i] [lst]
+        if i >= lengthString str then
+            lst
+        else
+            splitCharsInner (i + 1) (Cons (toInt (substring str i 1), lst))
+    in
+    reverse (splitCharsInner 0 (Nil ()))
+in
+
+// Some boilerplate helpers that should probably be in the standard library
+rec zip = [l] [r]
+    match (l, r) with
+    | (Cons (lh, lt), Cons (rh, rt)) -> Cons ((lh, rh), zip lt rt)
+    | (Nil (), Nil ()) -> Nil ()
+in
+
+let transpose = [lines]
+    rec transposeInner = [len] [lines]
+        match lines with
+        | Cons (h, t) ->
+            let tails = transposeInner len t in
+            map ([(h1, t1)] Cons (h1, t1)) (zip h tails)
+        | Nil () ->
+            replicate (Nil ()) len
+    in
+    let len = length (getOption (Nil ()) (head lines)) in
+    transposeInner len lines
+in
+
+// Part 1
+let rows = map splitChars lines in
+let cols = transpose rows in
+
+let solveRow = [goal] [row] [cols] [acc] [y]
+    rec solveRowInner = [lst] [acc] [x]
+        match lst with
+        | Cons ((height, col), t) ->
+            solveRowInner t (goal (x, y) height row col acc) (x + 1)
+        | Nil () -> acc
+    in
+    solveRowInner (zip row cols) acc 0
+in
+
+rec solution = [goal] [rows] [cols] [acc] [y]
+    match rows with
+    | Cons (row, t) ->
+        solution goal t cols (solveRow goal row cols acc y) (y + 1)
+    | Nil () -> acc
+in
+
+let goal1 = [(x,  y)] [height] [row] [col] [acc]
+    let left = take x row in
+    let right = skip (x + 1) row in
+    let top = take y col in
+    let bottom = skip (y + 1) col in
+    let lessThanHeight = ([x] x < height) in
+    if (forall lessThanHeight left) || (forall lessThanHeight right) ||
+       (forall lessThanHeight top) || (forall lessThanHeight bottom)
+    then acc + 1
+    else acc
+in
+
+let _ = print (toString (solution goal1 rows cols 0 0) + "\n") in
+
+// Part 2
+let getViewDist = [height] [sightline]
+    let indexed = zip sightline (iota (length sightline)) in
+    let obstruction = find ([x] fst x >= height) indexed in
+    match obstruction with
+    | Some (_, i) -> i + 1
+    | None () -> length sightline
+in
+
+let goal2 = [(x,  y)] [height] [row] [col] [acc]
+    let left = reverse (take x row) in
+    let right = skip (x + 1) row in
+    let top = reverse (take y col) in
+    let bottom = skip (y + 1) col in
+    let score = getViewDist height left * getViewDist height right *
+                getViewDist height top * getViewDist height bottom in
+    max acc score
+in
+
+let _ = print (toString (solution goal2 rows cols 0 0) + "\n") in
