@@ -1,0 +1,24 @@
+let content = readFile "examples/aoc2022/day6/input.txt" in
+
+let isMarker = [str]
+    let lst = stringToList str in
+    rec hasDups = [rest]
+        match rest with
+        | Cons(h, t) -> (exists ([x] x = h) t) || hasDups t
+        | Nil () -> false
+    in
+    not (hasDups lst)
+in
+
+rec solution = [markerLen] [i]
+    if isMarker (substring content i markerLen) then
+        i + markerLen
+    else
+        solution markerLen (i + 1)
+in
+
+// Part 1
+let _ = print (toString (solution 4 0) + "\n") in
+
+// Part 2
+let _ = print (toString (solution 14 0) + "\n") in
