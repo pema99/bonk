@@ -41,13 +41,13 @@ let genIndent i =
 let rec pprJsExpr (i: int) (expr: JsExpr) : string =
     let ids = genIndent i
     match expr with
-    | JsDefer (stmt) -> sprintf "(function() {\n%s%s})()" (pprJsStmt (i+1) stmt) ids
-    | JsFunc (x, e) -> sprintf "function (%s) {\n%s%s}" x (pprJsBlock (i+1) e) ids
+    | JsDefer (stmt) -> sprintf "(() => {\n%s%s})()" (pprJsStmt (i+1) stmt) ids
+    | JsFunc (x, e) -> sprintf "(%s) => {\n%s%s}" x (pprJsBlock (i+1) e) ids
     | JsVar (v) -> v
     | JsCall (f, e) -> sprintf "%s(%s)" (pprJsExpr i f) (pprJsExpr i e)
     | JsConst (v) -> v
     | JsOp (l, op, r) -> sprintf "(%s %s %s)" (pprJsExpr i l) op (pprJsExpr i r)
-    | JsLet (x, e1, e2) -> sprintf "var %s = %s;\n%s%s" (x) (pprJsExpr i e1) ids (pprJsExpr i e2)
+    | JsLet (x, e1, e2) -> sprintf "const %s = %s;\n%s%s" (x) (pprJsExpr i e1) ids (pprJsExpr i e2)
     | JsList (lst) -> sprintf "[%s]" (lst |> List.map (pprJsExpr i) |> String.concat ", ")
     | JsObject (fields) -> sprintf "{ %s }" (List.map (fun (n, e) -> sprintf "%s: %s" n (pprJsExpr i e)) fields |> String.concat ", ")
     | JsField (e, f) -> sprintf "(%s).%s" (pprJsExpr i e) f
@@ -428,7 +428,7 @@ let startCompile builtins stdlib files =
         let res, ((_,_,_,loc),_) = inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
         match res with
         | Ok decls ->
-            let decls = monomorphizeDecls Map.empty decls
+            let decls = lowerDecls decls
             let jsAst = List.collect emitDecl decls
             let jsOutput = pprJsBlock 0 jsAst
             let jsOutput = if builtins then jsInstrincs + jsOutput else jsOutput

@@ -277,7 +277,7 @@ let mapTypedDecl fe fd decl =
     | TDClass (blankets, pred, impls)  -> fd <| TDClass (blankets, pred, impls)
     | TDMember (blankets, pred, impls) -> fd <| TDMember (blankets, pred, impls)
 
-let monomorphizeDecls (tenv: AbstractTermEnv) (decls: TypedDecl list) : TypedDecl list =
+let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
     let res, (_, (overloads, _)) = mapM gatherOverloadsDecl decls (Map.empty, (Map.empty, 0))
     match res with
     | Ok mdecls ->
@@ -292,3 +292,160 @@ let monomorphizeDecls (tenv: AbstractTermEnv) (decls: TypedDecl list) : TypedDec
             | _ -> ex
             ) id)
     | _ -> decls
+
+type ShadowEnv = Map<string, int>
+type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't>
+let shadow = state
+let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
+let setShadowEnv env = fun (ate, s) -> Ok (), (env, s)
+let renameShadowed name = shadow {
+    let! senv = getShadowEnv
+    match lookup senv name with
+    | Some v ->
+        if v = 0 then return name
+        else return sprintf "_%s%i" name v
+    | _ -> return name
+} 
+//let shadowName name = fun (ate, id) -> Ok ("__" + name + string id), (ate,  id + 1)
+
+let rec getNamesInPattern (pat: Pattern) : string list =
+    match pat with
+    | PName a -> [a]
+    | PConstant _ -> []
+    | PTuple pats -> pats |> List.collect getNamesInPattern
+    | PUnion (_, pat) -> getNamesInPattern pat
+
+
+let rec renameShadowedVarsInPattern (pat: Pattern) : ShadowM<Pattern> = shadow {
+    match pat with
+    | PName a ->
+        return! fmap PName <| renameShadowed a
+    | PConstant _ ->
+        return pat
+    | PTuple pats ->
+        let! pats = mapM renameShadowedVarsInPattern pats
+        return PTuple pats
+    | PUnion (case, pat) ->
+        return! fmap (fun rpat -> PUnion (case, rpat)) <| renameShadowedVarsInPattern pat
+}
+
+let shadowNewName (pat: Pattern) : ShadowM<Pattern * (ShadowEnv -> ShadowEnv)> = shadow {
+    let! senv = getShadowEnv
+    let rec cont names senv =
+        match names with
+        | [] -> senv
+        | name :: rest ->
+            let senv = extend senv name (1 + (lookup senv name |> Option.defaultValue (-1)))
+            cont rest senv
+    let senv = cont (getNamesInPattern pat) senv
+    let mapper = fun _ -> senv
+    let! pat = local mapper (renameShadowedVarsInPattern pat)
+    return pat, mapper
+}
+
+let shadowNewString (name: string) : ShadowM<string * (ShadowEnv -> ShadowEnv)> = shadow {
+    let! senv = getShadowEnv
+    let senv = extend senv name (1 + (lookup senv name |> Option.defaultValue 0))
+    let mapper = fun _ -> senv
+    let! name = local mapper (renameShadowed name)
+    return name, mapper
+}
+
+let rec renameShadowedVarsInExpr (e: TypedExpr) : ShadowM<TypedExpr> = shadow {
+    match e with
+    | TELit (qt, _) ->
+        return e
+    | TEOp (qt, l, op, r) ->
+        let! e1 = renameShadowedVarsInExpr l
+        let! e2 = renameShadowedVarsInExpr r
+        return TEOp (qt, e1, op, e2)
+    | TEVar (qt, a) ->
+        let! renamed = renameShadowed a
+        return TEVar (qt, renamed)
+    | TEApp (qt, f, x) ->
+        let! clos = renameShadowedVarsInExpr f
+        let! arg = renameShadowedVarsInExpr x
+        return TEApp (qt, clos, arg)
+    | TELam (qt, x, t) ->
+        let! pat, mapper = shadowNewName x
+        let! body = local mapper (renameShadowedVarsInExpr t)
+        return TELam (qt, pat, body)
+    | TELet (qt, x, v, t) ->
+        let! pat, mapper = shadowNewName x
+        let! value = renameShadowedVarsInExpr v
+        let! body = local mapper (renameShadowedVarsInExpr t)
+        return TELet (qt, pat, value, body)
+    | TEGroup (qt, bs, rest) ->
+        let! bss =
+            // TODO: Think this should technically be a fold over the mappers. Oh well.
+            mapM (fun (x, v) -> lower {
+                let! x, mapper = shadowNewString x
+                let! expr = local mapper (renameShadowedVarsInExpr v)
+                return (x, expr), mapper
+            }) bs
+        let bsss, mappers = bss |> List.unzip
+        let mapper = List.fold (>>) id mappers
+        let! rest = local mapper (renameShadowedVarsInExpr rest)
+        return TEGroup (qt, bsss, rest)
+    | TEIf (qt, c, tr, fl) ->
+        let! cond = renameShadowedVarsInExpr c
+        let! trueb = renameShadowedVarsInExpr tr
+        let! falseb = renameShadowedVarsInExpr fl
+        return TEIf (qt, cond, trueb, falseb)
+    | TETuple (qt, es) ->
+        let! res = mapM renameShadowedVarsInExpr es
+        return TETuple (qt, res)
+    | TEMatch (qt, e, xs) ->
+        let! e = renameShadowedVarsInExpr e
+        let! xss =
+            // Intentionally don't extract bindings here,
+            // since bindings in matches are scoped to the match bodies
+            mapM (fun (pat, body) -> lower {
+                let! pat, mapper = shadowNewName pat
+                let! value = local mapper (renameShadowedVarsInExpr body)
+                return pat, value 
+            }) xs
+        let pats, rest = List.unzip xss
+        return TEMatch (qt, e, List.zip pats rest)
+    | TERaw (qt, body) ->
+        return e
+    }
+
+let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
+    match decl with
+    | TDExpr expr -> 
+        let! expr = renameShadowedVarsInExpr expr
+        return TDExpr expr
+    | TDLet (pat, expr) ->
+        let! e = renameShadowedVarsInExpr expr
+        let! pat, mapper = shadowNewName pat
+        let! senv = getShadowEnv
+        do! setShadowEnv (mapper senv)
+        return TDLet (pat, e)
+    | TDGroup (es) -> // TODO Bindings
+        let! exprs =
+            mapM (fun (a, b) -> lower {
+                let! b = renameShadowedVarsInExpr b 
+                return a, b
+            }) es
+        return TDGroup exprs
+    | TDUnion (name, tvs, cases) ->
+        return TDUnion (name, tvs, cases)
+    | TDClass (blankets, pred, impls) ->
+        return TDClass (blankets, pred, impls)
+    | TDMember (blankets, pred, impls) ->
+        let! impls = 
+            mapM (fun (name, expr) -> lower {
+                let! expr = renameShadowedVarsInExpr expr
+                return name, expr
+            }) impls
+        return TDMember (blankets, pred, impls)
+    }
+
+let renamedShadowedVarsInDecls (decls: TypedDecl list) : TypedDecl list =
+    let res, _ = mapM renamedShadowedVarsInDecl decls (Map.empty, ())
+    match res with
+    | Ok mdecls -> mdecls
+    | _ -> decls
+
+let lowerDecls = monomorphizeDecls >> renamedShadowedVarsInDecls
