@@ -9,7 +9,7 @@ let drawPixel = [cyc] [x] [mem]
     let pixel =
         let cyc = (cyc-1) % 40 in
         if (cyc - x) <= 1 && (cyc - x) >= (-1)
-        then "#"
+        then "█"
         else " "
     in
     Cons (pixel, mem)
