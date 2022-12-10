@@ -85,7 +85,7 @@ and pprJsStmt (i: int) (stmt: JsStmt) : string =
             |> String.concat ""
         sprintf "%sswitch (%s) {\n%s%s}\n" ids oper cases ids
     | JsDecl (x, e) ->
-        sprintf "%svar %s = %s;\n" ids x (pprJsExpr i e)
+        sprintf "%slet %s = %s;\n" ids x (pprJsExpr i e)
     | JsAssign (x, e) ->
         sprintf "%s%s = %s;\n" ids x (pprJsExpr i e)
     | JsReturn (ret) ->
