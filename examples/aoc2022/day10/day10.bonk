@@ -1,0 +1,55 @@
+let content = readFile "examples/aoc2022/day10/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+let isInteresting = [cyc]
+    (cyc % 40) = 20
+in
+
+let drawPixel = [cyc] [x] [mem]
+    let pixel =
+        let cyc = (cyc-1) % 40 in
+        if (cyc - x) <= 1 && (cyc - x) >= (-1)
+        then "#"
+        else " "
+    in
+    Cons (pixel, mem)
+in
+
+rec solution = [lines] [cyc] [x] [acc] [mem]
+    match lines with
+    | Cons (h, t) ->
+        if h = "noop" then
+            let acc = if isInteresting cyc then acc + cyc * x else acc in
+            let mem = drawPixel cyc x mem in
+            let cyc = cyc + 1 in
+            solution t cyc x acc mem
+        else
+            let Cons (_1, Cons (arg, _2)) = splitString ' ' h in
+            let arg = toInt arg in
+            let acc = if isInteresting cyc then acc + cyc * x else acc in
+            let mem = drawPixel cyc x mem in
+            let cyc = cyc + 1 in
+            let acc = if isInteresting cyc then acc + cyc * x else acc in
+            let mem = drawPixel cyc x mem in
+            let cyc = cyc + 1 in
+            solution t cyc (x + arg) acc mem
+    | Nil () -> (acc, mem)
+in
+
+// Part 1
+let (acc, mem) = solution lines 1 1 0 (Nil ()) in
+let _ = print (toString (acc) + "\n") in
+
+// Part 2
+rec printMem = [mem] [i]
+    match mem with
+    | Cons (h, t) ->
+        let _ = print (h) in
+        if (i % 40) = 0 then
+            let _ = print "\n" in
+            printMem t 1
+        else
+            printMem t (i + 1)
+    | Nil () -> ()
+in
+printMem (reverse mem) 1
