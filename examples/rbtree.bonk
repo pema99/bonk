@@ -1,0 +1,61 @@
+// Red Black Tree. Only does insertions because I am too stupid.
+sum RBTree 'k 'v =
+    | RBNode 'k * 'v * bool * (RBTree 'k 'v) * (RBTree 'k 'v) // value, black?, left, right
+    | RBEmpty unit
+
+rec rbSearch = [key] [tree]
+    match tree with
+    | RBEmpty _ -> None ()
+    | RBNode (k, v, _, l, r) ->
+        if key < k then rbSearch key l
+        else if key > k then rbSearch key r
+        else Some v
+in
+
+let rbInsert = [key] [val] [tree]
+    // force resulting node's color to be black
+    let makeBlack = [tree]
+        match tree with
+        | RBNode (k, v, _, l, r) -> RBNode (k, v, true, l, r)
+        | RBEmpty _ -> RBEmpty ()
+    in
+
+    // balance the tree
+    let balanceHelper = [a] [b] [c] [d] [x] [y] [z] [vx] [vy] [vz]
+        RBNode (y, vy, false, RBNode (x, vx, true, a, b), RBNode (z, vz, true, c, d))
+    in
+    rec balance = [color] [a] [x] [val] [b]
+        match (color, a, x, val, b) with
+        | (true, RBNode (y, vy, false, RBNode (x, vx, false, a, b), c), z, vz, d) -> balanceHelper a b c d x y z vx vy vz
+        | (true, RBNode (x, vx, false, a, RBNode (y, vy, false, b, c)), z, vz, d) -> balanceHelper a b c d x y z vx vy vz
+        | (true, a, x, vx, RBNode (z, vz, false, RBNode (y, vy, false, b, c), d)) -> balanceHelper a b c d x y z vx vy vz
+        | (true, a, x, vx, RBNode (y, vy, false, b, RBNode (z, vz, false, c, d))) -> balanceHelper a b c d x y z vx vy vz
+        | _ -> RBNode (x, val, color, a, b)
+    in
+
+    // recursive insert
+    rec insert = [tree]
+        match tree with
+        | RBEmpty _ -> RBNode (key, val, false, RBEmpty (), RBEmpty ())
+        | RBNode (y, vy, color, a, b) ->
+            if key < y then balance color (insert a) y vy b
+            else if key > y then balance color a y vy (insert b)
+            else RBNode (y, vy, color, a, b)
+    in
+
+    makeBlack (insert tree)
+in
+
+let rbPrint = [tree]
+    rec rbPrintInner = [tree] [indent]
+        match tree with
+        | RBEmpty _ -> ()
+        | RBNode (k, v, color, l, r) ->
+            let istring = fold (+) "" (replicate "  " indent) in
+            let cstring = if color then "B" else "R" in
+            let _ = print (istring + cstring + "(" + toString k + ", " + toString v + ")\n") in
+            let _ = rbPrintInner l (indent + 1) in
+            rbPrintInner r (indent + 1)
+    in
+    rbPrintInner tree 0
+in

@@ -1,0 +1,189 @@
+// --- AA Trees ---
+sum AATree 'k 'v =
+    | AANode int * (AATree 'k 'v) * 'k * 'v * (AATree 'k 'v) // level, left, key, value, right
+    | AAEmpty unit
+
+let (aaInsert, aaDelete, aaSearch, aaPrint) =
+    // Helpers
+    let skew = [tree]
+        match tree with
+        | AANode (n, AANode (ln, ll, lk, lv, lr), k, v, r) ->
+            if ln = n then
+                AANode (ln, ll, lk, lv, AANode (n, lr, k, v, r))
+            else
+                tree
+        | _ -> tree
+    in
+    let split = [tree]
+        match tree with
+        | AANode (tn, a, tk, tv, AANode (rn, b, rk, rv, AANode (xn, c, xk, xv, d))) ->
+            if tn = xn then
+                AANode (rn + 1, AANode (tn, a, tk, tv, b), rk, rv, AANode (xn, c, xk, xv, d))
+            else
+                tree
+        | _ -> tree
+    in
+    let fixup = [x]
+        split (skew x)
+    in
+    rec tpred = [tree]
+        match tree with
+        | AANode (_, _, k, v, AAEmpty ()) -> (k, v)
+        | AANode (_, _, _, _, r) -> tpred r
+    in
+    rec tsucc = [tree]
+        match tree with
+        | AANode (_, AAEmpty (), k, v, _) -> (k, v)
+        | AANode (_, l, _, _, _) -> tsucc l
+    in
+    rec lvl = [tree]
+        match tree with
+        | AAEmpty () -> Nil ()
+        | AANode (n, _, _, _, _) -> Cons (n, Nil ())
+    in
+    let getLvl = [tree]
+        match tree with
+        | AAEmpty () -> 0
+        | AANode (n, _, _, _, _) -> n
+    in
+    let getRight = [tree]
+        match tree with
+        | AANode (_, _, _, _, r) -> r
+    in
+    rec declvl = [tree]
+        match tree with
+        | AANode (n, AAEmpty (), k, v, AAEmpty ()) ->
+            tree
+        | AANode (n, l, k, v, AAEmpty ()) ->
+            let s = getLvl l + 1 in
+            if s < n then
+                AANode (s, l, k, v, AAEmpty ())
+            else
+                tree
+        | AANode (n, l, k, v, AANode (rn, rl, rk, rv, rr)) ->
+            let s = (fold min (2147483647) (Cons (rn, lvl l))) + 1 in
+            if (s < n) && (s < rn) then
+                AANode (s, l, k, v, AANode (s, rl, rk, rv, rr))
+            else
+                tree
+        | _ -> tree
+    in
+    rec remove = [tree] [key]
+        match tree with
+        | AANode (n, AAEmpty (), k, v, AAEmpty ()) ->
+            if key = k then AAEmpty ()
+            else tree
+        | AANode (n, AAEmpty (), k, v, r) ->
+            let (ks, s) = tsucc r in
+            if key = k then AANode (n, AAEmpty (), ks, s, remove r ks)
+            else tree
+        | AANode (n, l, k, v, r) ->
+            if key > k then AANode (n, l, k, v, remove r key)
+            else if key < k then AANode (n, remove l key, k, v, r)
+            else
+                let (kp, p) = tpred l in
+                AANode (n, remove l kp, kp, p, r)
+        | _ -> tree
+    in
+
+    // Insertion
+    rec aaInsert = [key] [val] [tree]
+        match tree with
+        | AAEmpty _ -> AANode (1, AAEmpty (), key, val, AAEmpty ())
+        | AANode (n, l, k, v, r) ->
+            if key < k then
+                fixup (AANode (n, (aaInsert key val l), k, v, r))
+            else if key > k then
+                fixup (AANode (n, l, k, v, (aaInsert key val r)))
+            else
+                AANode (1, AAEmpty (), key, val, AAEmpty ())
+    in
+
+    // Deletion
+    let aaDelete = [key] [tree]
+        rec delete = [tree] [key]
+            match tree with
+            | AAEmpty () -> AAEmpty ()
+            | AANode _ ->
+                let a = skew (declvl (remove tree key)) in
+                match (a, getRight a) with
+                | (AAEmpty (), _) -> AAEmpty ()
+                | (_, AAEmpty ()) ->
+                    let AANode (n, l, k, v, r) = split a in
+                    AANode (n, l, k, v, split r)
+                | _ ->
+                    let AANode (n, l, k, v, r) = a in
+                    let AANode (rn, rl, rk, rv, rr) = skew r in
+                    let AANode (b, c, dk, dv, e) = split (AANode (n, l, k, v, AANode (rn, rl, rk, rv, skew rr))) in
+                    AANode (b, c, dk, dv, split e)
+        in
+        delete tree key
+    in
+
+    // Lookups
+    rec aaSearch = [key] [tree]
+        match tree with
+        | AAEmpty _ -> None ()
+        | AANode (_, l, k, v, r) ->
+            if key < k then aaSearch key l
+            else if key > k then aaSearch key r
+            else Some v
+    in
+
+    // Printing
+    let aaPrint = [tree]
+        rec aaPrintInner = [tree] [indent]
+            match tree with
+            | AAEmpty _ -> ()
+            | AANode (n, l, k, v, r) ->
+                let istring = fold (+) "" (replicate "  " indent) in
+                let _ = print (istring + toString n + "(" + toString k + ", " + toString v + ")\n") in
+                let _ = aaPrintInner l (indent + 1) in
+                aaPrintInner r (indent + 1)
+        in
+        aaPrintInner tree 0
+    in
+    (aaInsert, aaDelete, aaSearch, aaPrint)
+in
+
+// --- Stacks ---
+sum Stack 'a = Stack (List 'a)
+
+let stackEmpty =
+    Stack (Nil ())
+in
+
+let stackPop = [lst]
+    match lst with | Stack lst ->
+        let hd = head lst in
+        let tl = tail lst in
+        (match (hd, tl) with
+        | (Some a, Some b) -> Some (a, Stack b)
+        | (Some a, None) -> Some (a, Stack (Nil ()))
+        | _ -> None ())
+in
+
+let stackPush = [val] [lst]
+    match lst with | Stack lst ->
+        Stack (Cons (val, lst))
+in
+
+// --- Queues ---
+sum Queue 'a = Queue (List 'a) * (List 'a)
+
+let queueEmpty =
+    Queue (Nil (), Nil ())
+in
+
+let queueEnqueue = [val] [queue]
+    match queue with | Queue (l, r) ->
+        Queue (l, Cons (val, r))
+in
+
+rec queueDequeue = [queue]
+    match queue with | Queue (l, r) ->
+        (match (l, r) with
+        | (Nil (), Nil ()) -> (None (), queueEmpty) 
+        | (Cons (x, xs), push) -> (Some x, Queue (xs, push))
+        | (Nil (), push) -> queueDequeue (Queue (reverse push, Nil ())))
+in

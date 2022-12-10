@@ -1,0 +1,5 @@
+// Doesn't parse correctly
+
+sum Stack 'a =
+    | StackCons 'a * (Stack 'a)
+    | StackNil () // wrong type

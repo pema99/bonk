@@ -1,0 +1,5 @@
+// Wrong precedence for types?
+
+sum RBTree 'a =
+    | RBNode 'a * bool * RBTree 'a * RBTree 'a
+    | RBEmpty unit
