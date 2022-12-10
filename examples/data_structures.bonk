@@ -3,7 +3,7 @@ sum AATree 'k 'v =
     | AANode int * (AATree 'k 'v) * 'k * 'v * (AATree 'k 'v) // level, left, key, value, right
     | AAEmpty unit
 
-let (aaInsert, aaDelete, aaSearch, aaPrint) =
+let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint) =
     // Helpers
     let skew = [tree]
         match tree with
@@ -100,24 +100,21 @@ let (aaInsert, aaDelete, aaSearch, aaPrint) =
     in
 
     // Deletion
-    let aaDelete = [key] [tree]
-        rec delete = [tree] [key]
-            match tree with
-            | AAEmpty () -> AAEmpty ()
-            | AANode _ ->
-                let a = skew (declvl (remove tree key)) in
-                match (a, getRight a) with
-                | (AAEmpty (), _) -> AAEmpty ()
-                | (_, AAEmpty ()) ->
-                    let AANode (n, l, k, v, r) = split a in
-                    AANode (n, l, k, v, split r)
-                | _ ->
-                    let AANode (n, l, k, v, r) = a in
-                    let AANode (rn, rl, rk, rv, rr) = skew r in
-                    let AANode (b, c, dk, dv, e) = split (AANode (n, l, k, v, AANode (rn, rl, rk, rv, skew rr))) in
-                    AANode (b, c, dk, dv, split e)
-        in
-        delete tree key
+    rec aaDelete = [key] [tree] 
+        match tree with
+        | AAEmpty () -> AAEmpty ()
+        | AANode _ ->
+            let a = skew (declvl (remove tree key)) in
+            match (a, getRight a) with
+            | (AAEmpty (), _) -> AAEmpty ()
+            | (_, AAEmpty ()) ->
+                let AANode (n, l, k, v, r) = split a in
+                AANode (n, l, k, v, split r)
+            | _ ->
+                let AANode (n, l, k, v, r) = a in
+                let AANode (rn, rl, rk, rv, rr) = skew r in
+                let AANode (b, c, dk, dv, e) = split (AANode (n, l, k, v, AANode (rn, rl, rk, rv, skew rr))) in
+                AANode (b, c, dk, dv, split e)
     in
 
     // Lookups
@@ -128,6 +125,16 @@ let (aaInsert, aaDelete, aaSearch, aaPrint) =
             if key < k then aaSearch key l
             else if key > k then aaSearch key r
             else Some v
+    in
+
+    // Empty tree
+    let aaEmpty =
+        AAEmpty ()
+    in
+
+    // From list
+    let aaFromList = [lst]
+        fold ([tree] [(key, val)] aaInsert key val tree) aaEmpty lst
     in
 
     // Printing
@@ -143,7 +150,8 @@ let (aaInsert, aaDelete, aaSearch, aaPrint) =
         in
         aaPrintInner tree 0
     in
-    (aaInsert, aaDelete, aaSearch, aaPrint)
+
+    (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint)
 in
 
 // --- Stacks ---
