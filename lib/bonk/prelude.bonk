@@ -181,6 +181,27 @@ let replace = [n] [v] [lst]
     reverse (replaceInner lst 0 (Nil ()))
 in
 
+let zip = [l] [r]
+    rec zipInner = [l] [r] [acc]
+        match (l, r) with
+        | (Cons (lh, lt), Cons (rh, rt)) ->
+            zipInner lt rt (Cons ((lh, rh), acc))
+        | _ -> acc
+    in
+    reverse (zipInner l r (Nil ()))
+in
+
+let unzip = [lst]
+    rec unzipInner = [lst] [accl] [accr]
+        match lst with
+        | Cons ((lh, rh), lt) ->
+            unzipInner lt (Cons (lh, accl)) (Cons (rh, accr))
+        | _ -> (accl, accr)
+    in
+    let (l, r) = unzipInner lst (Nil ()) (Nil ()) in
+    (reverse l, reverse r)
+in
+
 rec stringToList = [str]
     let len = lengthString str in
     if len = 0 then Nil ()
