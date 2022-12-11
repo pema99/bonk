@@ -1,0 +1,122 @@
+let content = readFile "examples/aoc2022/day11/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+// Cuuuursed
+let parseMonkey = [lines] [lcm]
+    let data = take 7 lines in
+    let lines = skip 7 lines in
+
+    let items = splitString ' ' (getOption "" (nth 1 data)) in
+    let items = map toInt (skip 4 items) in
+
+    let op = splitString ' ' (getOption "" (nth 2 data)) in
+    let ops = skip 6 op in
+    let Cons (opa, Cons (opv, _)) = ops in
+    let opo = if opa = "+" then (+) else (*) in
+    let opf =
+        if opv = "old" then [x] opo x x
+        else [x] opo x (toInt opv)
+    in
+
+    let div = splitString ' ' (getOption "" (nth 3 data)) in
+    let Cons (div, _) = skip 5 div in
+    let div = toInt div in
+
+    let tr = splitString ' ' (getOption "" (nth 4 data)) in
+    let Cons (tr, _) = skip 9 tr in
+    let tr = toInt tr in
+
+    let fl = splitString ' ' (getOption "" (nth 5 data)) in
+    let Cons (fl, _) = skip 9 fl in
+    let fl = toInt fl in
+
+    ((items, opf, div, tr, fl), lines, lcm * div)
+in
+
+let parseMonkeys = [lines]
+    rec parseMonkeysInner = [lines] [lcm] [acc]
+        match lines with
+        | Cons (h, t) -> 
+            let (monkey, nlines, nlcm) = parseMonkey lines lcm in
+            parseMonkeysInner nlines nlcm (Cons (monkey, acc))
+        | Nil () -> (reverse acc, lcm)
+    in
+    parseMonkeysInner lines 1 (Nil ())
+in
+
+let (monkeys, lcm) = parseMonkeys lines in
+
+// Should be in std lib
+let floori = [x] toInt (floor (toFloat x)) in
+
+let addItem = [item] [(items, opf, div, tr, fl)]
+    (Cons (item, items), opf, div, tr, fl)
+in
+
+rec addToNth = [n] [item] [monkeys]
+    match monkeys with
+    | Cons (h, t) ->
+        if n = 0 then Cons (addItem item h, t)
+        else Cons (h, addToNth (n-1) item t)
+    | Nil () -> Nil ()
+in
+
+rec simulateMonkey = [divisor] [idx] [monkey] [monkeys]
+    let (items, opf, div, tr, fl) = monkey in
+    let monkeys =
+        fold ([acc] [item]
+            // Shoutout to phos' for making realize this trick
+            let worry = (floori ((opf item) / divisor)) % lcm in
+            let otherIdx = 
+                if worry % div = 0 then tr
+                else fl
+            in
+            addToNth otherIdx worry acc
+        ) monkeys items
+    in
+    (length items, replace idx (Nil (), opf, div, tr, fl) monkeys)
+in
+
+rec simulateMonkeys = [divisor] [idx] [len] [monkeys] [counts]
+    if idx >= len then (monkeys, counts)
+    else
+        let monkey = getOption (Nil (), [x]x, 0, 0, 0) (nth idx monkeys) in
+        let res = simulateMonkey divisor idx monkey monkeys in
+        let (inspections, monkeys) = res in
+        let count = getOption 0 (nth idx counts) in
+        let counts = replace idx (count + inspections) counts in
+        simulateMonkeys divisor (idx+1) len monkeys counts
+in
+
+rec simulate = [divisor] [rounds] [round] [monkeys] [counts] 
+    if round >= rounds then counts
+    else
+        let (monkeys, counts) = simulateMonkeys divisor 0 (length monkeys) monkeys counts in
+        simulate divisor rounds (round+1) monkeys counts
+in
+
+let solve = [divisor] [rounds]
+    let res = simulate divisor rounds 0 monkeys (replicate 0 (length monkeys)) in
+
+    rec findMax = [lst] [m] [mi] [i]
+        match lst with
+        | Cons (h, t) -> if h > m then findMax t h i (i+1) else findMax t m mi (i+1)
+        | Nil () -> mi
+    in
+
+    rec remove = [lst] [i] [curr]
+        match lst with
+        | Cons (h, t) -> if curr = i then t else Cons (h, remove t i (curr+1))
+        | Nil () -> Nil ()
+    in
+
+    let max1i = findMax res 0 0 0 in
+    let max1v = getOption 0 (nth max1i res) in
+    let res = remove res max1i 0 in
+    let max2i = findMax res 0 0 0 in
+    let max2v = getOption 0 (nth max2i res) in
+    max1v * max2v
+in
+
+let _ = print (toString (solve 3 20) + "\n") in
+let _ = print (toString (solve 1 10000) + "\n") in
