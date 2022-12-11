@@ -153,11 +153,22 @@ let opFunP =
                 (EOp ((EVar "x", s), op, (EVar "y", s)), s)), s)), s))
     |> attempt
 
+// Cons (e, ac)
+let listLiteralP =
+    spannedP (between (tok LBrace) (sepBy exprP (tok Semicolon)) (tok RBrace))
+    |>> fun (lst, span) ->
+        lst
+        |> List.rev
+        |> List.fold
+            (fun acc (e, s) -> EApp ((EVar "Cons", s), (ETuple [(e, s); acc], s)), s)
+            (EApp ((EVar "Nil", span), (ELit LUnit, span)), span)
+
 let nonAppP =
     opFunP
     <|> (literalP |>> ELit |> spannedP)
     <|> groupP
     <|> varP
+    <|> listLiteralP
 
 let appP =
     lamP

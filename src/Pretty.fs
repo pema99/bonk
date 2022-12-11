@@ -28,29 +28,6 @@ let printColor str =
     printfn ""
     System.Console.ForegroundColor <- System.ConsoleColor.White
 
-let rec prettyType (t: Type) : string =
-    match t with
-    | TConst v -> v
-    | TVar v -> sprintf "'%s" v
-    | TArrow (l, r) -> sprintf "(%s -> %s)" (prettyType l) (prettyType r) 
-    | TCtor (kind, args) ->
-        match kind with
-        | KProduct _ ->
-            args
-            |> List.map prettyType
-            |> List.toArray
-            |> String.concat " * "
-            |> sprintf "(%s)"
-        | KSum name ->
-            let fmt =
-                args
-                |> List.map prettyType
-                |> List.toArray
-                |> String.concat ", "
-            if fmt = "" then name
-            else sprintf "%s<%s>" name fmt
-        | _ -> "<Invalid>"   
-
 let prettyTypeName (i: int) : string =
     if i < 26 then string <| 'a' + char i
     else sprintf "t%A" i
@@ -80,18 +57,8 @@ let rec renameFreshInner (t: Type) subst count =
         List.tryLast counts |> Option.defaultValue count
 
 let renameFreshType t =
-    renameFreshInner t Map.empty 0
-
-let prettyQualType (t: QualType) =
-    let a, b = t
-    let preds =
-        List.map (fun (c, d) -> c, prettyType d) a
-        |> List.map (fun (c, d) -> sprintf "%s %s" c d)
-        |> String.concat ", "
-    if List.length a > 0 then
-        sprintf "(%s) => %s" preds (b |> prettyType)
-    else
-        (b |> prettyType)
+    let (t, _, _) = renameFreshInner t Map.empty 0
+    t
 
 let renameFreshQualType (t: QualType) =
     let a, b = t
@@ -99,6 +66,46 @@ let renameFreshQualType (t: QualType) =
     let a = List.scan (fun (_, (_, s, c)) (ps, v) -> ps, renameFreshInner v s c) ("", (tVoid, s, c)) a
     let a = List.map (fun (a, (b, _, _)) -> a, b) (List.tail a)
     (a, b)
+
+let rec prettyTypeInner (t: Type) : string =
+    match t with
+    | TConst v -> v
+    | TVar v -> sprintf "'%s" v
+    | TArrow (l, r) -> sprintf "(%s -> %s)" (prettyTypeInner l) (prettyTypeInner r) 
+    | TCtor (kind, args) ->
+        match kind with
+        | KProduct _ ->
+            args
+            |> List.map prettyTypeInner
+            |> List.toArray
+            |> String.concat " * "
+            |> sprintf "(%s)"
+        | KSum name ->
+            let fmt =
+                args
+                |> List.map prettyTypeInner
+                |> List.toArray
+                |> String.concat ", "
+            if fmt = "" then name
+            else sprintf "%s<%s>" name fmt
+        | _ -> "<Invalid>"   
+
+let prettyType =
+    renameFreshType >> prettyTypeInner
+
+let prettyQualTypeInner (t: QualType) =
+    let a, b = t
+    let preds =
+        List.map (fun (c, d) -> c, prettyTypeInner d) a
+        |> List.map (fun (c, d) -> sprintf "%s %s" c d)
+        |> String.concat ", "
+    if List.length a > 0 then
+        sprintf "(%s) => %s" preds (b |> prettyTypeInner)
+    else
+        (b |> prettyTypeInner)
+
+let prettyQualType =
+    renameFreshQualType >> prettyQualTypeInner
 
 let rec prettyValue v =
     match v with

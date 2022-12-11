@@ -237,7 +237,7 @@ let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
 let checkType (name: string) : ReplM<string option> = repl {
     let! ((typeEnv, _, _, _), _) = get
     match lookup typeEnv name with
-    | Some (_, typ) -> return Some (typ |> renameFreshQualType |> prettyQualType)
+    | Some (_, typ) -> return Some (typ |> prettyQualType)
     | None -> return None
     }
 
@@ -349,7 +349,7 @@ let runRepl stdlib : ReplM<unit> = repl {
                 |> Seq.iter (fun (name, ty, te) ->
                     match ty, te with
                     | Some (_, ty), Some te ->
-                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyQualType (renameFreshQualType ty)) (prettyValue te)
+                        printColor <| sprintf "$w%s : $b%s $w= $g%s" name (prettyQualType ty) (prettyValue te)
                     | _ -> ())
             | 'q' ->
                 System.Environment.Exit 0

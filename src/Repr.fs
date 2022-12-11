@@ -40,8 +40,9 @@ type Token =
     // Symbols
     | LParen | RParen
     | LBrack | RBrack
+    | LBrace | RBrace
     | Comma | Pipe | Colon
-    | Arrow | Tick
+    | Semicolon | Arrow | Tick
 
 // Patterns
 and Pattern =

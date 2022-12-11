@@ -72,7 +72,6 @@ let zDecode: string -> string =
 
 let mangleOverload (func: string) (ts: QualType) : string =
     ts
-    |> renameFreshQualType
     |> prettyQualType
     |> sprintf "%s_%s" func
     |> zEncode

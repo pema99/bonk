@@ -49,6 +49,9 @@ let symbolP =
     <|> (one '|' *> just Pipe)
     <|> (one ''' *> just Tick)
     <|> (one ':' *> just Colon)
+    <|> (one ';' *> just Semicolon)
+    <|> (one '{' *> just LBrace)
+    <|> (one '}' *> just RBrace)
     <|> (one '-' *> one '>' *> just Arrow)
 
 // Identifiers

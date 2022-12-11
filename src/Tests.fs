@@ -42,7 +42,7 @@ let listTypes = repl {
         |> List.map (fun (name, ty) ->
             match ty with
             | Some (_, ty) ->
-                sprintf "%s : %s" name (prettyQualType (renameFreshQualType ty))
+                sprintf "%s : %s" name (prettyQualType ty)
             | _ ->
                 sprintf "Invalid type for %s" name)
 }
