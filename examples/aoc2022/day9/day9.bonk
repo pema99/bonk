@@ -37,35 +37,13 @@ in
 
 let steps = expand lines (Nil ()) in
 
-// Part 1
-rec solution1 = [steps] [(tx, ty)] [(hx, hy)] [acc]
-    match steps with
-    | Cons (h, t) ->
-        let (hx, hy) =
-            if h = "U" then (hx, hy + 1)
-            else if h = "D" then (hx, hy - 1)
-            else if h = "L" then (hx - 1, hy)
-            else (hx + 1, hy)
-        in
-        let (tx, ty) = move (tx, ty) (hx, hy) in
-        if exists ([x] fst x = tx && snd x = ty) acc then
-            solution1 t (tx, ty) (hx, hy) acc
-        else
-            solution1 t (tx, ty) (hx, hy) (Cons ((tx, ty), acc))
-    | Nil () -> acc
-in
-
-let acc = solution1 steps (0, 0) (0, 0) (Nil ()) in
-let _ = print (toString (length acc) + "\n") in
-
-// Part 2
 rec moveTails = [ts] [prev]
     match ts with
     | Cons (h, t) -> Cons (move h prev, moveTails t h)
     | Nil () -> Nil ()
 in
 
-rec solution2 = [steps] [ts] [(hx, hy)] [acc]
+rec solution = [steps] [ts] [(hx, hy)] [acc]
     match steps with
     | Cons (h, t) ->
         let (hx, hy) =
@@ -77,11 +55,16 @@ rec solution2 = [steps] [ts] [(hx, hy)] [acc]
         let ts = moveTails ts (hx, hy) in
         let (lx, ly) = getOption (0, 0) (head (reverse ts)) in
         if exists ([x] fst x = lx && snd x = ly) acc then
-            solution2 t ts (hx, hy) acc
+            solution t ts (hx, hy) acc
         else
-            solution2 t ts (hx, hy) (Cons ((lx, ly), acc))
+            solution t ts (hx, hy) (Cons ((lx, ly), acc))
     | Nil () -> acc
 in
 
-let acc = solution2 steps (replicate (0, 0) 9) (0, 0) (Nil ()) in
+// Part 1
+let acc = solution steps (Cons ((0, 0), Nil ())) (0, 0) (Nil ()) in
+let _ = print (toString (length acc) + "\n") in
+
+// Part 2
+let acc = solution steps (replicate (0, 0) 9) (0, 0) (Nil ()) in
 let _ = print (toString (length acc) + "\n") in
