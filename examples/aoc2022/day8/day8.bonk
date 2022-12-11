@@ -13,12 +13,6 @@ let splitChars = [str]
 in
 
 // Some boilerplate helpers that should probably be in the standard library
-rec zip = [l] [r]
-    match (l, r) with
-    | (Cons (lh, lt), Cons (rh, rt)) -> Cons ((lh, rh), zip lt rt)
-    | (Nil (), Nil ()) -> Nil ()
-in
-
 let transpose = [lines]
     rec transposeInner = [len] [lines]
         match lines with
