@@ -42,7 +42,7 @@ let rec pprJsExpr (i: int) (expr: JsExpr) : string =
     let ids = genIndent i
     match expr with
     | JsDefer (stmt) -> sprintf "(() => {\n%s%s})()" (pprJsStmt (i+1) stmt) ids
-    | JsFunc (x, e) -> sprintf "(%s) => {\n%s%s}" x (pprJsBlock (i+1) e) ids
+    | JsFunc (x, e) -> sprintf "((%s) => {\n%s%s})" x (pprJsBlock (i+1) e) ids
     | JsVar (v) -> v
     | JsCall (f, e) -> sprintf "%s(%s)" (pprJsExpr i f) (pprJsExpr i e)
     | JsConst (v) -> v
