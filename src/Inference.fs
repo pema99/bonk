@@ -87,6 +87,7 @@ let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
 let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
 let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
 let withSpan x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x) m
+let withSpanOf x m = local (fun (te, ue, ce, sp) -> te, ue, ce, snd x) m
 let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
 let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
 let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
@@ -431,7 +432,8 @@ and inferBinding (pat: Pattern) (e1: Spanned<Expr>) (e2: Spanned<Expr>) (poly: b
     }
 
 // Main inference
-and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
+and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
+    withSpanOf e <| infer {
     // Before we infer a type, apply the current substitution to the environment
     let! env = getTypeEnv
     let! subs1 = getSubstitution
@@ -445,9 +447,8 @@ and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
     }
 
 and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
-    let e, span = e
-    withSpan span <| infer {
-    match e with
+    withSpanOf e <| infer {
+    match fst e with
     | ELit (LUnit)     -> return let ty = ([], tUnit)   in ty, TELit (ty, LUnit)
     | ELit (LInt v)    -> return let ty = ([], tInt)    in ty, TELit (ty, LInt v)
     | ELit (LBool v)   -> return let ty = ([], tBool)   in ty, TELit (ty, LBool v)
@@ -561,7 +562,8 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
     }
 
 // Infer and expression and then solve constraints
-let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
+let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
+    withSpanOf e <| infer {
     // Infer the type of the expression
     let! qt, te = inferExpr e
     // Get the final substitution and apply it to final list of predicates
