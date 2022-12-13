@@ -151,22 +151,26 @@ let rec emitPat (pat: Pattern) : string =
     | PConstant x -> emitLit x
     | _ -> failwith "TODO PAT"
 
-// Emit a binary operator
-let emitOp (op: BinOp) : string =
+// Emit a binary operation
+let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
     match op with
-    | Plus -> "+"
-    | Minus -> "-"
-    | Star -> "*"
-    | Slash -> "/"
-    | Modulo -> "%"
-    | Equal -> "==="
-    | NotEq -> "!=="
-    | GreaterEq -> ">="
-    | LessEq -> "<="
-    | Greater -> ">"
-    | Less -> "<"
-    | BoolAnd -> "&&"
-    | BoolOr -> "||"
+    | Plus      -> JsOp (l, "+", r)
+    | Minus     -> JsOp (l, "-", r)
+    | Star      -> JsOp (l, "*", r)
+    | Modulo    -> JsOp (l, "%", r)
+    | Equal     -> JsOp (l, "===", r)
+    | NotEq     -> JsOp (l, "!==", r)
+    | GreaterEq -> JsOp (l, ">=", r)
+    | LessEq    -> JsOp (l, "<=", r)
+    | Greater   -> JsOp (l, ">", r)
+    | Less      -> JsOp (l, "<", r)
+    | BoolAnd   -> JsOp (l, "&&", r)
+    | BoolOr    -> JsOp (l, "||", r)
+    | Slash ->
+        if typ = tFloat then 
+            JsOp(JsOp (l, "/", r), "|", JsConst "0")
+        else 
+            JsOp (l, "/", r)
 
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
@@ -212,7 +216,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
     | TEIf (pt, cond, tr, fl) -> 
         JsDefer (JsIf (emitExpr cond, [JsReturn (emitExpr tr)], Some [JsReturn (emitExpr fl)]))
     | TEOp (pt, l, op, r) ->
-        JsOp (emitExpr l, emitOp op, emitExpr r)
+        emitOp pt op (emitExpr l) (emitExpr r)
     | TETuple (pt, es) ->
         JsList (List.map (emitExpr) es)
     | TEMatch (pt, ex, bs) ->

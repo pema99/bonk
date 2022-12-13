@@ -1,0 +1,11 @@
+// Should print 1
+let x = 5 / 3 in
+let _ = print (toString x + "\n") in
+
+// Should print 1.666666
+let x = 5.0 / 3.0 in
+let _ = print (toString x + "\n") in
+
+// Should not work
+let x = true / false in
+let _ = print (toString x + "\n") in
