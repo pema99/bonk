@@ -1,0 +1,23 @@
+// Value equality should work regardless of types
+// This currently doesn't work due to lack of implementability of default typeclasses
+
+let p = [x] print (toString x + "\n") in
+
+let _ = print "Everything below should be true\n" in
+let _ = p (42 = 42) in
+let _ = p (42 != 43) in
+let _ = p ("hello" = "hello") in
+let _ = p ("hello" != "world") in
+let _ = p ((1, 2) = (1, 2)) in
+let _ = p ((1, 2) != (1, 3)) in
+let _ = p ((Some 3) = (Some 3)) in
+let _ = p ((Some 3) != (Some 4)) in
+
+let _ = print "Everything below should be false\n" in
+let _ = p (42 != 42) in
+let _ = p ("hello" != "hello") in
+let _ = p ((1, 2) != (1, 2)) in
+let _ = p ((1, 1) = (1, 2)) in
+let _ = p ((2, 2) = (1, 2)) in
+let _ = p ((Some 3) = (Some 4)) in
+let _ = p ((Some 3) != (Some 3)) in
