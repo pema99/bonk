@@ -1,0 +1,138 @@
+let content = readFile "examples/aoc2022/day12/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+// Declare some useful stuff
+let width = lengthString (getOption "" (head lines)) in
+let height = length lines in
+let posToIdx = [(x, y)] y * width + x in
+let inf = 2147483647 in 
+
+// This is just straight up a heap implementation that I'll clean up and put in std lib at some point
+sum Heap 'a =
+    | HeapNode int * 'a * (Heap 'a) * (Heap 'a)
+    | HeapEmpty unit
+
+let heapEmpty = HeapEmpty () in
+
+let heapHeight = [heap]
+    match heap with
+    | HeapEmpty() -> 0
+    | HeapNode(h, _, _, _) -> h
+in
+   
+let leftify = [x] [a] [b]
+    if heapHeight a >= heapHeight b then HeapNode (heapHeight b + 1, x, a, b)
+    else HeapNode (heapHeight a + 1, x, b, a)
+in
+
+rec merge = [heaps]
+    match heaps with
+    | (x, HeapEmpty()) -> x
+    | (HeapEmpty(), x) -> x
+    | (HeapNode(d1, x, l1, r1), HeapNode(d2, y, l2, r2)) ->
+        let (xpos, xheight, xdist, xprev) = x in 
+        let (ypos, yheight, ydist, yprev) = y in
+        if xdist <= ydist then leftify x l1 (merge (r1, HeapNode(d2, y, l2, r2))) // Less or less eq?
+        else leftify y l2 (merge (HeapNode(d1, x, l1, r1), r2))
+in
+
+let heapGetMin = [heap]
+    match heap with
+    | HeapEmpty() -> None ()
+    | HeapNode(h, x, l, r) -> Some x
+in
+
+let heapInsert = [x] [heap]
+    merge (heap, HeapNode(1, x, HeapEmpty(), HeapEmpty()))
+in
+
+let heapExtractMin = [heap]
+    match heap with
+    | HeapEmpty() -> None ()
+    | HeapNode(h, x, l, r) ->
+        let newHeap = merge (l, r) in
+        Some (x, newHeap)
+in
+
+// Actual challenge code starts here, with parsing the inputs
+rec parseLine = [tree] [line] [x] [y] [start]
+    if x >= (lengthString line) then (tree, start)
+    else
+        let c = indexString line x in
+        let start = if c = 'S' then (x, y) else start in
+        let ntree = aaInsert (posToIdx (x, y)) c tree in
+        parseLine ntree line (x + 1) y start
+in
+
+rec parseLines = [tree] [lines] [y] [start]
+    if y >= (length lines) then (tree, start)
+    else
+        let line = getOption "" (nth y lines) in
+        let (ntree, nstart) = parseLine tree line 0 y start in
+        parseLines ntree lines (y + 1) nstart
+in
+
+// Part 1
+let (tree, start) = parseLines aaEmpty lines 0 (0, 0) in
+
+let getHeight = [c]
+    if c = 'S' then toInt 'a'
+    else if c = 'E' then toInt 'z'
+    else toInt c
+in
+
+let getNeighbor = [flip] [(x, y)] [self]
+    match aaSearch (posToIdx (x, y)) tree with
+    | None () -> Nil ()
+    | Some target ->
+        let (self, target) = if flip then (target, self) else (self, target) in
+        let heightCheck = (getHeight self) >= ((getHeight target) - 1) in
+        let inBounds = (x >= 0) && (y >= 0) && (x < width) && (y < height) in
+        if inBounds && heightCheck then
+            let node = getOption '~' (aaSearch (posToIdx (x, y)) tree) in
+            Cons (((x, y), node), Nil())
+        else
+            Nil ()
+in
+
+let getNeighbors = [flip] [(x, y)] [self]
+    let l = getNeighbor flip (x-1, y) self in
+    let r = getNeighbor flip (x+1, y) self in
+    let u = getNeighbor flip (x, y-1) self in
+    let d = getNeighbor flip (x, y+1) self in
+    append l (append r (append u d))
+in
+
+let go = [flip] [(loc, height, dist, prev)]
+    let neighbors = getNeighbors flip loc height in
+    map ([((nx, ny), nheight)]
+        ((nx, ny), nheight, dist + 1, loc)
+    ) neighbors
+in
+
+let mightBeDijkstra = [start] [tar] [flip]
+    rec search = [visited] [unvisited]
+        match heapExtractMin unvisited with
+        | None () -> None ()
+        | Some ((loc, height, dist, prev), rest) ->
+            if height = tar then
+                Some (loc, dist)
+            else if isSome (aaSearch (posToIdx loc) visited) then
+                search visited rest
+            else
+                let neighbors = go flip (loc, height, dist, prev) in
+                let nvisited = aaInsert (posToIdx loc) (height, dist, prev) visited in
+                let nwithoutVertex = fold ([acc] [x] heapInsert x acc) rest neighbors in
+                search nvisited nwithoutVertex
+    in
+    search aaEmpty (heapInsert start heapEmpty)
+in
+
+let res = mightBeDijkstra (start, 'S', 0, (0, 0)) 'E' false in
+let (loc, dist) = getOption ((-1, -1), -1) res in
+let _ = print (toString dist + "\n") in
+
+// Part 2
+let res = mightBeDijkstra (loc, 'E', 0, (0, 0)) 'a' true in
+let (loc, dist) = getOption ((-1, -1), -1) res in
+let _ = print (toString dist + "\n") in
