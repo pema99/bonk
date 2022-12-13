@@ -1,0 +1,7 @@
+// Typeclasses work with polymorphic types, negative case
+
+class Add =
+    | add : this -> this -> this
+
+let a = add { 1; 2; 3 } { 4; 5; 6 } in
+let _ = map ([x] print (toString x)) a in

@@ -1,0 +1,3 @@
+Typing error: Typeclass 'Add' does not have an instance for 'List<int>'.
+Typing error at line 7, column 38: Use of unbound variable 'a'.
+

@@ -1,0 +1,4 @@
+Typing error: Typeclass 'Add' does not exist.
+Typing error at line 6, column 9: Use of unbound variable 'add'.
+Typing error at line 7, column 38: Use of unbound variable 'a'.
+

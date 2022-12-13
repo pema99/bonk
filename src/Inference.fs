@@ -134,6 +134,41 @@ let generalize (t: QualType) : InferM<Scheme> = infer {
 let toScheme (t: Type) : Scheme =
     ([], ([], t))
 
+// Unification, most general unifier
+let occurs (s: string) (t: Type) : bool =
+    Set.exists ((=) s) (ftvType t)
+
+let rec mguList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer {
+    match t1, t2 with
+    | [], [] -> return Map.empty
+    | h1::ta1, h2::ta2 -> 
+        let! s1 = mgu h1 h2
+        let! s2 = mguList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
+        return compose s2 s1
+    | _ ->
+        let prettyConcat = List.map (prettyType) >> String.concat ", "
+        return! typeError <| sprintf "Failed to unify types [%s] and [%s]." (prettyConcat t1) (prettyConcat t2)
+    }
+
+and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
+    match t1, t2 with
+    | a, b when a = b -> return Map.empty
+    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
+    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
+    | TArrow (l1, r1), TArrow (l2, r2) -> return! mguList [l1; r1] [l2; r2]
+    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
+        return! mguList lts rts
+    | _ ->
+        return! typeError <| sprintf "Failed to unify types '%s' and '%s'." (prettyType t1) (prettyType t2)
+    }
+
+// Unify two types and store the resulting substitution
+let unify (t1: Type) (t2: Type) : InferM<unit> = infer {
+    let! subs = getSubstitution
+    let! u = mgu (applyType subs t1) (applyType subs t2)
+    do! setSubstitution (compose subs u)
+}
+
 // Get the superclasses of a typeclass
 let supers (i: string) : InferM<string list> = infer {
     let! cls = getClassEnv
@@ -171,7 +206,7 @@ and toHNF (p: Pred) : InferM<Pred list> = infer {
     else return! bySuper p >>= toHNFs
     }
 
-// Reduce a list of predicates via reduction. Solve typeclass constraints along the way.
+// Reduce a list of predicates via reduction.
 let reduce (ps: Pred list) : InferM<Pred list> = infer {
     let! qs = toHNFs ps
     return List.distinct qs
@@ -184,40 +219,40 @@ let isRelevant (ty: Type) (p: Pred) : bool =
     | (_, TVar a) -> Set.contains a tvs
     | _ -> true
 
-// Unification, most general unifier
-let occurs (s: string) (t: Type) : bool =
-    Set.exists ((=) s) (ftvType t)
-
-let rec mguList (t1 : Type list) (t2 : Type list) : InferM<Substitution> = infer {
-    match t1, t2 with
-    | [], [] -> return Map.empty
-    | h1::ta1, h2::ta2 -> 
-        let! s1 = mgu h1 h2
-        let! s2 = mguList (List.map (applyType s1) ta1) (List.map (applyType s1) ta2)
-        return compose s2 s1
+// Is a given type an instance of a given typeclass?
+// TODO: This is very basic constraint solving. Need something more sophisticated.
+let instanceOf ((reqs, instances): Class) (ty: Type) : InferM<bool> = infer {
+    match ty with
+    | TConst tc ->
+        return List.contains (TConst tc) instances
+    | TArrow _ | TCtor _ ->
+        // Technically this should apply to type vars as well, but my logic is too brittle for that.
+        let! state = get
+        let overloads = List.map (fun impl -> fst <| mgu ty impl state) instances
+        let anyValid = List.exists (Result.isOk) overloads
+        return anyValid
     | _ ->
-        let prettyConcat = List.map (prettyType) >> String.concat ", "
-        return! typeError <| sprintf "Failed to unify types [%s] and [%s]." (prettyConcat t1) (prettyConcat t2)
+        return true
     }
 
-and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
-    match t1, t2 with
-    | a, b when a = b -> return Map.empty
-    | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
-    | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArrow (l1, r1), TArrow (l2, r2) -> return! mguList [l1; r1] [l2; r2]
-    | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
-        return! mguList lts rts
-    | _ ->
-        return! typeError <| sprintf "Failed to unify types '%s' and '%s'." (prettyType t1) (prettyType t2)
+// Check if a predicate is is stating an illegal fact.
+let checkPredicate (p: Pred) : InferM<unit> = infer {
+    let (name, ty) = p
+    let! cls = getClassEnv
+    let klass = lookup cls name
+    if not <| Option.isSome klass then
+        return! typeError <| sprintf "Typeclass '%s' does not exist." name
+    let! valid = instanceOf (Option.get klass) ty
+    if not valid then
+        return! typeError <| sprintf "Typeclass '%s' does not have an instance for '%s'." name (prettyType ty)
     }
 
-// Unify two types and store the resulting substitution
-let unify (t1: Type) (t2: Type) : InferM<unit> = infer {
-    let! subs = getSubstitution
-    let! u = mgu (applyType subs t1) (applyType subs t2)
-    do! setSubstitution (compose subs u)
-}
+// Solve typeclass constraints along the way and reduce to HNF.
+let solveConstraints (ty: Type) (ps: Pred list) : InferM<Pred list> = infer {
+    let! reduced = reduce ps
+    do! mapM_ checkPredicate ps
+    return List.filter (isRelevant ty) reduced
+    }
 
 // Gather all usages of user types in a type
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
@@ -538,8 +573,7 @@ let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
         let! nps = 
             ps @ ops
             |> List.map (fun (a, b) -> a, applyType subs b)
-            |> List.filter (isRelevant res)
-            |> reduce
+            |> solveConstraints res
         return applyQualType subs (nps, res)
         }
     // Traverse the AST and get the most up to date type for each node

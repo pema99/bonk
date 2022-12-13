@@ -100,6 +100,9 @@ let tests = [
     "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
     "Simple raw black usage", fun () -> testTypes false "raw_blocks_simple"
     "Wide operators parse correctly", fun () -> testTypes false "wide_operator"
+    "Typeclasses for polymorphic types", fun () -> testValues true "typeclass_polymorphic"
+    "Missing typeclass causes error", fun () -> testValues true "typeclass_missing"
+    "Invalid typeclass for polymorphic types", fun () -> testValues true "typeclass_polymorphic_invalid"
 ]
 
 let startTests() =

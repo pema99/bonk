@@ -1,0 +1,7 @@
+// Typeclass error for missing class
+
+member List 'a of Add =
+    | add : [x] [y] append x y
+
+let a = add { 1; 2; 3 } { 4; 5; 6 } in
+let _ = map ([x] print (toString x)) a in
