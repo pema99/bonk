@@ -1,0 +1,126 @@
+// This solution requires examples/data_structures.bonk to be included
+let content = readFile "examples/aoc2022/day13/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+sum T =
+    | Lst (List T)
+    | Lit int
+
+// Parsing logic
+let isNumber = [str]
+    let c = indexString str 0 in
+    (c >= '0') && (c <= '9')
+in
+
+let parseLit = [line]
+    rec parseLitInner = [line] 
+        match line with
+        | Cons (h, t) ->
+            if isNumber h then
+                let (next, rest) = parseLitInner t in
+                (h + next, rest)
+            else
+                ("", line)
+        | Nil () -> ("", line)
+    in
+    let (next, rest) = parseLitInner line in
+    (Lit (toInt next), rest)
+in
+
+rec parseList = [line]
+    rec parseListInner = [line] [acc]
+        match line with
+        | Cons (h, t) ->
+            if h = "," then parseListInner t acc
+            else if h = "]" then (acc, t)
+            else
+                let (next, rest) =
+                    if h = "[" then parseList line
+                    else parseLit line
+                in
+                parseListInner rest (Cons (next, acc))
+        | Nil () -> (acc, line)
+    in
+    let Cons ("[", line) = line in
+    let (next, rest) = parseListInner line (Nil ()) in
+    (Lst (reverse next), rest)
+in
+
+rec strToList = [str]
+    if lengthString str = 0 then Nil ()
+    else
+        let next = strToList (substring str 1 ((lengthString str) - 1)) in
+        Cons (substring str 0 1, next)
+in
+
+let parseLines = [lines]
+    rec parseLinesInner = [lines] [acc]
+        match lines with
+        | Cons(l, Cons(r, Cons(_, t))) ->
+            let (lp, _) = parseList (strToList l) in
+            let (rp, _) = parseList (strToList r) in
+            parseLinesInner t (Cons (rp, Cons (lp, acc)))
+        | Nil() -> acc
+    in
+    reverse (parseLinesInner lines (Nil ()))
+in
+
+let packets = parseLines lines in
+
+// Part 1
+let correct = 0 in
+let incorrect = 1 in
+let unknown = 2 in
+
+rec compare = [l] [r]
+    match (l, r) with
+    | (Lit lv, Lit rv) ->
+        if lv < rv then correct
+        else if lv > rv then incorrect
+        else unknown
+    | (Lst lv, Lst rv) ->
+        let c = compareList lv rv in
+        if c = correct then correct
+        else if c = incorrect then incorrect
+        else unknown
+    | (Lit lv, rv) ->
+        compare (Lst ({Lit lv})) rv
+    | (lv, Lit rv) ->
+        compare lv (Lst ({Lit rv}))
+and compareList = [l] [r]
+    match (l, r) with
+    | (Cons (lh, lt), Cons (rh, rt)) ->
+        let c = compare lh rh in
+        if c = correct then correct
+        else if c = incorrect then incorrect
+        else compareList lt rt
+    | (Nil (), Cons (rh, rt)) -> correct
+    | (Cons (lh, lt), Nil ()) -> incorrect
+    | _ -> unknown
+in
+
+rec solution = [packets] [i] [acc]
+    match packets with
+    | Cons(l, Cons(r, t)) ->
+        let cmp = compare l r in
+        if cmp = correct then
+            solution t (i+1) (acc+i)
+        else
+            solution t (i+1) acc
+    | _ -> acc
+in
+
+let _ = print (toString (solution packets 1 0) + "\n") in
+
+// Part 2
+let adiv = Lst (Cons (Lst (Cons (Lit 2, Nil ())), Nil())) in
+let bdiv = Lst (Cons (Lst (Cons (Lit 6, Nil ())), Nil())) in
+let packets = Cons (adiv, Cons (bdiv, packets)) in
+let sorted = heapSort ([l] [r] if compare l r = correct then true else false) (packets) in
+
+let sortedWithIdx = zip sorted (iota (length sorted)) in
+let aidx = find ([(x, i)] compare adiv x = unknown) sortedWithIdx in
+let bidx = find ([(x, i)] compare bdiv x = unknown) sortedWithIdx in
+match (aidx, bidx) with
+| (Some (a, ai), Some (b, bi)) ->
+    print (toString ((ai + 1) * (bi + 1)) + "\n")

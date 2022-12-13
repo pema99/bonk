@@ -66,7 +66,7 @@ in
 
 let mightBeDijkstra = [start] [tar] [flip]
     rec search = [visited] [unvisited]
-        match heapExtractMin unvisited with
+        match minHeapExtract unvisited with
         | None () -> None ()
         | Some ((loc, height, dist, prev), rest) ->
             if height = tar then
@@ -76,10 +76,10 @@ let mightBeDijkstra = [start] [tar] [flip]
             else
                 let neighbors = go flip (loc, height, dist, prev) in
                 let nvisited = aaInsert (posToIdx loc) (height, dist, prev) visited in
-                let nwithoutVertex = fold ([acc] [(k, v)] heapInsert k v acc) rest neighbors in
+                let nwithoutVertex = fold ([acc] [(k, v)] minHeapInsert k v acc) rest neighbors in
                 search nvisited nwithoutVertex
     in
-    search aaEmpty (heapInsert 0 start heapEmpty)
+    search aaEmpty (minHeapInsert 0 start heapEmpty)
 in
 
 let res = mightBeDijkstra (start, 'S', 0, (0, 0)) 'E' false in
