@@ -195,3 +195,50 @@ rec queueDequeue = [queue]
         | (Cons (x, xs), push) -> (Some x, Queue (xs, push))
         | (Nil (), push) -> queueDequeue (Queue (reverse push, Nil ())))
 in
+
+// --- Heaps ---
+sum Heap 'k 'v =
+    | HeapNode int * 'k * 'v * (Heap 'k 'v) * (Heap 'k 'v)
+    | HeapEmpty unit
+
+let (heapInsert, heapExtractMin, heapEmpty) =
+    // Helpers
+    let height = [heap]
+        match heap with
+        | HeapEmpty() -> 0
+        | HeapNode(h, _, _, _, _) -> h
+    in
+    let leftify = [k] [v] [a] [b]
+        if height a >= height b then HeapNode (height b + 1, k, v, a, b)
+        else HeapNode (height a + 1, k, v, b, a)
+    in
+    rec merge = [heaps]
+        match heaps with
+        | (x, HeapEmpty()) -> x
+        | (HeapEmpty(), x) -> x
+        | (HeapNode(d1, k1, v1, l1, r1), HeapNode(d2, k2, v2, l2, r2)) ->
+            if k1 <= k2 then leftify k1 v1 l1 (merge (r1, HeapNode(d2, k2, v2, l2, r2)))
+            else leftify k2 v2 l2 (merge (HeapNode(d1, k1, v1, l1, r1), r2))
+    in
+
+    // Insertion
+    let heapInsert = [k] [v] [heap]
+        merge (heap, HeapNode(1, k, v, HeapEmpty(), HeapEmpty()))
+    in
+
+    // Deletion / extraction
+    let heapExtractMin = [heap]
+        match heap with
+        | HeapEmpty() -> None ()
+        | HeapNode(h, k, v, l, r) ->
+            let newHeap = merge (l, r) in
+            Some (v, newHeap)
+    in
+
+    // Empty heap
+    let heapEmpty =
+        HeapEmpty ()
+    in
+
+    (heapInsert, heapExtractMin, heapEmpty)
+in

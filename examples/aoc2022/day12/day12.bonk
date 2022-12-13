@@ -8,53 +8,6 @@ let height = length lines in
 let posToIdx = [(x, y)] y * width + x in
 let inf = 2147483647 in 
 
-// This is just straight up a heap implementation that I'll clean up and put in std lib at some point
-sum Heap 'a =
-    | HeapNode int * 'a * (Heap 'a) * (Heap 'a)
-    | HeapEmpty unit
-
-let heapEmpty = HeapEmpty () in
-
-let heapHeight = [heap]
-    match heap with
-    | HeapEmpty() -> 0
-    | HeapNode(h, _, _, _) -> h
-in
-   
-let leftify = [x] [a] [b]
-    if heapHeight a >= heapHeight b then HeapNode (heapHeight b + 1, x, a, b)
-    else HeapNode (heapHeight a + 1, x, b, a)
-in
-
-rec merge = [heaps]
-    match heaps with
-    | (x, HeapEmpty()) -> x
-    | (HeapEmpty(), x) -> x
-    | (HeapNode(d1, x, l1, r1), HeapNode(d2, y, l2, r2)) ->
-        let (xpos, xheight, xdist, xprev) = x in 
-        let (ypos, yheight, ydist, yprev) = y in
-        if xdist <= ydist then leftify x l1 (merge (r1, HeapNode(d2, y, l2, r2))) // Less or less eq?
-        else leftify y l2 (merge (HeapNode(d1, x, l1, r1), r2))
-in
-
-let heapGetMin = [heap]
-    match heap with
-    | HeapEmpty() -> None ()
-    | HeapNode(h, x, l, r) -> Some x
-in
-
-let heapInsert = [x] [heap]
-    merge (heap, HeapNode(1, x, HeapEmpty(), HeapEmpty()))
-in
-
-let heapExtractMin = [heap]
-    match heap with
-    | HeapEmpty() -> None ()
-    | HeapNode(h, x, l, r) ->
-        let newHeap = merge (l, r) in
-        Some (x, newHeap)
-in
-
 // Actual challenge code starts here, with parsing the inputs
 rec parseLine = [tree] [line] [x] [y] [start]
     if x >= (lengthString line) then (tree, start)
@@ -107,7 +60,7 @@ in
 let go = [flip] [(loc, height, dist, prev)]
     let neighbors = getNeighbors flip loc height in
     map ([((nx, ny), nheight)]
-        ((nx, ny), nheight, dist + 1, loc)
+        (dist + 1, ((nx, ny), nheight, dist + 1, loc))
     ) neighbors
 in
 
@@ -123,10 +76,10 @@ let mightBeDijkstra = [start] [tar] [flip]
             else
                 let neighbors = go flip (loc, height, dist, prev) in
                 let nvisited = aaInsert (posToIdx loc) (height, dist, prev) visited in
-                let nwithoutVertex = fold ([acc] [x] heapInsert x acc) rest neighbors in
+                let nwithoutVertex = fold ([acc] [(k, v)] heapInsert k v acc) rest neighbors in
                 search nvisited nwithoutVertex
     in
-    search aaEmpty (heapInsert start heapEmpty)
+    search aaEmpty (heapInsert 0 start heapEmpty)
 in
 
 let res = mightBeDijkstra (start, 'S', 0, (0, 0)) 'E' false in
