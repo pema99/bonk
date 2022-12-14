@@ -61,50 +61,79 @@ sum List 'a =
     | Nil unit 
 in 
 
+let reverse = [lst]
+    rec inner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> inner t (Cons (h, acc))
+        | Nil ()      -> acc
+    in
+    inner lst (Nil ())
+in
+
 rec map = [f] [lst] 
-    match lst with 
-    | Cons (h, t) -> Cons (f h, map f t) 
-    | Nil _       -> Nil ()  
+    rec inner = [lst] [acc]
+        match lst with 
+        | Cons (h, t) -> inner t (Cons (f h, acc))
+        | Nil _       -> acc
+    in
+    reverse (inner lst (Nil ()))
 in 
 
 rec fold = [f] [z] [lst]
+    rec inner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> inner t (f acc h)
+        | Nil _       -> acc
+    in
     match lst with
-    | Cons (h, t) -> fold f (f z h) (t)
+    | Cons (h, t) -> inner lst z
     | Nil _       -> z
 in
 
 rec filter = [f] [lst]
-    match lst with
-    | Cons (h, t) ->
-        if f h
-        then Cons (h, filter f t)
-        else filter f t
-    | Nil _       -> Nil _
+    rec inner = [lst] [acc]
+        match lst with 
+        | Cons (h, t) ->
+            if f h
+            then inner t (Cons (h, acc))
+            else inner t acc
+        | Nil _       -> acc
+    in
+    reverse (inner lst (Nil ()))
 in
 
-rec length = [lst]
-    match lst with
-    | Cons (h, t) -> 1 + length t
-    | Nil _       -> 0
+let length = [lst]
+    rec inner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> inner t (acc + 1)
+        | Nil _       -> acc
+    in
+    inner lst 0
 in
 
 let iota = [n]
-    rec inner = [acc]
-        if acc >= n then Nil ()
-        else Cons (acc, inner (acc + 1))
+    rec inner = [i] [acc]
+        if i < 0 then acc
+        else inner (i-1) (Cons (i, acc))
     in
-    inner 0
+    inner (n-1) (Nil ())
 in
 
-rec replicate = [i] [n]
-    if n > 0 then Cons (i, replicate i (n - 1))
-    else Nil ()
+let replicate = [v] [n]
+    rec inner = [i] [acc]
+        if i <= 0 then acc
+        else inner (i-1) (Cons (v, acc))
+    in
+    inner n (Nil ())
 in
 
-rec append = [a] [b]
-    match a with
-    | Cons (h, t) -> Cons (h, append t b)
-    | Nil _       -> b
+let append = [a] [b]
+    rec inner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> inner t (Cons (h, acc))
+        | Nil _       -> acc
+    in
+    inner (reverse a) b
 in
 
 rec nth = [n] [lst]
@@ -120,10 +149,17 @@ let exists = [f] [lst]
     length (filter f lst) > 0
 in
 
-rec forall = [f] [lst]
-    match lst with
-    | Cons (h, t) -> (f h) && (forall f t)
-    | Nil _       -> true
+let contains = [v] [lst]
+    exists ([x] x = v) lst
+in
+
+let forall = [f] [lst]
+    rec inner = [lst] [acc]
+        match lst with
+        | Cons (h, t) -> inner t (acc && f h)
+        | Nil _       -> acc
+    in
+    inner lst true
 in
 
 let head = [lst]
@@ -142,25 +178,16 @@ let find = [f] [lst]
     head (filter f lst)
 in
 
-let reverse = [lst]
-    rec reverseInner = [lst] [acc]
-        match lst with
-        | Cons (h, t) -> reverseInner t (Cons (h, acc))
-        | Nil () -> acc
-    in
-    reverseInner lst (Nil ())
-in
-
 let take = [n] [lst]
-    rec takeInner = [n] [lst] [acc]
+    rec inner = [n] [lst] [acc]
         if n = 0 then
             acc
         else
             match lst with
-            | Cons (h, t) -> takeInner (n - 1) t (Cons (h, acc))
+            | Cons (h, t) -> inner (n - 1) t (Cons (h, acc))
             | Nil () -> Nil ()
     in
-    reverse (takeInner n lst (Nil ()))
+    reverse (inner n lst (Nil ()))
 in
 
 rec skip = [n] [lst]
@@ -173,32 +200,32 @@ rec skip = [n] [lst]
 in
 
 let replace = [n] [v] [lst]
-    rec replaceInner = [lst] [i] [acc]
+    rec inner = [lst] [i] [acc]
         match lst with
-        | Cons (h, t) -> replaceInner t (i + 1) (Cons (if i = n then v else h, acc))
+        | Cons (h, t) -> inner t (i + 1) (Cons (if i = n then v else h, acc))
         | Nil () -> acc
     in
-    reverse (replaceInner lst 0 (Nil ()))
+    reverse (inner lst 0 (Nil ()))
 in
 
 let zip = [l] [r]
-    rec zipInner = [l] [r] [acc]
+    rec inner = [l] [r] [acc]
         match (l, r) with
         | (Cons (lh, lt), Cons (rh, rt)) ->
-            zipInner lt rt (Cons ((lh, rh), acc))
+            inner lt rt (Cons ((lh, rh), acc))
         | _ -> acc
     in
-    reverse (zipInner l r (Nil ()))
+    reverse (inner l r (Nil ()))
 in
 
 let unzip = [lst]
-    rec unzipInner = [lst] [accl] [accr]
+    rec inner = [lst] [accl] [accr]
         match lst with
         | Cons ((lh, rh), lt) ->
-            unzipInner lt (Cons (lh, accl)) (Cons (rh, accr))
+            inner lt (Cons (lh, accl)) (Cons (rh, accr))
         | _ -> (accl, accr)
     in
-    let (l, r) = unzipInner lst (Nil ()) (Nil ()) in
+    let (l, r) = inner lst (Nil ()) (Nil ()) in
     (reverse l, reverse r)
 in
 
