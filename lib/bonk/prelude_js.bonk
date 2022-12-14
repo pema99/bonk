@@ -1,6 +1,6 @@
 // Shadow some helpful stuff for JS specifically
 
-let _ = $$0;
+let __ = $$0;
     let listToArray = (lst) => {
         let extracted = [];
         while (lst.tag === "Cons") {
@@ -28,7 +28,7 @@ $$ in
 //    return arrayToList(res.reverse());
 //}
 
-let map = $('a -> 'b) -> (List 'a) -> (List 'a)$
+let map = $('a -> 'b) -> ((List 'a) -> (List 'b))$
     (f) => (lst) => {
         let array = listToArray(lst);
         for (let i = 0; i < array.length; i++) {
@@ -38,7 +38,7 @@ let map = $('a -> 'b) -> (List 'a) -> (List 'a)$
     }
 $$ in
 
-let fold = $('a -> 'b -> 'a) -> 'a -> (List 'b) -> 'a$
+let fold = $('a -> ('b -> 'a)) -> ('a -> ((List 'b) -> 'a))$
     (f) => (acc) => (lst) => {
         let array = listToArray(lst);
         for (let i = 0; i < array.length; i++) {
@@ -48,7 +48,7 @@ let fold = $('a -> 'b -> 'a) -> 'a -> (List 'b) -> 'a$
     }
 $$ in
 
-let filter = $('a -> bool) -> (List 'a) -> (List 'a)$
+let filter = $('a -> bool) -> ((List 'a) -> (List 'a))$
     (f) => (lst) => {
         let array = listToArray(lst);
         let res = [];
