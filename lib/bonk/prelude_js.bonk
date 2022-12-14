@@ -1,0 +1,62 @@
+// Shadow some helpful stuff for JS specifically
+
+let _ = $$0;
+    let listToArray = (lst) => {
+        let extracted = [];
+        while (lst.tag === "Cons") {
+            extracted.push(lst.val[0]);
+            lst = lst.val[1];
+        }
+        return extracted;
+    }
+    let arrayToList = (arr) => {
+        let res = Nil("<unit>")
+        for (let i = 0; i < arr.length; i++) {
+            res = Cons([arr[i], res]);
+        }
+        return res;
+    }
+$$ in
+
+//let scan = (f) => (acc) => (lst) => {
+//    let array = listToArray(lst);
+//    let res = [];
+//    for (let i = 0; i < array.length; i++) {
+//        acc = f(acc)(array[i]);
+//        res.push(acc);
+//    }
+//    return arrayToList(res.reverse());
+//}
+
+let map = $('a -> 'b) -> (List 'a) -> (List 'a)$
+    (f) => (lst) => {
+        let array = listToArray(lst);
+        for (let i = 0; i < array.length; i++) {
+            array[i] = f(array[i]);
+        }
+        return arrayToList(array.reverse());
+    }
+$$ in
+
+let fold = $('a -> 'b -> 'a) -> 'a -> (List 'b) -> 'a$
+    (f) => (acc) => (lst) => {
+        let array = listToArray(lst);
+        for (let i = 0; i < array.length; i++) {
+            acc = f(acc)(array[i]);
+        }
+        return acc;
+    }
+$$ in
+
+let filter = $('a -> bool) -> (List 'a) -> (List 'a)$
+    (f) => (lst) => {
+        let array = listToArray(lst);
+        let res = [];
+        for (let i = 0; i < array.length; i++) {
+            if (f(array[i])) {
+                res.push(array[i]);
+            }
+        }
+        return arrayToList(res.reverse());
+    }
+$$ in

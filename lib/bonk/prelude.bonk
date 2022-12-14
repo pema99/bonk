@@ -70,7 +70,7 @@ let reverse = [lst]
     inner lst (Nil ())
 in
 
-rec map = [f] [lst] 
+let map = [f] [lst] 
     rec inner = [lst] [acc]
         match lst with 
         | Cons (h, t) -> inner t (Cons (f h, acc))
@@ -79,7 +79,7 @@ rec map = [f] [lst]
     reverse (inner lst (Nil ()))
 in 
 
-rec fold = [f] [z] [lst]
+let fold = [f] [z] [lst]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (f acc h)
@@ -90,7 +90,7 @@ rec fold = [f] [z] [lst]
     | Nil _       -> z
 in
 
-rec filter = [f] [lst]
+let filter = [f] [lst]
     rec inner = [lst] [acc]
         match lst with 
         | Cons (h, t) ->
