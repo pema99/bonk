@@ -1,0 +1,4 @@
+(
+    rec id0 = [a] if false then id0 a else 1 in
+    (id0 5, id0 true)
+)

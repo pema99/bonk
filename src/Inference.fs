@@ -531,17 +531,27 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let names, inis = List.unzip bs
         let env = List.fold (fun env (name, tv) ->
             extend env name (toScheme tv)) env (List.zip names tvs) 
-        // Infer the types of the value being bound in the new environment and generalize them
+        // Infer the types of the value being bound in the new environment.
+        // Recursive calls will bind to the fresh vars.
         let! res = inTypeEnv env (mapM inferExpr inis)
         let qts, tes = List.unzip res
-        let! scs = inTypeEnv env (mapM generalize qts)
-        // Put them in the environment
+        // Unify fresh type vas with inferred types, which may generate new substitutions. 
+        // At this point, we've gathered all the substitutions from each member of the group.
+        // TODO: What about about predicates?
+        do! mapM_ (fun (l, r) -> unify l r) (List.zip tvs (List.map snd qts))
+        // Get fully up-to-date inferred types, by applying current substitions.
+        // TODO: Do I need to handle the TypedExprs here, or just QualTypes?
+        let! subs = getSubstitution
+        let qts = List.map (applyQualType subs) qts
+        // Generalize the updated inferred types. This is where let-polymorphism happens.
+        // Importantly, this happens on the in the current environment. If we did it in the
+        // environment with the fresh vars, we would lose the let-polymorphism.
+        let! scs = mapM generalize qts
+        // Put the generalized types back into environment.
         let env = List.fold (fun env (name, sc) ->
             extend env name sc) env (List.zip names scs) 
         // Infer the body/rhs of the binding under the gathered constraints
         let! (p2, t2), te2 = inTypeEnv env (inferExpr rest)
-        // Unify fresh tvs with inferred types // TODO: What about about predicates
-        do! mapM_ (fun (l, r) -> unify l r) (List.zip tvs (List.map (snd >> snd) scs))
         let qt = (p2, t2)
         return qt, TEGroup (qt, List.zip names tes, te2)
     | ERaw (typ, body) ->
@@ -593,7 +603,7 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
         [a, (ftvQualType typ |> Set.toList, typ)]
     | PTuple pats, (ps, TCtor (KProduct, typs)) ->
         let rep = List.replicate (List.length typs) ps
-        let packed = List.zip rep typs
+        let packed = List.zip rep typs |> List.map (fun (ps, ty) -> List.filter (isRelevant ty) ps, ty)
         List.collect (fun (pat, va) -> gatherVarBindings pat va) (List.zip pats packed)
     | _ -> [] // TODO
 
