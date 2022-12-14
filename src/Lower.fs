@@ -423,9 +423,13 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
         return TDLet (pat, e)
     | TDGroup (es) -> // TODO Bindings
         let! exprs =
-            mapM (fun (a, b) -> lower {
-                let! b = renameShadowedVarsInExpr b 
-                return a, b
+            mapM (fun (pat, e) -> lower {
+                let! e = renameShadowedVarsInExpr e
+                let! pat, mapper = shadowNewName (PName pat)
+                let pat = match pat with PName n -> n | _ -> "_failure"
+                let! senv = getShadowEnv
+                do! setShadowEnv (mapper senv)
+                return pat, e
             }) es
         return TDGroup exprs
     | TDUnion (name, tvs, cases) ->
