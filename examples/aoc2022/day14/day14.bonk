@@ -1,0 +1,118 @@
+// This solution requires examples/data_structures.bonk to be included
+let content = readFile "examples/aoc2022/day14/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+// Parsing logic
+let splitStringByString = [sep] [str]
+    let sepLength = lengthString sep in
+    rec splitInner = [f] [s] [acc]
+        if (f + s) >= lengthString str then
+            Cons (substring str f s, acc)
+        else
+            let next = substring str (f + s) sepLength in
+            if next = sep then
+                let lst = (Cons (substring str f s, acc)) in
+                splitInner (f+s+sepLength) 0 lst
+            else
+                splitInner f (s + 1) acc
+    in reverse (splitInner 0 0 (Nil ()))
+in
+
+let posToIdx = [(x, y)] y * 1000 + x in
+let idxToY = [idx] idx / 1000 in
+
+let printf = $'a -> ()$(x) => console.log(x)$$ in
+
+rec addPath = [(fx,fy)] [(tx,ty)] [tree]
+    if fx = tx && fy = ty then
+        aaInsert (posToIdx (fx, fy)) '#' tree
+    else if fy = ty then
+        addPath (fx+1, fy) (tx, ty) (aaInsert (posToIdx (fx, fy)) '#' tree)
+    else
+        addPath (fx, fy+1) (tx, ty) (aaInsert (posToIdx (fx, fy)) '#' tree)
+in
+
+let parsePair = [txt]
+    let pair = splitStringByString "," txt in
+    let x = toInt (getOption "" (head pair)) in
+    let y = toInt (getOption "" (head (skip 1 pair))) in
+    (x, y)
+in
+
+let parseLine = [tree] [line]
+    let path = splitStringByString " -> " line in
+    let first = parsePair (getOption "" (head path)) in
+    let path = skip 1 path in
+    rec parseLineInner = [(px, py)] [path] [tree]
+        match path with
+        | Cons (h, t) ->
+            let (nx, ny) = parsePair h in
+            let ntree = addPath (min px nx, min py ny) (max px nx, max py ny) tree in
+            parseLineInner (nx, ny) t ntree
+        | Nil () ->
+            tree
+    in
+    parseLineInner first path tree
+in
+
+// Business logic
+let tree = fold parseLine aaEmpty lines in
+
+rec findBottom = [tree] [y]
+    match tree with
+    | AANode (n, l, k, v, r) ->
+        let ny = idxToY k in
+        let y = max y ny in
+        let y = findBottom l y in
+        let y = findBottom r y in
+        y
+    | _ -> y
+in
+
+let bottom = findBottom tree 0 in
+
+sum StepResult 'a =
+    | Step int * int
+    | Stop int * int
+    | Void unit
+
+rec solution = [step] [i] [pos] [tree]
+    match step pos tree with
+    | Step npos ->
+        solution step i npos tree
+    | Stop (nx, ny) ->
+        if nx = 500 && ny = 0 then i + 1
+        else
+            let ntree = aaInsert (posToIdx (nx, ny)) 'o' tree in
+            solution step (i+1) (500, 0) ntree
+    | Void () -> 
+        i
+in
+
+// Part 1
+let isAir1 = [(x, y)] [tree]
+    getOption '.' (aaSearch (posToIdx (x, y)) tree) = '.'
+in
+
+let step1 = [(x, y)] [tree]
+    if y >  bottom then                 Void ()
+    else if isAir1 (x,   y+1) tree then Step (x,   y+1)
+    else if isAir1 (x-1, y+1) tree then Step (x-1, y+1)
+    else if isAir1 (x+1, y+1) tree then Step (x+1, y+1)
+    else                               Stop (x, y)
+in
+let _ = printf (solution step1 0 (500, 0) tree) in
+
+// Part 2
+let isAir2 = [(x, y)] [tree]
+    (y < (bottom + 2)) &&
+    (getOption '.' (aaSearch (posToIdx (x, y)) tree) = '.')
+in
+
+rec step2 = [(x, y)] [tree]
+    if      isAir2 (x,   y+1) tree then Step (x,   y+1)
+    else if isAir2 (x-1, y+1) tree then Step (x-1, y+1)
+    else if isAir2 (x+1, y+1) tree then Step (x+1, y+1)
+    else                                Stop (x, y)
+in
+let _ = printf ((solution step2 0 (500, 0) tree)) in
