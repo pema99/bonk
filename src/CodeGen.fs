@@ -167,7 +167,7 @@ let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr
     | BoolAnd   -> JsOp (l, "&&", r)
     | BoolOr    -> JsOp (l, "||", r)
     | Slash ->
-        if typ = tFloat then 
+        if typ = tInt then 
             JsOp(JsOp (l, "/", r), "|", JsConst "0")
         else 
             JsOp (l, "/", r)

@@ -96,7 +96,7 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint) =
             else if key > k then
                 fixup (AANode (n, l, k, v, (aaInsert key val r)))
             else
-                AANode (1, AAEmpty (), key, val, AAEmpty ())
+                AANode (n, l, key, val, r)
     in
 
     // Deletion
