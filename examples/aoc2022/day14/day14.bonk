@@ -74,7 +74,7 @@ let bottom = findBottom tree 0 in
 sum StepResult 'a =
     | Step int * int
     | Stop int * int
-    | Void unit
+    | Halt unit
 
 rec solution = [step] [i] [pos] [tree]
     match step pos tree with
@@ -85,7 +85,7 @@ rec solution = [step] [i] [pos] [tree]
         else
             let ntree = aaInsert (posToIdx (nx, ny)) 'o' tree in
             solution step (i+1) (500, 0) ntree
-    | Void () -> 
+    | Halt () -> 
         i
 in
 
@@ -95,7 +95,7 @@ let isAir1 = [(x, y)] [tree]
 in
 
 let step1 = [(x, y)] [tree]
-    if y >  bottom then                 Void ()
+    if y >  bottom then                 Halt ()
     else if isAir1 (x,   y+1) tree then Step (x,   y+1)
     else if isAir1 (x-1, y+1) tree then Step (x-1, y+1)
     else if isAir1 (x+1, y+1) tree then Step (x+1, y+1)
