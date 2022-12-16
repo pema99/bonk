@@ -432,17 +432,13 @@ and inferBinding (pat: Pattern) (e1: Spanned<Expr>) (e2: Spanned<Expr>) (poly: b
     }
 
 // Main inference
-and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
-    withSpanOf e <| infer {
-    // Before we infer a type, apply the current substitution to the environment
-    let! env = getTypeEnv
-    let! subs1 = getSubstitution
-    // Next, infer the type in the new environment
-    let! (res, ex) = inTypeEnv (applyEnv subs1 env) (inferExprInner e)
+and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
+    // Infer the type in the new environment
+    let! (res, ex) = inferExprInner e
     // After that, collect any new substitutions from the previous inference
     let! subs2 = getSubstitution
     // And apply those along with the initial ones to inferred type
-    let ty = applyQualType (compose subs1 subs2) res
+    let ty = applyQualType subs2 res
     return ty, (replaceType ex ty)
     }
 
