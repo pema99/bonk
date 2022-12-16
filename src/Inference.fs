@@ -230,7 +230,7 @@ let instanceOf ((reqs, instances): Class) (ty: Type) : InferM<bool> = infer {
         // Technically this should apply to type vars as well, but my logic is too brittle for that.
         let! state = get
         let overloads = List.map (fun impl -> fst <| mgu ty impl state) instances
-        let anyValid = List.exists (Result.isOk) overloads
+        let anyValid = List.exists (function Ok _ -> true | _ -> false) overloads
         return anyValid
     | _ ->
         return true
