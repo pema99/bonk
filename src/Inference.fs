@@ -579,10 +579,10 @@ let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
     let fixType (ps, res) = infer {
         let res = applyType subs res
         let! nps = 
-            ps @ ops
+            (ps @ ops)
             |> List.map (fun (a, b) -> a, applyType subs b)
             |> solveConstraints res
-        return applyQualType subs (nps, res)
+        return (nps, res)
         }
     // Traverse the AST and get the most up to date type for each node
     // I don't do this along the way since it is expensive
