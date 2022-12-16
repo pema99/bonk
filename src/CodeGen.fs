@@ -34,6 +34,33 @@ and JsExpr =
     | JsField of JsExpr * string
     | JsIndex of JsExpr * int
 
+// Poor mans optimization passes
+let rec traverseExpr fe fs (ex: JsExpr) : JsExpr =
+    match ex with
+    | JsDefer stm -> JsDefer (traverseStmt fe fs stm)
+    | JsFunc (x, e) -> JsFunc (x, List.map (traverseStmt fe fs) e)
+    | JsCall (f, e) -> JsCall (traverseExpr fe fs f, traverseExpr fe fs e)
+    | JsOp (l, op, r) -> JsOp (traverseExpr fe fs l, op, traverseExpr fe fs r)
+    | JsLet (x, e1, e2) -> JsLet (x, traverseExpr fe fs e1, traverseExpr fe fs e2)
+    | JsList lst -> JsList (List.map (traverseExpr fe fs) lst)
+    | JsObject lst -> JsObject (List.map (fun (a,b) -> a, traverseExpr fe fs b) lst)
+    | JsField (e, x) -> JsField(traverseExpr fe fs e, x)
+    | JsIndex (e, i) -> JsIndex(traverseExpr fe fs e, i)
+    | _ -> ex
+    |> fe
+
+and traverseStmt fe fs (stm: JsStmt) : JsStmt =
+    match stm with
+    | JsIf (cond, tr, fl) -> JsIf (traverseExpr fe fs cond, List.map (traverseStmt fe fs) tr, Option.map (List.map (traverseStmt fe fs)) fl)
+    | JsWhile (cond, body) -> JsWhile (traverseExpr fe fs cond, List.map (traverseStmt fe fs) body)
+    | JsSwitch (sw, cases) -> JsSwitch (traverseExpr fe fs sw, List.map (fun (a,b) -> a, List.map (traverseStmt fe fs) b) cases)
+    | JsDecl (x, e) -> JsDecl (x, traverseExpr fe fs e)
+    | JsAssign (x, e) -> JsAssign (x, traverseExpr fe fs e)
+    | JsReturn e -> JsReturn (traverseExpr fe fs e)
+    | JsIgnore e -> JsIgnore (traverseExpr fe fs e)
+    | JsScope lst -> JsScope (List.map (traverseStmt fe fs) lst)
+    |> fs
+
 // Pretty printing
 let genIndent i =
     List.init i (fun _ -> "    ") |> String.concat ""
@@ -172,6 +199,65 @@ let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr
         else 
             JsOp (l, "/", r)
 
+let optimizeTailRecursionExpr (name: string) (arity: int) (ex: JsExpr) : JsExpr =
+    // Grab parameter names
+    let rec getParams ex =
+        match ex with
+        | JsFunc (xs, [ JsReturn (JsFunc (n1, n2)) ]) ->
+            xs :: getParams (JsFunc (n1, n2))
+        | JsFunc (xs, _) ->
+            [xs]
+        | _ ->
+            []
+    let parms = getParams ex
+    if List.length parms <> arity then
+        ex
+    else
+        // Grab parameters from a suspected tail call
+        let getTailCallsParams ex =
+            let rec unfoldTailCall ex =
+                match ex with
+                | JsCall (f, x) -> unfoldTailCall f |> Option.map (fun xs -> x :: xs)
+                | JsVar (x) when x = name -> Some []
+                | _ -> None
+            match unfoldTailCall ex with
+            | Some es when List.length es = arity -> Some es
+            | _ -> None
+        // Inject mutables into the function body for each tail call
+        let rec injectMuts ex =
+            traverseStmt ( // TODO: Needs to be a fold to handle shadowing
+                function
+                | JsCall (f, x) as e ->
+                    match getTailCallsParams e with
+                    | Some es ->
+                        let lhs = sprintf "[%s]" (parms |> String.concat ", ")
+                        let rhs = 
+                            es
+                            |> List.rev
+                            |> JsList
+                        JsDefer (JsScope [JsAssign (lhs, rhs)])
+                    | None -> e
+                | e -> e) id ex
+        // Inject something into the function body while matching
+        let rec injectMatch f ex =
+            match ex with
+            | JsFunc (x, [JsReturn (e)]) ->
+                let rest =
+                    match e with
+                    | JsFunc (_, _) ->
+                        [JsReturn (injectMatch f e)]
+                    | JsDefer blk ->
+                        f blk
+                    | a ->
+                        [JsIgnore a]
+                JsFunc (x, rest)
+            | ex -> ex
+        injectMatch (fun inner -> [
+            JsWhile (JsConst "true", [
+                injectMuts inner
+            ])
+        ]) ex
+
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
     match ex with
@@ -233,8 +319,17 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                     [sw]
                 )
             )
-    | TEGroup (pt, [x, i], rest) when isTailRecursive x i -> 
-        let optim = optimizeTailRecursion x i
+    | TEGroup (pt, [x, i], rest) ->
+        let rec getArity ex =
+            match ex with
+            | TELam (pt, x, e) -> 1 +  getArity e
+            | _ -> 0
+        let arity = getArity i
+        let res = emitExpr i
+        let optim =
+            if isTailRecursive x i
+            then optimizeTailRecursionExpr x arity res
+            else res
         JsDefer (
             JsScope (
                 [ JsDecl (x, optim)
@@ -252,63 +347,6 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         )
     | TERaw (pt, body) ->
         JsVar body
-
-// Instead of emitting a normal function, emit a trampolined version
-// assuming the function is recusive. Input is the function name and expression.
-and optimizeTailRecursion (name: string) (ex: TypedExpr) : JsExpr =
-    // Get fun arity
-    let rec getArity ex =
-        match ex with
-        | TELam (pt, x, e) -> 1 +  getArity e
-        | _ -> 0
-    let arity = getArity ex
-    // Build an application chain for the trampoline
-    let rec buildCall i ex =
-        match ex with
-        | TELam (pt, x, e) -> JsCall (buildCall (i+1) e, JsVar (sprintf "__arg%i" (arity-1-i)))
-        | _ -> JsVar name
-    // Inject something into the function body, use fresh names for args
-    let rec inject f i ex =
-        match ex with
-        | TELam (pt, x, (TELam (_, _, _) as e)) ->
-            JsFunc ((sprintf "__arg%i" i), [JsReturn (inject f (i+1) e)])
-        | TELam (pt, x, e) -> 
-            JsFunc ((sprintf "__arg%i" i), f)
-        | ex -> emitExpr ex
-    // Inject something into the function body while matching
-    let rec injectMatch f ex =
-        match ex with
-        | TELam (pt, x, e) ->
-            let rest =
-                match e with
-                | TELam (_, _, _) -> [JsReturn (injectMatch f e)]
-                | e -> f e
-            match x with
-            | PName x -> JsFunc (x, rest)
-            | x ->
-                let fvName = "__tmp"
-                let hoisted = hoist x
-                let matcher = emitPatternMatch (JsScope []) x (TEVar (([], tVoid), fvName)) false
-                JsFunc (fvName, 
-                    List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @ [matcher] @ rest)
-        | ex -> emitExpr ex
-    // Create delayed lambda around function body
-    let delayed = 
-        injectMatch (fun inner -> [
-            JsDecl ("__cont", JsFunc ("", [
-                JsReturn (emitExpr inner)
-            ]))
-            JsAssign ("__cont.inner", JsConst "true")
-            JsReturn (JsVar "__cont")
-        ]) ex
-    // Create trampoline
-    inject ([
-        JsDecl (name, delayed)
-        JsDecl ("__rec", buildCall 0 ex)
-        JsWhile (JsOp (JsField (JsVar "__rec", "inner"), "===", JsConst "true"),
-            [ JsAssign("__rec", JsCall(JsVar "__rec", JsConst "")) ])
-        JsReturn (JsVar "__rec")
-    ]) 0 ex
 
 // Emit a structure that matches a pattern and adds bindings as necessary
 // TODO: Optimize the constant re-scoping a bit
@@ -344,33 +382,6 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
                 [ cont pat (JsField (expr, "val")) next ],
                 None)
     cont pat (emitExpr expr) res
-
-// Poor mans optimization passes
-let rec traverseExpr fe fs (ex: JsExpr) : JsExpr =
-    match ex with
-    | JsDefer stm -> JsDefer (traverseStmt fe fs stm)
-    | JsFunc (x, e) -> JsFunc (x, List.map (traverseStmt fe fs) e)
-    | JsCall (f, e) -> JsCall (traverseExpr fe fs f, traverseExpr fe fs e)
-    | JsOp (l, op, r) -> JsOp (traverseExpr fe fs l, op, traverseExpr fe fs r)
-    | JsLet (x, e1, e2) -> JsLet (x, traverseExpr fe fs e1, traverseExpr fe fs e2)
-    | JsList lst -> JsList (List.map (traverseExpr fe fs) lst)
-    | JsObject lst -> JsObject (List.map (fun (a,b) -> a, traverseExpr fe fs b) lst)
-    | JsField (e, x) -> JsField(traverseExpr fe fs e, x)
-    | JsIndex (e, i) -> JsIndex(traverseExpr fe fs e, i)
-    | _ -> ex
-    |> fe
-
-and traverseStmt fe fs (stm: JsStmt) : JsStmt =
-    match stm with
-    | JsIf (cond, tr, fl) -> JsIf (traverseExpr fe fs cond, List.map (traverseStmt fe fs) tr, Option.map (List.map (traverseStmt fe fs)) fl)
-    | JsWhile (cond, body) -> JsWhile (traverseExpr fe fs cond, List.map (traverseStmt fe fs) body)
-    | JsSwitch (sw, cases) -> JsSwitch (traverseExpr fe fs sw, List.map (fun (a,b) -> a, List.map (traverseStmt fe fs) b) cases)
-    | JsDecl (x, e) -> JsDecl (x, traverseExpr fe fs e)
-    | JsAssign (x, e) -> JsAssign (x, traverseExpr fe fs e)
-    | JsReturn e -> JsReturn (traverseExpr fe fs e)
-    | JsIgnore e -> JsIgnore (traverseExpr fe fs e)
-    | JsScope lst -> JsScope (List.map (traverseStmt fe fs) lst)
-    |> fs
 
 let eliminateReturnDefer stm =
     match stm with
