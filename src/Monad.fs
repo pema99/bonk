@@ -71,7 +71,7 @@ let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderS
         | Error err -> Error err, o
 
 
-let rec mapM (f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> =
+let rec inline mapM ([<InlineIfLambda>] f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> =
     let rec inner t acc = state {
         match t with
         | h :: t ->
@@ -91,7 +91,7 @@ let rec foldM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s
 }
 let inline foldM_ ([<InlineIfLambda>] f) acc t = foldM f acc t >>. just ()
 
-let rec scanM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a list> =
+let rec inline scanM ([<InlineIfLambda>] f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a list> =
     let rec inner va t acc = state {
         match t with
         | h :: t ->
