@@ -16,43 +16,40 @@ let mkString = List.toArray >> System.String
 let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
 let whitespacedP p = between whitespaceP p whitespaceP
 
-// Binary operators
+// Symbols
 let operatorP = com {
     let! l = item
-    let! r = look
+    let! r = opt look
     match l, r with
-    | '!', '=' -> return! item *> just NotEq
-    | '>', '=' -> return! item *> just GreaterEq
-    | '<', '=' -> return! item *> just LessEq
-    | '&', '&' -> return! item *> just BoolAnd
-    | '|', '|' -> return! item *> just BoolOr
-    | '=', _ -> return Equal
-    | '>', _ -> return Greater
-    | '<', _ -> return Less
-    | '+', _ -> return Plus
-    | '-', _ when r <> '>' -> return Minus
-    | '*', _ -> return Star
-    | '/', _ -> return Slash
-    | '%', _ -> return Modulo
+    | '!', Some '=' -> return! (item *> just NotEq) |>> Op
+    | '>', Some '=' -> return! (item *> just GreaterEq) |>> Op
+    | '<', Some '=' -> return! (item *> just LessEq) |>> Op
+    | '&', Some '&' -> return! (item *> just BoolAnd) |>> Op
+    | '|', Some '|' -> return! (item *> just BoolOr) |>> Op
+    | '-', Some '>' -> return! (item *> just Arrow)
+    | '<', Some '|' -> return! (item *> just PipeLeft)
+    | '|', Some '>' -> return! (item *> just PipeRight)
+    | '=', _ -> return Op Equal
+    | '>', _ -> return Op Greater
+    | '<', _ -> return Op Less
+    | '+', _ -> return Op Plus
+    | '-', _ -> return Op Minus
+    | '*', _ -> return Op Star
+    | '/', _ -> return Op Slash
+    | '%', _ -> return Op Modulo
+    | '(', _ -> return LParen
+    | ')', _ -> return RParen
+    | '[', _ -> return LBrack
+    | ']', _ -> return RBrack
+    | ',', _ -> return Comma
+    | '|', _ -> return Pipe
+    | ''', _ -> return Tick
+    | ':', _ -> return Colon
+    | ';', _ -> return Semicolon
+    | '{', _ -> return LBrace
+    | '}', _ -> return RBrace
     | _ -> return! fail()
     }
-
-let operatorTokP = operatorP |>> Op
-
-// Symbols
-let symbolP =
-    (one '(' *> just LParen)
-    <|> (one ')' *> just RParen)
-    <|> (one '[' *> just LBrack)
-    <|> (one ']' *> just RBrack)
-    <|> (one ',' *> just Comma)
-    <|> (one '|' *> just Pipe)
-    <|> (one ''' *> just Tick)
-    <|> (one ':' *> just Colon)
-    <|> (one ';' *> just Semicolon)
-    <|> (one '{' *> just LBrace)
-    <|> (one '}' *> just RBrace)
-    <|> (one '-' *> one '>' *> just Arrow)
 
 // Identifiers
 let identP = 
@@ -153,7 +150,7 @@ let rawBlockP =
 
 tokenPImpl :=
     many (attempt commentP <* whitespaceP) *>
-    whitespacedP (spannedP (literalP <|> wordP <|> attempt operatorTokP <|> symbolP <|> attempt rawBlockP))
+    whitespacedP (spannedP (literalP <|> wordP <|> attempt operatorP <|> attempt rawBlockP))
 
 let lex txt =
     let (res, state) = 

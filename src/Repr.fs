@@ -43,6 +43,7 @@ type Token =
     | LBrace | RBrace
     | Comma | Pipe | Colon
     | Semicolon | Arrow | Tick
+    | PipeLeft | PipeRight
 
 // Patterns
 and Pattern =

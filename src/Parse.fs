@@ -189,6 +189,14 @@ let addSubP = chainL1 mulDivP (chooseBinOpP [Plus; Minus])
 let comparisonP = chainL1 addSubP (chooseBinOpP [GreaterEq; LessEq; Greater; Less; NotEq; Equal])
 let boolOpP = chainL1 comparisonP (chooseBinOpP [BoolAnd; BoolOr])
 
+let pipeRightP =
+    tok PipeRight
+    *> just (curry <| fun (l, r) -> (EApp (r, l), constructSpan l r))
+let pipeLeftP =
+    tok PipeLeft
+    *> just (curry <| fun (l, r) -> (EApp (l, r), constructSpan l r))
+let pipeOpP = chainL1 boolOpP (pipeRightP <|> pipeLeftP)
+
 let unOpP = 
     (opP Minus)
     <+> exprP
@@ -213,7 +221,7 @@ let rawP =
             | _ -> return! fail()
     } |> spannedP
 
-exprPImpl := boolOpP <|> unOpP <|> rawP
+exprPImpl := pipeOpP <|> unOpP <|> rawP
 
 // Declarations
 let declLetP =
