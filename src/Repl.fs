@@ -45,7 +45,7 @@ let rec calcArity (ex: TypedExpr) : int =
 
 let rec buildApp (f: TypedExpr) (args: TypedExpr list) =
     match args with
-    | h :: t -> TEApp (([], tVoid), buildApp f t, h)
+    | h :: t -> TEApp ((Set.empty, tVoid), buildApp f t, h)
     | [] -> f
 
 let rec matchPattern tenv pat v =
@@ -53,7 +53,7 @@ let rec matchPattern tenv pat v =
     | PName a, v ->
         Some [a, v]
     | PConstant a, v ->
-        if (eval tenv (TELit (([], tVoid), a))) = Some v then Some []
+        if (eval tenv (TELit ((Set.empty, tVoid), a))) = Some v then Some []
         else None
     | PTuple pats, VTuple vs ->
         let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
@@ -276,7 +276,7 @@ let rec handleDecl silent decl = repl {
         | None -> printfn "Evaluation failure"
     | Some (TDGroup (es)) ->
         let vs = List.map (fun (name, ex) ->
-            eval tenv (TEGroup (([], tVoid), es, TEVar (([], tVoid), name)))
+            eval tenv (TEGroup ((Set.empty, tVoid), es, TEVar ((Set.empty, tVoid), name)))
             |> Option.bind (matchPattern tenv (PName name))) es
         if List.exists Option.isNone vs then printfn "Evaluation failure"
         else do! handleBindings (List.choose id vs |> List.concat)

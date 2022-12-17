@@ -49,13 +49,13 @@ let applyType =
     fixedPoint applyTypeFP
 
 let ftvQualType (t: QualType) : Set<string> =
-    let wide = List.map (snd >> ftvType) (fst t)
-    Set.union (wide |> List.fold Set.union Set.empty) (ftvType (snd t))
+    let wide = Set.map (snd >> ftvType) (fst t)
+    Set.union (wide |> Set.fold Set.union Set.empty) (ftvType (snd t))
 
 let applyQualType =
     let applyQualTypeFP (s: Substitution) (t: QualType) : QualType =
         let p, ty = t
-        List.map (fun (a, b) -> a, applyType s b) p, applyType s ty
+        Set.map (fun (a, b) -> a, applyType s b) p, applyType s ty
     fixedPoint applyQualTypeFP
 
 let ftvScheme (sc: Scheme) : string Set =
@@ -133,7 +133,7 @@ let generalize (t: QualType) : InferM<Scheme> = infer {
 
 // Turn a type into a trivial scheme
 let toScheme (t: Type) : Scheme =
-    ([], ([], t))
+    ([], (Set.empty, t))
 
 // Unification, most general unifier
 let occurs (s: string) (t: Type) : bool =
@@ -179,10 +179,10 @@ let supers (i: string) : InferM<string list> = infer {
     }
 
 // Given a predicate, which predicates must also hold by superclass relations?
-let rec bySuper (p: Pred) : InferM<Pred list> = infer {
+let rec bySuper (p: Pred) : InferM<Pred Set> = infer {
     let i, t = p
     let! res = (supers i) >>= mapM (fun j -> bySuper (j, t))
-    return List.concat res
+    return List.fold Set.union Set.empty res
     }
 
 // Is predicate in head normal form?
@@ -196,21 +196,15 @@ let isHNF (p: Pred) : bool =
     cont (snd p) // TODO: Is this fine?
 
 // Convert a list of predicate to head normal form.
-let rec toHNFs (ps: Pred list) : InferM<Pred list> = infer {
-    let! res = mapM toHNF ps
-    return List.concat res
+let rec toHNFs (ps: Pred Set) : InferM<Pred Set> = infer {
+    let! res = mapM toHNF (Set.toList ps)
+    return List.fold Set.union Set.empty res
     }
 
 // Convert a single predicate to head normal form if possible.
-and toHNF (p: Pred) : InferM<Pred list> = infer {
-    if isHNF p then return [p]
+and toHNF (p: Pred) : InferM<Pred Set> = infer {
+    if isHNF p then return Set.singleton p
     else return! bySuper p >>= toHNFs
-    }
-
-// Reduce a list of predicates via reduction.
-let reduce (ps: Pred list) : InferM<Pred list> = infer {
-    let! qs = toHNFs ps
-    return List.distinct qs
     }
 
 // Check if a predicate tells us anything about a type
@@ -248,11 +242,10 @@ let checkPredicate (p: Pred) : InferM<unit> = infer {
         return! typeError <| sprintf "Typeclass '%s' does not have an instance for '%s'." name (prettyType ty)
     }
 
-// Solve typeclass constraints along the way and reduce to HNF.
-let solveConstraints (ty: Type) (ps: Pred list) : InferM<Pred list> = infer {
-    let! reduced = reduce ps
-    do! mapM_ checkPredicate ps
-    return List.filter (isRelevant ty) reduced
+// Reduce a list of predicates via reduction and check constraints.
+let reduce (ps: Pred Set) : InferM<Pred Set> = infer {
+    do! mapM_ checkPredicate (Set.toList ps)
+    return! toHNFs ps
     }
 
 // Gather all usages of user types in a type
@@ -358,6 +351,20 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         return TERaw (pt, body)
     }
 
+(*let rec traverseTypedExpr (ty: QualType) (ex: TypedExpr) : InferM<TypedExpr> =
+    match (ty, ex) with
+    | (ty, TELit (_, v)) -> TELit (ty, v)
+    | (ty, TEVar (_, a)) -> TEVar (ty, a)
+    | TEApp (pt, f, x) ->
+    | TELam (pt, x, e) ->
+    | TELet (pt, x, e1, e2) ->
+    | TEIf (pt, cond, tr, fl) ->
+    | TEOp (pt, l, op, r) ->
+    | TETuple (pt, es) ->
+    | TEMatch (pt, e, bs) ->
+    | TEGroup (pt, bs, rest) ->
+    | (ty, TERaw (pt, body)) -> TERaw (ty, body) *)
+
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
     traverseTypedExpr (applyQualType s >> just) ex
 
@@ -405,7 +412,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
                 // Make a fresh type variable for the pattern being bound
                 let! tv = fresh
                 // Gather constrains from the inner pattern matched with the fresh type variable
-                let! env = gatherPatternConstraints env pat (pd @ ps, tv) poly
+                let! env = gatherPatternConstraints env pat (Set.union pd ps, tv) poly
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
                 do! unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
@@ -445,12 +452,12 @@ and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
 and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
     withSpanOf e <| infer {
     match fst e with
-    | ELit (LUnit)     -> return let ty = ([], tUnit)   in ty, TELit (ty, LUnit)
-    | ELit (LInt v)    -> return let ty = ([], tInt)    in ty, TELit (ty, LInt v)
-    | ELit (LBool v)   -> return let ty = ([], tBool)   in ty, TELit (ty, LBool v)
-    | ELit (LFloat v)  -> return let ty = ([], tFloat)  in ty, TELit (ty, LFloat v)
-    | ELit (LString v) -> return let ty = ([], tString) in ty, TELit (ty, LString v)
-    | ELit (LChar v)   -> return let ty = ([], tChar)   in ty, TELit (ty, LChar v)
+    | ELit (LUnit)     -> return let ty = (Set.empty, tUnit)   in ty, TELit (ty, LUnit)
+    | ELit (LInt v)    -> return let ty = (Set.empty, tInt)    in ty, TELit (ty, LInt v)
+    | ELit (LBool v)   -> return let ty = (Set.empty, tBool)   in ty, TELit (ty, LBool v)
+    | ELit (LFloat v)  -> return let ty = (Set.empty, tFloat)  in ty, TELit (ty, LFloat v)
+    | ELit (LString v) -> return let ty = (Set.empty, tString) in ty, TELit (ty, LString v)
+    | ELit (LChar v)   -> return let ty = (Set.empty, tChar)   in ty, TELit (ty, LChar v)
     | EVar a ->
         let! env = getTypeEnv
         match lookup env a with
@@ -463,7 +470,7 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let! (p1, t1), tf = inferExpr f
         let! (p2, t2), tx = inferExpr x
         do! unify t1 (TArrow (t2, tv))
-        let qt = (p1 @ p2, tv)
+        let qt = (Set.union p1 p2, tv)
         return qt, TEApp (qt, tf, tx)
     | ELam (x, e) ->
         match x with
@@ -476,7 +483,7 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
             let! env = getTypeEnv
-            let! env = gatherPatternConstraints env (PTuple x) ([], (TCtor (KProduct, tvs))) false
+            let! env = gatherPatternConstraints env (PTuple x) (Set.empty, (TCtor (KProduct, tvs))) false
             let! (p1, t1), te = inTypeEnv env (inferExpr e)
             let qt = (p1, TArrow (TCtor (KProduct, tvs), t1))
             return qt, TELam (qt, PTuple x, te)
@@ -491,7 +498,7 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let! (p3, t3), tf = inferExpr fl
         let! s4 = unify t1 tBool
         let! s5 = unify t2 t3
-        let qt = (p1 @ p2 @ p3, t2)
+        let qt = (Set.unionMany [p1; p2; p3], t2)
         return qt, TEIf (qt, tc, tt, tf)
     | EOp (l, op, r) ->
         let! (p1, t1), tl = inferExpr l
@@ -500,13 +507,13 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let scheme = Map.find op opSchemes
         let! (p3, inst) = instantiate scheme
         let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
-        let qt = (p1 @ p2 @ p3, tv)
+        let qt = (Set.unionMany [p1; p2; p3], tv)
         return qt, TEOp (qt, tl, op, tr)
     | ETuple es ->
         let! res = mapM inferExpr es
         let scs, xs = List.unzip res
         let ps, typs = List.unzip scs
-        let qt = (List.concat ps, TCtor (KProduct, typs))
+        let qt = (List.fold Set.union Set.empty ps, TCtor (KProduct, typs))
         return (qt, TETuple (qt, xs))
     | EMatch (e, bs) ->
         // Scan over all match branches gathering constraints from pattern matching along the way
@@ -518,7 +525,7 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let uni = List.pairwise typs
         let! uni = mapM (fun (l, r) -> unify l r) uni
         // Compose all intermediate substitutions
-        let qt = (List.concat ps, List.head typs)
+        let qt = (List.fold Set.union Set.empty ps, List.head typs)
         return qt, TEMatch (qt, List.head te1, List.zip (List.map fst bs) te2)
     | EGroup (bs, rest) ->
         // Generate fresh vars for each binding, and put then in the environment
@@ -562,9 +569,9 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
                     |> Set.map fst
                     |> String.concat ", "
                 return! typeError <| sprintf "Use of undeclared type constructors in raw block: %s." bad
-            return ([], typ), TERaw (([], typ), body)
+            return (Set.empty, typ), TERaw ((Set.empty, typ), body)
         | None ->
-            return ([], tOpaque), TERaw (([], tOpaque), body)
+            return (Set.empty, tOpaque), TERaw ((Set.empty, tOpaque), body)
     }
 
 // Infer and expression and then solve constraints
@@ -574,14 +581,18 @@ let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
     let! qt, te = inferExpr e
     // Get the final substitution and apply it to final list of predicates
     let! subs = getSubstitution
-    let ops = List.map (fun (q, t) -> q, applyType subs t) (fst qt)
+    let! ops = reduce (Set.map (fun (q, t) -> q, applyType subs t) (fst qt))
     // Use this function to get a final type
     let fixType (ps, res) = infer {
         let res = applyType subs res
-        let! nps = 
-            (ps @ ops)
-            |> List.map (fun (a, b) -> a, applyType subs b)
-            |> solveConstraints res
+        let! npsh = 
+            ps
+            |> Set.map (fun (a, b) -> a, applyType subs b)
+            |> reduce
+        let nps =
+            npsh
+            |> Set.union ops
+            |> Set.filter (isRelevant res)
         return (nps, res)
         }
     // Traverse the AST and get the most up to date type for each node
@@ -599,7 +610,7 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
         [a, (ftvQualType typ |> Set.toList, typ)]
     | PTuple pats, (ps, TCtor (KProduct, typs)) ->
         let rep = List.replicate (List.length typs) ps
-        let packed = List.zip rep typs |> List.map (fun (ps, ty) -> List.filter (isRelevant ty) ps, ty)
+        let packed = List.zip rep typs |> List.map (fun (ps, ty) -> Set.filter (isRelevant ty) ps, ty)
         List.collect (fun (pat, va) -> gatherVarBindings pat va) (List.zip pats packed)
     | _ -> [] // TODO
 
@@ -653,12 +664,12 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // Put placeholder constructors for each variant in the environment
         let! env = getTypeEnv
         let! nenv = mapM (fun (case, typ) -> infer {
-                            let! sc = generalize ([], (TArrow (typ, ret)))
+                            let! sc = generalize (Set.empty, (TArrow (typ, ret)))
                             return case, sc
                          }) cases
         return (nenv, [name, (List.length typs)], [], []), TDUnion (name, typs, cases)
     | DClass (name, reqs, mems) ->
-        let vars = List.map (fun (mem, typ) -> mem, (["this"], ([name, TVar "this"], typ))) mems
+        let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])
         return (vars, [], [cls], []), TDClass (name, reqs, mems)
     | DMember (blankets, pred, exprs) ->

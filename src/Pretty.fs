@@ -63,9 +63,9 @@ let renameFreshType t =
 let renameFreshQualType (t: QualType) =
     let a, b = t
     let b, s, c = renameFreshInner b Map.empty 0
-    let a = List.scan (fun (_, (_, s, c)) (ps, v) -> ps, renameFreshInner v s c) ("", (tVoid, s, c)) a
-    let a = List.map (fun (a, (b, _, _)) -> a, b) (List.tail a)
-    (a, b)
+    let a = Seq.scan (fun (_, (_, s, c)) (ps, v) -> ps, renameFreshInner v s c) ("", (tVoid, s, c)) a
+    let a = Seq.map (fun (a, (b, _, _)) -> a, b) (Seq.tail a)
+    (Set.ofSeq a, b)
 
 let rec prettyTypeInner (t: Type) : string =
     match t with
@@ -96,10 +96,10 @@ let prettyType =
 let prettyQualTypeInner (t: QualType) =
     let a, b = t
     let preds =
-        List.map (fun (c, d) -> c, prettyTypeInner d) a
-        |> List.map (fun (c, d) -> sprintf "%s %s" c d)
+        Set.map (fun (c, d) -> c, prettyTypeInner d) a
+        |> Set.map (fun (c, d) -> sprintf "%s %s" c d)
         |> String.concat ", "
-    if List.length a > 0 then
+    if Set.count a > 0 then
         sprintf "(%s) => %s" preds (b |> prettyTypeInner)
     else
         (b |> prettyTypeInner)

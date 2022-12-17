@@ -1,2 +1,2 @@
-a : (Show 'a, Num 'a) => ('a -> ('a -> (string * 'a)))
+a : (Num 'a, Show 'a) => ('a -> ('a -> (string * 'a)))
 show : (Show 'a) => ('a -> string)

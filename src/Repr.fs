@@ -71,7 +71,7 @@ and Decl =
     | DGroup  of (string * Spanned<Expr>) list
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | DMember of Pred list * Pred * (string * Spanned<Expr>) list     // blankets, pred, impls
+    | DMember of Pred Set * Pred * (string * Spanned<Expr>) list     // blankets, pred, impls
 
 // Kinds of type constructors
 and Kind =
@@ -89,7 +89,7 @@ and Type =
 // Type predicates, used to handle typeclasses
 and Pred = (string * Type)              // ie. (Num 'a)
 and Class = (string list * Type list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
-and QualType = (Pred list * Type)
+and QualType = (Pred Set * Type)
 
 type TypedExpr =
     | TEVar   of QualType * string
@@ -110,7 +110,7 @@ type TypedDecl =
     | TDGroup  of (string * TypedExpr) list
     | TDUnion  of string * string list * (string * Type) list 
     | TDClass  of string * string list * (string * Type) list  // name, reqs, (fname, ftype)
-    | TDMember of Pred list * Pred * (string * TypedExpr) list // blankets, pred, impls
+    | TDMember of Pred Set * Pred * (string * TypedExpr) list // blankets, pred, impls
 
 // Type schemes for polytypes
 type Scheme = string list * QualType

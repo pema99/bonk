@@ -249,7 +249,7 @@ let declImplP =
     <+> (identP <* opP Equal <* opt (tok Pipe))
     <+> (sepBy1 (identP <* (tok Colon) <+> exprP) (tok Pipe))
     <* opt (tok In)
-    |>> (fun (a, b) -> DMember ([],flip a,b))
+    |>> (fun (a, b) -> DMember (Set.empty,flip a,b))
 
 let declExprP =
     exprP |>> DExpr
