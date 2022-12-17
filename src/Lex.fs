@@ -79,6 +79,7 @@ let wordP =
         | "true"   -> Lit (LBool true)
         | "false"  -> Lit (LBool false)
         | "int"    -> TypeDesc (TConst "int")
+        | "char"   -> TypeDesc (TConst "char")
         | "bool"   -> TypeDesc (TConst "bool")
         | "float"  -> TypeDesc (TConst "float")
         | "string" -> TypeDesc (TConst "string")

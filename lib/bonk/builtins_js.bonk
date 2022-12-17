@@ -1,0 +1,23 @@
+let _rawToString = $'a -> string$(x) => x.toString()$$ in
+let _charToString = $char -> string$(x) => String.fromCharCode(x)$$ in
+
+class ToString =
+    | toString : this -> string
+
+member int of ToString =
+    | toString : _rawToString
+
+member bool of ToString =
+    | toString : [x] if x then "true" else "false"
+
+member float of ToString =
+    | toString : _rawToString
+
+member char of ToString =
+    | toString : _charToString
+
+member unit of ToString =
+    | toString : [x] "()"
+
+member string of ToString =
+    | toString : [x] x

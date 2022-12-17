@@ -12,6 +12,8 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="lib/bonk/prelude.bonk" />
+    <EmbeddedResource Include="lib/bonk/prelude_js.bonk" />
+    <EmbeddedResource Include="lib/bonk/builtins_js.bonk" />
     <EmbeddedResource Include="lib/js/intrinsics.js" />
     <Compile Include="src/Repr.fs" />
     <Compile Include="src/Prelude.fs" />

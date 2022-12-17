@@ -6,6 +6,7 @@ open Monad
 open Pretty
 
 // TODO: Maybe don't use a list inside the templates. Just reference the class metadata by name.
+// TODO: Closures
 type AbstractValue =
     | AVType of QualType
     | AVPartialTemplate of string * int * TypedExpr list // name, arity, overloads
@@ -97,21 +98,21 @@ let rec compatible (l: QualType) (r: QualType) : bool =
         List.forall (fun (a, b) -> compatible a b) (List.zip qls qrs)
     | _ -> false
 
-let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
+let rec candidate (overload: QualType) (args: QualType list) : bool =
     match overload, args with
-    | TELam ((qt, TArrow (a, _)), x, rest), h :: t ->
-        compatible (qt, a) h && candidate rest t
+    | (ql, TArrow (lf, lt)), h :: t ->
+        compatible (ql, lf) h && candidate (ql, lt) t
     | _, [] -> true 
     | _ -> false
 
 let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExpr option =
-    match List.tryFind (fun ex -> candidate ex args) overloads with
+    match List.tryFind (fun ex -> candidate (getExprType ex) args) overloads with
     | Some goal -> Some goal
     | None -> None
 
-let rec calcArity (ex: TypedExpr) : int =
-    match ex with
-    | TELam (ty, x, rest) -> 1 + calcArity rest
+let rec calcArityType (ty: Type) : int =
+    match ty with
+    | TArrow (a, b) -> 1 + calcArityType b
     | _ -> 0
 
 let rec matchPattern tenv pat (v: AbstractValue) =
@@ -244,7 +245,8 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
                 let tenv = extend tenv s (AVPartialTemplate (name, arity, e :: overloads))
                 do! setAbtractTermEnv tenv
             | _ ->
-                let tenv = extend tenv s (AVPartialTemplate (s, calcArity e, [e]))
+                let ty = snd (getExprType e)
+                let tenv = extend tenv s (AVPartialTemplate (s, calcArityType ty, [e]))
                 do! setAbtractTermEnv tenv
         }
         do! mapM_ addMember impls

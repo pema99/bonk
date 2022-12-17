@@ -215,22 +215,17 @@ let classes: ClassEnv = Map.ofList [
     ])
 ]
 
-// Attempt to load std lib
-let stdLib = 
+let loadLibrarySource name =
     use res =
         System.Reflection.Assembly
             .GetExecutingAssembly()
-            .GetManifestResourceStream("bonk.lib.bonk.prelude.bonk")
+            .GetManifestResourceStream(name)
     let out = Array.create (int res.Length) (byte 0)
     res.Read(out, 0, int res.Length) |> ignore
     System.Text.Encoding.Default.GetString(out)
 
-// And JS intrinsics
-let jsInstrincs =
-    use res =
-        System.Reflection.Assembly
-            .GetExecutingAssembly()
-            .GetManifestResourceStream("bonk.lib.js.intrinsics.js")
-    let out = Array.create (int res.Length) (byte 0)
-    res.Read(out, 0, int res.Length) |> ignore
-    System.Text.Encoding.Default.GetString(out)
+// Attempt to load std lib
+let stdLib = loadLibrarySource "bonk.lib.bonk.prelude.bonk"
+let jsStdLib = loadLibrarySource "bonk.lib.bonk.prelude_js.bonk"
+let jsInstrincs = loadLibrarySource "bonk.lib.js.intrinsics.js"
+let jsBuiltins = loadLibrarySource "bonk.lib.bonk.builtins_js.bonk"

@@ -439,6 +439,7 @@ let startCompile builtins stdlib files =
         |> Seq.toList
         |> List.map (File.ReadAllText)
         |> fun strs -> if stdlib then stdLib :: strs else strs
+        |> fun strs -> if builtins then jsBuiltins :: strs else strs
         |> List.map parseProgram
         |> List.reduce (joinResult (fun a b -> a @ b))
     let funSchemes = if builtins then funSchemes else Map.empty
