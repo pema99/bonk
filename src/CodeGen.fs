@@ -167,7 +167,7 @@ let emitLit (lit: Literal) : string =
     | LString v -> sprintf "\"%s\"" v
     | LInt v -> string v
     | LBool v -> (string v).ToLower()
-    | LChar v -> sprintf "\'%c\'.charCodeAt(0)" v
+    | LChar v -> sprintf "_makeChar(\"%c\")" v
     | LUnit -> "\"<unit>\""
 
 // Emit a pattern
@@ -179,25 +179,42 @@ let rec emitPat (pat: Pattern) : string =
     | _ -> failwith "TODO PAT"
 
 // Emit a binary operation
-let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
-    match op with
-    | Plus      -> JsOp (l, "+", r)
-    | Minus     -> JsOp (l, "-", r)
-    | Star      -> JsOp (l, "*", r)
-    | Modulo    -> JsOp (l, "%", r)
-    | Equal     -> JsOp (l, "===", r)
-    | NotEq     -> JsOp (l, "!==", r)
-    | GreaterEq -> JsOp (l, ">=", r)
-    | LessEq    -> JsOp (l, "<=", r)
-    | Greater   -> JsOp (l, ">", r)
-    | Less      -> JsOp (l, "<", r)
-    | BoolAnd   -> JsOp (l, "&&", r)
-    | BoolOr    -> JsOp (l, "||", r)
-    | Slash ->
-        if typ = tInt then 
-            JsOp(JsOp (l, "/", r), "|", JsConst "0")
-        else 
-            JsOp (l, "/", r)
+let emitOp (op: BinOp) (l: JsExpr) (r: JsExpr) ((_, lt): QualType) ((_, rt): QualType) : JsExpr =
+    // Some helpers
+    let isLogicalOp (op: BinOp) : bool =
+        match op with
+        | Equal   | NotEq | GreaterEq | LessEq
+        | Greater | Less  | BoolAnd   | BoolOr -> true
+        | _ -> false
+    let isChar = lt = tChar || rt = tChar
+    let isInt = lt = tInt || rt = tInt
+    let l = if isChar then JsCall (JsVar "_charToNum", l) else l
+    let r = if isChar then JsCall (JsVar "_charToNum", r) else r
+    // Emit the operation
+    let res =
+        match op with
+        | Plus      -> JsOp (l, "+", r)
+        | Minus     -> JsOp (l, "-", r)
+        | Star      -> JsOp (l, "*", r)
+        | Modulo    -> JsOp (l, "%", r)
+        | Equal     -> JsOp (l, "===", r)
+        | NotEq     -> JsOp (l, "!==", r)
+        | GreaterEq -> JsOp (l, ">=", r)
+        | LessEq    -> JsOp (l, "<=", r)
+        | Greater   -> JsOp (l, ">", r)
+        | Less      -> JsOp (l, "<", r)
+        | BoolAnd   -> JsOp (l, "&&", r)
+        | BoolOr    -> JsOp (l, "||", r)
+        | Slash ->
+            if isInt then 
+                JsOp(JsOp (l, "/", r), "|", JsConst "0")
+            else 
+                JsOp (l, "/", r)
+    // And post-process if necessary
+    if isChar && not <| isLogicalOp op then
+        JsCall (JsVar "_numToChar", res)
+    else
+        res
 
 let optimizeTailRecursion (name: string) (arity: int) (ex: JsExpr) : JsExpr =
     // Grab parameter names
@@ -302,7 +319,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
     | TEIf (pt, cond, tr, fl) -> 
         JsDefer (JsIf (emitExpr cond, [JsReturn (emitExpr tr)], Some [JsReturn (emitExpr fl)]))
     | TEOp (pt, l, op, r) ->
-        emitOp pt op (emitExpr l) (emitExpr r)
+        emitOp op (emitExpr l) (emitExpr r) (getExprType l) (getExprType r)
     | TETuple (pt, es) ->
         JsList (List.map (emitExpr) es)
     | TEMatch (pt, ex, bs) ->
@@ -357,7 +374,7 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
                 ]
         | PConstant a ->
             JsIf (
-                JsOp (JsConst (emitLit a), "===", expr),
+                JsCall (JsCall (JsVar "_compare", JsConst (emitLit a)), expr),
                 [ next ],
                 None)
         | PTuple pats ->

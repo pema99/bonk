@@ -1,0 +1,8 @@
+// Char support
+
+let a = 'a' in
+let b = indexString "abc" 1 in
+
+let _ = print (toString (a) + "\n") in
+let _ = print (toString (b) + "\n") in
+let _ = print (toString (a + b) + "\n") in
