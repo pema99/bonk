@@ -309,12 +309,12 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         match snd pt with
         | _ ->
             let hoisted = List.collect (fun (p, _) -> hoist p) bs |> List.distinct
-            let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("matched", JsConst (string i))) p ex true) bs
-            let sw = JsSwitch (JsVar "matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
+            let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("_matched", JsConst (string i))) p ex true) bs
+            let sw = JsSwitch (JsVar "_matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
             JsDefer (
                 JsScope (
                     List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
-                    [ JsDecl ("matched", JsConst "null") ] @
+                    [ JsDecl ("_matched", JsConst "null") ] @
                     beg @
                     [sw]
                 )
@@ -345,7 +345,7 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
         match pat with
         | PName a -> // name matches with anything // TODO: Don't use hardcoded match name, generate a unique one
             if hasAlternatives then
-                JsIf (JsOp (JsVar "matched", "===", JsConst "null" ),
+                JsIf (JsOp (JsVar "_matched", "===", JsConst "null" ),
                     [ JsAssign (a, expr)
                       next
                     ],
