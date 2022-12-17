@@ -195,7 +195,7 @@ let pipeRightP =
 let pipeLeftP =
     tok PipeLeft
     *> just (curry <| fun (l, r) -> (EApp (l, r), constructSpan l r))
-let pipeOpP = chainL1 boolOpP (pipeRightP <|> pipeLeftP)
+let pipeOpP = chainR1 (chainL1 boolOpP pipeRightP) pipeLeftP
 
 let unOpP = 
     (opP Minus)
