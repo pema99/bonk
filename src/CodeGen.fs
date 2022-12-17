@@ -199,7 +199,7 @@ let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr
         else 
             JsOp (l, "/", r)
 
-let optimizeTailRecursionExpr (name: string) (arity: int) (ex: JsExpr) : JsExpr =
+let optimizeTailRecursion (name: string) (arity: int) (ex: JsExpr) : JsExpr =
     // Grab parameter names
     let rec getParams ex =
         match ex with
@@ -320,19 +320,9 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                 )
             )
     | TEGroup (pt, [x, i], rest) ->
-        let rec getArity ex =
-            match ex with
-            | TELam (pt, x, e) -> 1 +  getArity e
-            | _ -> 0
-        let arity = getArity i
-        let res = emitExpr i
-        let optim =
-            if isTailRecursive x i
-            then optimizeTailRecursionExpr x arity res
-            else res
         JsDefer (
             JsScope (
-                [ JsDecl (x, optim)
+                [ JsDecl (x, emitOptimizedFuncDef x i)
                   JsReturn (emitExpr rest)
                 ]
             )
@@ -383,6 +373,17 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
                 None)
     cont pat (emitExpr expr) res
 
+and emitOptimizedFuncDef (name: string) (ex: TypedExpr) : JsExpr =
+    let rec getArity ex =
+        match ex with
+        | TELam (pt, x, e) -> 1 +  getArity e
+        | _ -> 0
+    let arity = getArity ex
+    let res = emitExpr ex
+    if isTailRecursive name ex
+    then optimizeTailRecursion name arity res
+    else res
+
 let eliminateReturnDefer stm =
     match stm with
     | JsReturn (JsDefer e) -> e
@@ -407,6 +408,9 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 let matcher = emitPatternMatch (JsScope []) x e false
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
                 [ matcher ]
+
+        | TDGroup ([x, i]) ->
+            [ JsDecl (x, emitOptimizedFuncDef x i) ]
 
         | TDGroup (bs) ->
             List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
