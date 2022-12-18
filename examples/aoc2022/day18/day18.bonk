@@ -1,0 +1,60 @@
+// This solution requires examples/data_structures.bonk to be included
+let content = readFile "examples/aoc2022/day18/input.txt" in
+let lines = splitString (indexString "\n" 0) content in
+
+let posToIdx = [(x,y,z)] ((z) * 50 + y) * 50 + x in
+
+// Parsing
+rec parseLines = [lines] [tree] [lst]
+    match lines with
+    | Cons (h, t) ->
+        let Cons (x, Cons(y, Cons(z, _))) = splitString ',' h in
+        let pos = (toInt x, toInt y, toInt z) in
+        let tree = aaInsert (posToIdx pos) 1 tree in
+        parseLines t tree (Cons (pos, lst))
+    | Nil () -> (tree, lst)
+in
+
+let (tree, lst) = parseLines lines aaEmpty (Nil ()) in
+
+let dirs = { (-1,0,0); (1,0,0); (0,-1,0); (0,1,0); (0,0,-1); (0,0,1) } in
+
+// Part 1
+let countUnoccluded = [(x,y,z)]
+    dirs
+    |> map ([(ox,oy,oz)] aaSearch (posToIdx (x+ox, y+oy, z+oz)) tree)
+    |> filter isNone
+    |> length
+in
+
+lst
+|> map countUnoccluded
+|> fold (+) 0
+|> toString
+|> print
+let _ = print "\n" in
+
+// Part 2
+let solution2 = [(x,y,z)]
+    rec inner = [(x,y,z)] [visited] [count]
+        // if we've already visited, terminate
+        if isSome (aaSearch (posToIdx (x,y,z)) visited) then
+            (count, visited)
+        // if out of bounds, terminate
+        else if x < (-2) || x > 22 || y < (-2) || y > 22 || z < (-2) || z > 22 then
+            (count, visited)
+        // if this is a solid cube, terminate
+        else if isSome (aaSearch (posToIdx (x,y,z)) tree) then
+            (count+1, visited)
+        // recurse to neighboring air blocks
+        else
+            let visited = aaInsert (posToIdx (x,y,z)) 1 visited in
+            dirs
+            |> fold ([(acc, visited)] [(ox, oy, oz)]
+                inner (x+ox, y+oy, z+oz) visited acc)
+                (count, visited)
+    in
+    fst (inner (x,y,z) aaEmpty 0)
+in
+
+let _ = print (toString (solution2 (0,0,0))) in
