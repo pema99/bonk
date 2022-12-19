@@ -49,7 +49,7 @@ let resolveImports prelude files =
     List.distinct files
     |> List.map (fun file -> Map.find file visited)
 
-let startCompile prelude files =
+let startCompile prelude output files =
     let ast =
         files
         |> resolveImports prelude
@@ -64,7 +64,7 @@ let startCompile prelude files =
             let jsAst = List.collect emitDecl decls
             let jsOutput = pprJsBlock 0 jsAst
             let jsOutput = jsInstrincs + jsOutput
-            File.WriteAllText("out.js", jsOutput)
+            File.WriteAllText(output, jsOutput)
         | Error err -> printfn "%s" err
     | Failure -> printfn "Parsing error: Unknown"
     | FailureWith (err, loc) -> printfn "Parsing error (%A): %s" loc err
