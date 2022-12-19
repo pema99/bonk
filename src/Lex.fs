@@ -73,6 +73,7 @@ let wordP =
         | "of"     -> Of
         | "rec"    -> Rec
         | "and"    -> And
+        | "import" -> Import
         | "true"   -> Lit (LBool true)
         | "false"  -> Lit (LBool false)
         | "int"    -> TypeDesc (TConst "int")
@@ -152,13 +153,13 @@ tokenPImpl :=
     many (attempt commentP <* whitespaceP) *>
     whitespacedP (spannedP (literalP <|> wordP <|> attempt operatorP <|> attempt rawBlockP))
 
-let lex txt =
+let lex allowMore txt =
     let (res, state) = 
         txt
         |> mkMultiLineParser
         |> many (tokenP)
     let state = state :?> MultiLineTextCombinatorState
     match res with
-    | Success _ when Seq.forall ((=) ';') (state.Source.Trim()) -> ()
+    | Success _ when (Seq.forall ((=) ';') (state.Source.Trim())) || allowMore -> ()
     | _ -> printfn "Lexing error at line %i, column %i." state.Line state.Column
     res

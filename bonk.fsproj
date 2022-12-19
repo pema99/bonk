@@ -25,6 +25,7 @@
     <Compile Include="src/Lower.fs" />
     <Compile Include="src/CodeGen.fs" />
     <Compile Include="src/Repl.fs" />
+    <Compile Include="src/Pipeline.fs" />
     <Compile Include="src/Tests.fs" />
     <Compile Include="src/Main.fs" />
   </ItemGroup>

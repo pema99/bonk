@@ -1,7 +1,7 @@
 module Main
 
 open Repl
-open CodeGen
+open Pipeline
 open Tests
 
 let printHelp() =
@@ -30,8 +30,7 @@ let printCompileHelp() =
     printfn "Usage: bonk compile options... <files>"
     printfn ""
     printfn "Options:"
-    printfn "   --nobuiltins        Don't load builtin bindings / intrinsics."
-    printfn "   --nostdlib          Don't load the standard library."
+    printfn "   --noprelude         Don't implicitly load the prelude."
     printfn ""
 
 [<EntryPoint>]
@@ -55,14 +54,13 @@ let main args =
         System.IO.Directory.Delete("tests/output", true)
         startTests()
     else if args.[0] = "compile" then
-        let builtins = not <| Seq.contains "--nobuiltins" args
-        let stdlib = not <| Seq.contains "--nostdlib" args
+        let prelude = not <| Seq.contains "--noprelude" args
         let files = args |> Seq.tail |> Seq.filter (fun str -> str.[0] <> '-')
         if Seq.isEmpty files then
             printfn "Error: No files provided!"
             printCompileHelp()
         else
-            startCompile builtins (stdlib && builtins) files
+            startCompile prelude files
     else
         printHelp()
     0

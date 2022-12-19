@@ -44,6 +44,7 @@ let opP op    = extract (function (Op v, _) when v = op -> Some v | _ -> None)
 let anyOpP    = extract (function (Op v, _) -> Some v | _ -> None)
 let identP    = extract (function (Ident v, _) -> Some v | _ -> None)
 let literalP  = extract (function (Lit v, _) -> Some v | _ -> None)
+let stringP   = extract (function (Lit (LString v), _) -> Some v | _ -> None)
 let typeDescP = extract (function (TypeDesc v, _) -> Some v | _ -> None)
 
 // Patterns
@@ -265,11 +266,14 @@ let declExprP =
 let declP =
     declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP
 
-let programP =
-    many declP
+let importsP =
+    many (tok Import *> stringP)
 
-let runParse (kind: Com<'t, Spanned<Token>>) txt =
-    let lexed = lex txt
+let programP =
+    importsP *> (many declP)
+
+let runParse (kind: Com<'t, Spanned<Token>>) allowMore txt =
+    let lexed = lex allowMore txt
     match lexed with
     | Success v ->
         let res, state =
@@ -279,7 +283,7 @@ let runParse (kind: Com<'t, Spanned<Token>>) txt =
             |> kind
         let state = state :?> ArrayCombinatorState<Spanned<Token>>
         match res with
-        | Success v when state.Offset >= state.Toks.Length-1 -> ()
+        | Success v when (state.Offset >= state.Toks.Length-1) || allowMore -> ()
         | _ ->
             let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
             let line = fst (fst span)
@@ -288,5 +292,6 @@ let runParse (kind: Com<'t, Spanned<Token>>) txt =
         res
     | err -> copyFailure err
 
-let parseDecl = runParse declP
-let parseProgram = runParse programP
+let parseDecl = runParse declP false
+let parseImports = runParse importsP true
+let parseProgram = runParse programP false

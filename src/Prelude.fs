@@ -229,3 +229,11 @@ let stdLib = loadLibrarySource "bonk.lib.bonk.prelude.bonk"
 let jsStdLib = loadLibrarySource "bonk.lib.bonk.prelude_js.bonk"
 let jsInstrincs = loadLibrarySource "bonk.lib.js.intrinsics.js"
 let jsBuiltins = loadLibrarySource "bonk.lib.bonk.builtins_js.bonk"
+
+// Keep track of files
+let builtinFiles = Map.ofList [
+    "lib/bonk/prelude.bonk", stdLib
+    "lib/bonk/prelude_js.bonk", jsStdLib
+    "lib/js/intrinsics.js", jsInstrincs
+    "lib/bonk/builtins_js.bonk", jsBuiltins
+]

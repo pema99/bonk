@@ -1,4 +1,5 @@
-// This solution requires examples/data_structures.bonk to be included
+import "examples/data_structures.bonk"
+
 let content = readFile "examples/aoc2022/day14/input.txt" in
 let lines = splitString (indexString "\n" 0) content in
 

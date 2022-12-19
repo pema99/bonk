@@ -11,5 +11,7 @@ dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day8/day8.bonk   &&
 dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day9/day9.bonk   && bun out.js >> out.txt
 dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day10/day10.bonk && bun out.js >> out.txt
 dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day11/day11.bonk && bun out.js >> out.txt
-dotnet run compile lib/bonk/prelude_js.bonk examples/data_structures.bonk examples/aoc2022/day12/day12.bonk && bun out.js >> out.txt
-dotnet run compile lib/bonk/prelude_js.bonk examples/data_structures.bonk examples/aoc2022/day13/day13.bonk && bun out.js >> out.txt
+dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day12/day12.bonk && bun out.js >> out.txt
+dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day13/day13.bonk && bun out.js >> out.txt
+dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day14/day14.bonk && bun out.js >> out.txt
+dotnet run compile lib/bonk/prelude_js.bonk examples/aoc2022/day18/day18.bonk && bun out.js >> out.txt

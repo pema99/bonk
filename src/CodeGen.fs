@@ -2,10 +2,7 @@ module CodeGen
 
 open System.IO
 open Repr
-open Parse
-open Combinator
 open Inference
-open Prelude
 open Lower
 
 // JS AST
@@ -431,30 +428,3 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 let mangled = mangleOverload name (getExprType body)
                 JsDecl (mangled, emitExpr body)) impls
     List.map (optimizeStmt) res
-
-let startCompile builtins stdlib files =
-    let stdlib = if not builtins then false else stdlib
-    let ast =
-        files
-        |> Seq.toList
-        |> List.map (File.ReadAllText)
-        |> fun strs -> if stdlib then stdLib :: strs else strs
-        |> fun strs -> if builtins then jsBuiltins :: strs else strs
-        |> List.map parseProgram
-        |> List.reduce (joinResult (fun a b -> a @ b))
-    let funSchemes = if builtins then funSchemes else Map.empty
-    match ast with
-    | Success decls ->
-        let res, ((_,_,_,loc),_) = inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
-        match res with
-        | Ok decls ->
-            let decls = lowerDecls decls
-            let jsAst = List.collect emitDecl decls
-            let jsOutput = pprJsBlock 0 jsAst
-            let jsOutput = if builtins then jsInstrincs + jsOutput else jsOutput
-            File.WriteAllText("out.js", jsOutput)
-        | Error err -> printfn "%s" err
-    | Failure -> printfn "Parsing error: Unknown"
-    | FailureWith (err, loc) -> printfn "Parsing error (%A): %s" loc err
-    | CompoundFailure errs -> Seq.iter (fun (err, loc) -> printfn "Parsing error (%A): %s" loc err) errs
-    ()

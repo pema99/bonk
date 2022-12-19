@@ -36,7 +36,7 @@ type Token =
     | If | Then | Else
     | Sum | Match | With
     | Class | Of | Member
-    | Rec | And
+    | Rec | And | Import
     // Symbols
     | LParen | RParen
     | LBrack | RBrack
