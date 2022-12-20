@@ -169,7 +169,7 @@ type PatternCtor =
     | PCNonExhaustive         // Things that can't be matched exhaustively. Nullary ctor.
     | PCWildcard              // Wildcard (name) patterns. Nullary ctor.
     | PCMissing               // Missing pattern
-    | PCRange of Literal list // Range of things we know // TODO:!!
+    | PCRange of Literal Set  // Range of things of we have seen
     | PCOpaque                // Opaque type with nothing known
 
 type DeconstructedPattern = {
@@ -199,7 +199,7 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
     | (PConstant (LUnit), ty) -> // TODO: Is this right?
         { ctor = PCTuple; fields = []; ty = ty }
     | (PConstant c, ty) ->
-        { ctor = PCOpaque; fields = []; ty = ty }
+        { ctor = PCRange (Set.singleton c); fields = []; ty = ty }
     | _ ->
         failwith "Invalid call to deconstructPattern"
 
@@ -218,6 +218,7 @@ let rec specialize (colTy: Type) (ctor: PatternCtor) (pat: DeconstructedPattern)
     | (PCWildcard, _) -> wildcards colTy ctor 
     | _ -> pat.fields
 
+// Does 'self' match a subset of what 'other' does?
 let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     match self, other with
     | (_, PCWildcard) -> true
@@ -225,6 +226,7 @@ let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     | (PCWildcard, _) -> false
     | (PCTuple, PCTuple) -> true
     | (PCVariant a, PCVariant b) -> a = b
+    | (PCRange a, PCRange b) -> Set.isSubset a b
     | (PCOpaque, _) -> false
     | (_, PCOpaque) -> false
     | (PCNonExhaustive, _) -> false
@@ -239,29 +241,33 @@ let rec specializeMatrix (colTy: Type) (ctor: PatternCtor) (mat: PatternMatrix) 
     |> List.filter (fun row -> isCoveredBy ctor (List.head row).ctor)
     |> List.map (fun row -> popHeadConstructor colTy row ctor)
 
-let rec splitConstructor (ctx: PatternCtx) (self: PatternCtor) (ctors: PatternCtor list) : PatternCtor list =
+let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor list * PatternCtor list * PatternCtor list) =
+    let allCtors =
+        match ctx.colTy with
+        | TConst "bool" -> [PCRange (Set [LBool false]); PCRange (Set [LBool true])] // TODO: PCRange!!!!
+        | TConst "int" -> [PCNonExhaustive]
+        | TConst "float" -> [PCNonExhaustive]
+        | TConst "string" -> [PCNonExhaustive]
+        | TConst "char" -> [PCNonExhaustive]
+        | TConst "unit" -> [PCTuple]
+        | TCtor (KProduct, _) -> [PCTuple]
+        | TCtor (KSum name, tys) ->
+            match Map.tryFind name ctx.env with
+            | Some (_, variants) -> List.map (fst >> PCVariant) variants
+            | None -> failwith "Invalid variant" // TODO: Handle error
+        | _ -> [PCNonExhaustive]
+    let allCtors =
+        allCtors |> List.collect (fun ctor -> splitConstructor ctx ctor ctors)
+    let matrixCtors =
+        ctors |> List.filter (function PCWildcard -> false | _ -> true)
+    let missingCtors =
+        allCtors |> List.filter (fun ctor -> not <| List.exists (isCoveredBy ctor) matrixCtors)
+    (matrixCtors, allCtors, missingCtors)
+
+and splitConstructor (ctx: PatternCtx) (self: PatternCtor) (ctors: PatternCtor list) : PatternCtor list =
     match self with
     | PCWildcard ->
-        let allCtors =
-            match ctx.colTy with
-            | TConst "bool" -> [PCNonExhaustive] // TODO: PCRange!!!!
-            | TConst "int" -> [PCNonExhaustive]
-            | TConst "float" -> [PCNonExhaustive]
-            | TConst "string" -> [PCNonExhaustive]
-            | TConst "char" -> [PCNonExhaustive]
-            | TConst "unit" -> [PCTuple]
-            | TCtor (KProduct, _) -> [PCTuple]
-            | TCtor (KSum name, tys) ->
-                match Map.tryFind name ctx.env with
-                | Some (_, variants) -> List.map (fst >> PCVariant) variants
-                | None -> failwith "Invalid variant" // TODO: Handle error
-            | _ -> [PCNonExhaustive]
-        let allCtors =
-            allCtors |> List.collect (fun ctor -> splitConstructor ctx ctor ctors)
-        let matrixCtors =
-            ctors |> List.filter (function PCWildcard -> false | _ -> true)
-        let missingCtors =
-            allCtors |> List.filter (fun ctor -> not <| List.exists (isCoveredBy ctor) matrixCtors)
+        let (matrixCtors, allCtors, missingCtors) = splitWildcard ctx ctors
         if List.isEmpty missingCtors then
             allCtors
         else
@@ -284,13 +290,23 @@ let applyConstructor (colTy: Type) (witness: Witness) (ctor: PatternCtor) : Witn
     }
     newPat :: List.skip arity witness
 
-let applyConstructorMatrix (colTy: Type) (usefulness: Witness list) (mat: PatternMatrix) (ctor: PatternCtor) : Witness list =
-    match usefulness with
+let applyConstructorMatrix (ctx: PatternCtx) (witnesses: Witness list) (mat: PatternMatrix) (ctor: PatternCtor) : Witness list =
+    match witnesses with
     | [] -> []
     | _ ->
         match ctor with
-        | PCMissing -> [[{ ctor = PCWildcard; fields = []; ty = colTy }]] //TODO: Make use of missing
-        | _ -> usefulness |> List.map (fun witness -> applyConstructor colTy witness ctor)
+        | PCMissing ->
+            let (_, _, missingCtors) = splitWildcard ctx (List.map (fun row -> (List.head row).ctor) mat)
+            let newPats =
+                missingCtors
+                |> List.map (fun missing ->
+                    let wilds = wildcards ctx.colTy missing
+                    { ctor = missing; fields = wilds; ty = ctx.colTy })
+            witnesses
+            |> List.collect (fun witness ->
+                newPats |> List.map (fun pat ->
+                    witness @ [pat]))
+        | _ -> witnesses |> List.map (fun witness -> applyConstructor ctx.colTy witness ctor)
 
 // Is pattern v useful w.r.t known patterns in rows. If so, return witnesses to usefulness.
 let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witness list =
@@ -307,23 +323,25 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
                 let specMatrix = specializeMatrix (ctx.colTy) ctor rows
                 let v = popHeadConstructor (ctx.colTy) v ctor
                 let usefulness = isUseful ctx.env specMatrix v
-                applyConstructorMatrix (ctx.colTy) usefulness rows ctor)
+                applyConstructorMatrix ctx usefulness rows ctor)
         ret
 
 let testFoo () =
     let fakeUEnv: UserEnv = Map.ofList [
         "Option", (["a"], [("Some", TVar "a"); ("None", tUnit)])
     ]
-    let fakeType = TCtor (KSum "Option", [tInt])
+    let fakeType = TCtor (KSum "Option", [tBool])
     let fakePats: PatternMatrix = [
         [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool true)))]
         [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool false)))]
         [deconstructPattern fakeUEnv fakeType (PUnion ("None", PName "_"))]
+        //[deconstructPattern fakeUEnv fakeType (PConstant (LBool false))]
 
         //[deconstructPattern fakeType (PUnion ("None", PConstant (LUnit)))]
         //[deconstructPattern fakeType (PName "_")]
     ]
-    let fakeNewPat: PatternStack = [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PName "_"))]
+    let fakeNewPat: PatternStack = [deconstructPattern fakeUEnv fakeType (PName "_")]
     let usefulness = isUseful fakeUEnv fakePats fakeNewPat
     printfn "Useful: %A" (List.isEmpty usefulness |> not)
+    printfn "%A\n" usefulness
     ()
