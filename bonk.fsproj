@@ -21,6 +21,7 @@
     <Compile Include="src/Monad.fs" />
     <Compile Include="src/Lex.fs" />
     <Compile Include="src/Parse.fs" />
+    <Compile Include="src/Semantics.fs" />
     <Compile Include="src/Inference.fs" />
     <Compile Include="src/Lower.fs" />
     <Compile Include="src/CodeGen.fs" />
