@@ -12,6 +12,7 @@ open Repr
 open Monad
 open Pretty
 open Prelude
+open Semantics
 
 // Substitutions
 type Substitution = Map<string, Type>
@@ -263,7 +264,7 @@ let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
 // Check if a usage of a user type is valid (correct arity)
 let rec checkUserTypeUsage (usr: UserEnv) (name: string, arity: int) : bool =
     match lookup usr name with
-    | Some v when v = arity -> true
+    | Some (v, _) when List.length v = arity -> true
     | _ -> false
 
 // Replace a type in a typed expression
@@ -350,20 +351,6 @@ let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : In
         let! pt = s pt
         return TERaw (pt, body)
     }
-
-(*let rec traverseTypedExpr (ty: QualType) (ex: TypedExpr) : InferM<TypedExpr> =
-    match (ty, ex) with
-    | (ty, TELit (_, v)) -> TELit (ty, v)
-    | (ty, TEVar (_, a)) -> TEVar (ty, a)
-    | TEApp (pt, f, x) ->
-    | TELam (pt, x, e) ->
-    | TELet (pt, x, e1, e2) ->
-    | TEIf (pt, cond, tr, fl) ->
-    | TEOp (pt, l, op, r) ->
-    | TETuple (pt, es) ->
-    | TEMatch (pt, e, bs) ->
-    | TEGroup (pt, bs, rest) ->
-    | (ty, TERaw (pt, body)) -> TERaw (ty, body) *)
 
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
     traverseTypedExpr (applyQualType s >> just) ex
@@ -526,6 +513,12 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         let! uni = mapM (fun (l, r) -> unify l r) uni
         // Compose all intermediate substitutions
         let qt = (List.fold Set.union Set.empty ps, List.head typs)
+
+        //match getMatchError uenv (snd <| getExprType (List.head (List.rev te1))) (List.map fst bs) with
+        //| Some err -> return! typeError err
+        //| _ -> ()
+        testFoo ()
+
         return qt, TEMatch (qt, List.head te1, List.zip (List.map fst bs) te2)
     | EGroup (bs, rest) ->
         // Generate fresh vars for each binding, and put then in the environment
@@ -640,7 +633,7 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
-        let nusr = extend usr name (List.length typs)
+        let nusr = extend usr name (typs, cases)
         // Gather all user type usages
         let usages = List.map gatherUserTypesUsages (List.map snd cases)
         let usages = List.fold Set.union Set.empty usages
@@ -667,7 +660,7 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
                             let! sc = generalize (Set.empty, (TArrow (typ, ret)))
                             return case, sc
                          }) cases
-        return (nenv, [name, (List.length typs)], [], []), TDUnion (name, typs, cases)
+        return (nenv, [name, (typs, cases)], [], []), TDUnion (name, typs, cases)
     | DClass (name, reqs, mems) ->
         let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])

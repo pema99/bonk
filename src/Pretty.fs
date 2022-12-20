@@ -2,13 +2,6 @@ module Pretty
 
 open Repr
 
-let rec prettyPattern pat =
-    match pat with
-    | PName a -> a
-    | PTuple pats  -> String.concat ", " (List.map prettyPattern pats)
-    | PUnion (case, pat) -> sprintf "%s %s" case (prettyPattern pat)
-    | _ -> "?"
-
 let printColor str =
     let rec cont str =
         match str with
@@ -118,3 +111,11 @@ let rec prettyValue v =
     | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
     | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
     | VClosure _ | VUnionCtor _ | VIntrinsic _ | VOverload _ -> "Closure"
+
+let prettyLiteral = function
+    | LInt v -> string v
+    | LBool v -> string v
+    | LFloat v -> string v
+    | LString v -> sprintf "\"%s\"" v
+    | LChar v -> sprintf "'%c'" v
+    | LUnit -> "()"
