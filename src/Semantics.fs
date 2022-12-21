@@ -5,6 +5,20 @@ module Semantics
 open Repr
 open Pretty
 
+// The code below performs exhaustiveness checking for pattern matching.
+// It is quite heavily based on the Rust compilers implementation:
+// - https://doc.rust-lang.org/nightly/nightly-rustc/rustc_mir_build/thir/pattern/usefulness/index.html
+// Which in turn is based on this paper from Inria:
+// - http://moscova.inria.fr/~maranget/papers/warn/index.html
+//
+// The basic idea is, given a set of patterns P, and a new pattern Q, to compute a 'usefulnes' metric for Q.
+// Concretely, this is a possibly empty set of values (represented as patterns that match them),
+// which are matched by Q, but not by any of the patterns in P. Once we have the ability to calculate this,
+// we can determine whether the patterns in P are exhaustive, by calculating the usefulness of the wildcard
+// pattern. If a wildcard can match _anything_ which P cannot, then P is not exhaustive. A similar idea can
+// be used to calculate reachability.
+
+// Different kinds of patterns, not all corresponding to patterns in the source language.
 type PatternCtor =
     | PCTuple                 // Tuples. K-ary ctor.
     | PCVariant of string     // Variant with given idx. K-ary ctor.
@@ -14,22 +28,25 @@ type PatternCtor =
     | PCIntRange of int * int // Int range low-high (or bools), both inclusive.
     | PCOpaque                // Opaque type with nothing known
 
+// Flat representation of a pattern, easy to manipulate.
 type DeconstructedPattern = {
     ctor: PatternCtor
     fields: DeconstructedPattern list
     ty: Type
 }
 
+// Stuff we need while running the algorithm.
 type PatternCtx = {
-    colTy: Type
-    env: UserEnv
+    colTy: Type  // Type of values matched by pattern in the current leftmost matrix column.
+    env: UserEnv // Used for looking up user-defined types.
 }
 
-type PatternStack = DeconstructedPattern list
-type PatternMatrix = PatternStack list
-type PatternFields = DeconstructedPattern list
-type Witness = DeconstructedPattern list
+type PatternStack = DeconstructedPattern list  // Matrix row.
+type PatternMatrix = PatternStack list         // Full matrix.
+type PatternFields = DeconstructedPattern list // Fields contained in a deconstructed pattern.
+type Witness = DeconstructedPattern list       // Witness of usefulness, equivalent to a row.
 
+// Convert a pattern to a deconstructed pattern.
 let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : DeconstructedPattern =
     match (pat, ty) with
     | (PName _, ty) ->
@@ -51,6 +68,7 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
     | _ ->
         failwith "Invalid call to deconstructPattern"
 
+// Used for creating fake versions of a pattern with all fields replace by wildcards.
 let wildcardsFromTypes (tys: Type list) : PatternFields =
     List.map (fun ty -> { ctor = PCWildcard; fields = []; ty = ty}) tys
 
@@ -60,13 +78,14 @@ let wildcards (colTy: Type) (ctor: PatternCtor) : PatternFields =
     | (PCVariant _, TCtor (KSum _, tys)) -> wildcardsFromTypes tys // TODO: Is this right?!!!!!!!!
     | _ -> []
 
-// S(c, pat)
+// Specialize 'pat' with 'ctor', yielding either nothing if the constructor doesn't match,
+// or the fields contained within 'pat' if it does.
 let rec specialize (colTy: Type) (ctor: PatternCtor) (pat: DeconstructedPattern) : PatternStack =
     match (pat.ctor, ctor) with
     | (PCWildcard, _) -> wildcards colTy ctor 
     | _ -> pat.fields
 
-// Does 'self' match a subset of what 'other' does?
+// Does 'self' match a subset of the values that 'other' matches?
 let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     match self, other with
     | (_, PCWildcard) -> true
@@ -80,6 +99,7 @@ let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     | (PCNonExhaustive, _) -> false
     | _ -> failwith "Incompatible constructors"
 
+// Specialization for an entire matrix.
 let rec popHeadConstructor (colTy: Type) (pat: PatternStack) (ctor: PatternCtor) : PatternStack =
     let newFields = pat |> List.head |> specialize colTy ctor
     newFields @ List.tail pat
@@ -89,6 +109,8 @@ let rec specializeMatrix (colTy: Type) (ctor: PatternCtor) (mat: PatternMatrix) 
     |> List.filter (fun row -> isCoveredBy ctor (List.head row).ctor)
     |> List.map (fun row -> popHeadConstructor colTy row ctor)
 
+// Split the wildcard pattern for a type into all possible pattern constructors for the type,
+// modulo those already matched by patterns in the matrix, ie. 'ctors'.
 let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor list * PatternCtor list * PatternCtor list) =
     let allCtors =
         match ctx.colTy with
@@ -112,6 +134,9 @@ let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor
         allCtors |> List.filter (fun ctor -> not <| List.exists (isCoveredBy ctor) matrixCtors)
     (matrixCtors, allCtors, missingCtors)
 
+// Split a pattern constructor into all possible concrete pattern constructors corresponding to it,
+// modulo those already matched by patterns in the matrix, ie. 'ctors'. This basically tells us what
+// which possible patterns we have left to check during our run of the algorithm.
 and splitConstructor (ctx: PatternCtx) (self: PatternCtor) (ctors: PatternCtor list) : PatternCtor list =
     match self with
     | PCWildcard ->
@@ -139,6 +164,7 @@ and splitConstructor (ctx: PatternCtx) (self: PatternCtor) (ctors: PatternCtor l
             |> List.map PCIntRange
     | _ -> [self]
 
+// Apply a constructor to a witness. Inverse of specialization.
 let applyConstructor (colTy: Type) (witness: Witness) (ctor: PatternCtor) : Witness =
     let arity =
         match (ctor, colTy) with
@@ -152,6 +178,7 @@ let applyConstructor (colTy: Type) (witness: Witness) (ctor: PatternCtor) : Witn
     }
     newPat :: List.skip arity witness
 
+// Same as above but for entire matrix.
 let applyConstructorMatrix (ctx: PatternCtx) (witnesses: Witness list) (mat: PatternMatrix) (ctor: PatternCtor) : Witness list =
     match witnesses with
     | [] -> []
