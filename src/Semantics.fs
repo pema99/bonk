@@ -169,7 +169,7 @@ type PatternCtor =
     | PCNonExhaustive         // Things that can't be matched exhaustively. Nullary ctor.
     | PCWildcard              // Wildcard (name) patterns. Nullary ctor.
     | PCMissing               // Missing pattern
-    | PCRange of Literal Set  // Range of things of we have seen
+    | PCIntRange of int * int // Int range low-high (or bools), both inclusive.
     | PCOpaque                // Opaque type with nothing known
 
 type DeconstructedPattern = {
@@ -196,10 +196,16 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
         { ctor = PCTuple; fields = List.map2 (deconstructPattern env) tys ps; ty = ty }
     | (PUnion (name, pat), TCtor (KSum _, tys)) ->
         { ctor = PCVariant name; fields = List.map (fun nty -> deconstructPattern env nty pat) tys; ty = ty } // TODO: Is this right?!!!!!!!!!
-    | (PConstant (LUnit), ty) -> // TODO: Is this right?
-        { ctor = PCTuple; fields = []; ty = ty }
     | (PConstant c, ty) ->
-        { ctor = PCRange (Set.singleton c); fields = []; ty = ty }
+        let ctor = 
+            match c with
+            | LBool v   -> PCIntRange (if v then (1,1) else (0,0))
+            | LChar v   -> PCIntRange (int v, int v)
+            | LInt v    -> PCIntRange (v, v)
+            | LUnit     -> PCTuple
+            | LFloat v  -> PCOpaque
+            | LString _ -> PCOpaque
+        { ctor = ctor; fields = []; ty = ty }
     | _ ->
         failwith "Invalid call to deconstructPattern"
 
@@ -226,7 +232,7 @@ let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     | (PCWildcard, _) -> false
     | (PCTuple, PCTuple) -> true
     | (PCVariant a, PCVariant b) -> a = b
-    | (PCRange a, PCRange b) -> Set.isSubset a b
+    | (PCIntRange (lf,lt), PCIntRange (rf,rt)) -> lf >= rf && lt <= rt
     | (PCOpaque, _) -> false
     | (_, PCOpaque) -> false
     | (PCNonExhaustive, _) -> false
@@ -244,11 +250,11 @@ let rec specializeMatrix (colTy: Type) (ctor: PatternCtor) (mat: PatternMatrix) 
 let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor list * PatternCtor list * PatternCtor list) =
     let allCtors =
         match ctx.colTy with
-        | TConst "bool" -> [PCRange (Set [LBool false]); PCRange (Set [LBool true])] // TODO: PCRange!!!!
-        | TConst "int" -> [PCNonExhaustive]
+        | TConst "bool" -> [PCIntRange (0, 1)]
+        | TConst "int" -> [PCIntRange (System.Int32.MinValue, System.Int32.MaxValue)]
         | TConst "float" -> [PCNonExhaustive]
         | TConst "string" -> [PCNonExhaustive]
-        | TConst "char" -> [PCNonExhaustive]
+        | TConst "char" -> [PCIntRange (int System.Char.MinValue, int System.Char.MaxValue)]
         | TConst "unit" -> [PCTuple]
         | TCtor (KProduct, _) -> [PCTuple]
         | TCtor (KSum name, tys) ->
@@ -275,6 +281,20 @@ and splitConstructor (ctx: PatternCtx) (self: PatternCtor) (ctors: PatternCtor l
                 [PCWildcard]
             else
                 [PCMissing]
+    | PCIntRange (f, t) ->
+        let subtractRanges (lf, lt) (rf, rt) =
+            if rf <= lf && rt >= lt then []               // completely contained
+            else if lf > rt then [(lf, lt)]               // no overlap
+            else if lt < rf then [(lf, lt)]               // no overlap
+            else if rt < lt && rf <= lf then [(rt+1, lt)] // cut off left side
+            else if rt >= lt && rf > lf then [(lf, rf-1)] // cut off right side
+            else [(lf, rf-1); (rt+1, lt)]                 // split into 2 intervals
+        ctors
+            |> List.choose (function PCIntRange (a, b) -> Some (a, b) | _ -> None) // extract ranges
+            |> List.fold (fun fs (a, b) ->                                         // remove ranges 1 by 1
+                List.collect (fun me -> subtractRanges me (a, b)) fs
+                ) [(f, t)]
+            |> List.map PCIntRange
     | _ -> [self]
 
 let applyConstructor (colTy: Type) (witness: Witness) (ctor: PatternCtor) : Witness =
@@ -332,7 +352,7 @@ let testFoo () =
     ]
     let fakeType = TCtor (KSum "Option", [tBool])
     let fakePats: PatternMatrix = [
-        [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool true)))]
+        //[deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool true)))]
         [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool false)))]
         [deconstructPattern fakeUEnv fakeType (PUnion ("None", PName "_"))]
         //[deconstructPattern fakeUEnv fakeType (PConstant (LBool false))]
