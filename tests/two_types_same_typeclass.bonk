@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Two types, same typeclass
+
 // Types should unify to the same predicate
 
 class Show =

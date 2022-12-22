@@ -1,4 +1,6 @@
-// Let bindings should allow polymorphic values
+// Mode: types
+// Prelude: false
+// Description: Let polymorphism works
 
 // Both in type constructors
 let id1 = [x] x in 

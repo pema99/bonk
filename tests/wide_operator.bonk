@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Wide operators parse correctly
+
 // Ensure that most wide operators work as expected
 
 // Arrow is a wide operator

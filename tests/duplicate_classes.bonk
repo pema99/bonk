@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Duplicate typeclass mentions
+
 // We shouldn't get 2 predicates in the type even though we mention it twice
 
 class Show =

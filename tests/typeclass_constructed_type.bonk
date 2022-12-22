@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Typeclass instance for constructed type
+
 // Test that implementing a typeclass for a constructed type works
 
 class Add =

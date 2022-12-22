@@ -1,3 +1,7 @@
+// Mode: values
+// Prelude: true
+// Description: Typeclasses for polymorphic types
+
 // Typeclasses work with polymorphic types
 
 class Add =

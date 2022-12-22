@@ -1,3 +1,7 @@
+// Mode: values
+// Prelude: true
+// Description: Basic overload resolution works
+
 // Test overload resolution, choosing between multiple typeclass instances
 
 class Show =

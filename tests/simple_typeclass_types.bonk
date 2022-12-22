@@ -1,4 +1,6 @@
-// A simple test for typeclass implementation
+// Mode: types
+// Prelude: false
+// Description: Simple typeclass test #1
 
 class MyClass =
     | add : this -> this -> this

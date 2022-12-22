@@ -1,3 +1,7 @@
+// Mode: values
+// Prelude: true
+// Description: Missing typeclass causes error
+
 // Typeclass error for missing class
 
 member List 'a of Add =

@@ -1,3 +1,7 @@
+// Mode: types, values
+// Prelude: true
+// Description: Mutual recursion
+
 rec even = [n]
 	not (odd n)
 and odd = [n]

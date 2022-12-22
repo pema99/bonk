@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Simple raw block usage.
+
 // Typed raw block
 // console_log :: 'a -> unit
 let console_log = [x] $unit$ console.log(x) $$ in

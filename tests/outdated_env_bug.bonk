@@ -1,3 +1,7 @@
+// Mode: types
+// Prelude: false
+// Description: Outdated environment regression
+
 // Note to self:
 // This bug happened because I wasn't updating the typing environment
 // often enough. I fixed it by applying the current substitution to the

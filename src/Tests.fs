@@ -54,9 +54,15 @@ let testTypes prelude file =
         do! loadLibrary true (File.ReadAllText inputPath)
         return! listTypes
     }
-    match runReplAction prelude action with
-    | Ok s -> compareOrBless (file + "_types") s
-    | _ -> Error "Failed to run REPL action."
+    use sw = new StringWriter()
+    let old = Console.Out
+    Console.SetOut(sw)
+    let res =
+        match runReplAction prelude action with
+        | Ok s -> compareOrBless (file + "_types") s
+        | _ -> Error "Failed to run REPL action."
+    Console.SetOut(old)
+    res
 
 let testValues prelude file =
     let inputPath = "tests/" + file + ".bonk"
@@ -106,22 +112,52 @@ let tests = [
     "Invalid typeclass for polymorphic types", fun () -> testValues true "typeclass_polymorphic_invalid"
 ]
 
+let findTests() =
+    let rxMode = System.Text.RegularExpressions.Regex("//\s*Mode:\s*([A-Za-z, ]*)")
+    let rxPrelude = System.Text.RegularExpressions.Regex("//\s*Prelude:\s*([A-Za-z]*)")
+    let rxDesc = System.Text.RegularExpressions.Regex("//\s*Description:\s*([A-Za-z, ]*)")
+    let tests = 
+        Directory.GetFiles("tests", "*.bonk")
+        |> Seq.collect (fun path ->
+            let fname = Path.GetFileNameWithoutExtension path
+            let content = File.ReadAllText path
+            let mode = if rxMode.Match(content).Groups.Count > 1 then rxMode.Match(content).Groups.[1].Value.ToLower() else "values"
+            let prelude = if rxPrelude.Match(content).Groups.Count > 1 then rxPrelude.Match(content).Groups.[1].Value.ToLower() else "true"
+            let prelude = if prelude = "true" then true else false
+            let desc = if rxDesc.Match(content).Groups.Count > 1 then rxDesc.Match(content).Groups.[1].Value else fname
+            if mode.Contains "values" && mode.Contains "types" then
+                [
+                    desc + ", test types.", fun () -> testTypes prelude fname
+                    desc + ", test value.", fun () -> testValues prelude fname
+                ]
+            else if mode.Contains "values" then
+                [
+                    desc, fun () -> testValues prelude fname
+                ]
+            else if mode.Contains "types" then
+                [
+                    desc, fun () -> testTypes prelude fname
+                ]
+            else
+                failwith <| sprintf "Invalid test mode '%s'." mode
+            )
+        |> Seq.toList
+    ("Prelude types match", testPrelude) :: tests
+
 let startTests() =
+    printfn "Running tests..."
     let results = List.map (fun (name, body) ->
         match body() with
         | Ok () ->
-            Ok <| sprintf "| %-40s | Pass" name
-        | Error err ->
-            Error <| sprintf "| %-40s | Fail\n\t%s" name err) tests
-    printfn "Running tests..."
-    for res in results do
-        match res with
-        | Ok s    -> 
             Console.ForegroundColor <- ConsoleColor.Green
-            printfn "%s" s
-        | Error s ->
+            let res = sprintf "| %-40s | Pass" name
+            printfn "%s" res
+            Ok res
+        | Error err ->
             Console.ForegroundColor <- ConsoleColor.Red
-            printfn "%s" s
+            let res = sprintf "| %-40s | Fail\n\t%s" name err
+            printfn "%s" res
+            Error res) (findTests())
     Console.ResetColor()
     let passed, failed =
         List.partition (fun x -> match x with Ok _ -> true | _ -> false) results

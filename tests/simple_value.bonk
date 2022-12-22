@@ -1,3 +1,7 @@
+// Mode: values
+// Prelude: true
+// Description: Simple value test
+
 // Print out some values very simply
 let _ = print (toString 3) in
 let _ = print "\nHello, World" in

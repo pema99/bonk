@@ -1,3 +1,7 @@
+// Mode: values
+// Prelude: false
+// Description: Wrong typeclass implementation fails #1
+
 // Test a wrong implementation of a typeclass fails
 
 class Show =
