@@ -20,7 +20,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - A tiny standard library (see `lib/bonk/prelude.bonk`).
 
 # Example code
-I solved quite a few problems from Advent of Code 2022 using bonk, [view them here](https://github.com/pema99/bonk/tree/master/examples/aoc2022).
+I solved quite a few problems from Advent of Code 2022 using bonk, [view the solutions here](https://github.com/pema99/bonk/tree/master/examples/aoc2022).
 
 I've also [implemented a few common persistent data structures](https://github.com/pema99/bonk/blob/master/examples/data_structures.bonk) including heaps, stacks, queues, and AA trees (similar to red-black trees).
 
