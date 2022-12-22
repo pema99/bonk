@@ -51,7 +51,9 @@ rec buildFileTree = [lines] [cd] [tree]
             let dnode = Dir (dir, Nil()) in
             buildFileTree t cd (addNode (reverse cd) dnode tree)
         else
-            let Cons(size, Cons(name, _)) = splitString ' ' line in
+            let res = splitString ' ' line in
+            let size = getOption "" (nth 0 res) in
+            let name = getOption "" (nth 1 res) in
             let fnode = File (name, toInt size) in 
             buildFileTree t cd (addNode (reverse cd) fnode tree)
     | Nil () -> tree

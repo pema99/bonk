@@ -42,7 +42,7 @@ rec parseList = [line]
                 parseListInner rest (Cons (next, acc))
         | Nil () -> (acc, line)
     in
-    let Cons ("[", line) = line in
+    let line = skip 1 line in
     let (next, rest) = parseListInner line (Nil ()) in
     (Lst (reverse next), rest)
 in

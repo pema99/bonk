@@ -27,7 +27,9 @@ in
 rec expand = [lines] [acc]
     match lines with
     | Cons (h, t) ->
-        let Cons (dir, Cons (len, _2)) = splitString ' ' h in
+        let res = splitString ' ' h in
+        let dir = getOption "" (nth 0 res) in
+        let len = getOption "" (nth 1 res) in
         let len = toInt len in
         let steps = replicate dir len in
         let acc = append acc steps in

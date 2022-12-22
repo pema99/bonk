@@ -228,20 +228,40 @@ let check = state
 let runCheckM (m: CheckM<'t>) : Result<'t, string> =
     m ((), ()) |> fst
 
+let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : CheckM<unit> = check {
+    let patMatrix = List.map (deconstructPattern env matcher >> List.singleton) pats
+    let wildcardPat = [deconstructPattern env matcher (PName "_")]
+    let witnesses = isUseful env patMatrix wildcardPat
+    if not <| List.isEmpty witnesses then
+        let f = fst sp
+        do! failure <| sprintf "Error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
+    }
+
+
 let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
-    traverseTypedDecls (fun ex -> check {
-        match ex.kind with
-        | EMatch (e1, bs) ->
-            let (_, typ) = getExprType e1
-            let pats = List.map fst bs
-            let patMatrix = List.map (deconstructPattern env typ >> List.singleton) pats
-            let wildcardPat = [deconstructPattern env typ (PName "_")]
-            let witnesses = isUseful env patMatrix wildcardPat
-            if List.isEmpty witnesses then
+    traverseTypedDecls 
+        (fun ex -> check {
+            match ex.kind with
+            | EMatch (e1, bs) ->
+                do! checkMatch env (ex.span) (snd e1.data) (List.map fst bs)
                 return ex
-            else
-                let f = fst ex.span
-                return! failure <| sprintf "Error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
-        | _ -> return ex
-    }) just decls
+            | ELet (p, e1, e2) ->
+                do! checkMatch env (ex.span) (snd e1.data) [p]
+                return ex
+            | ELam (p, e) ->
+                match snd ex.data with
+                | TArrow (inp, oup) ->
+                    do! checkMatch env (ex.span) inp [p]
+                    return ex
+                | _ -> return ex
+            | _ -> return ex
+        })
+        (fun decl -> check {
+            match decl.kind with
+            | DLet (p, e) ->
+                do! checkMatch env (decl.span) (snd e.data) [p]
+                return decl
+            | _ -> return decl
+        })
+        decls
     |> runCheckM

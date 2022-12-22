@@ -24,7 +24,7 @@ rec solution = [lines] [cyc] [x] [acc] [mem]
             let cyc = cyc + 1 in
             solution t cyc x acc mem
         else
-            let Cons (_1, Cons (arg, _2)) = splitString ' ' h in
+            let arg = getOption "" (nth 1 (splitString ' ' h)) in
             let arg = toInt arg in
             let acc = if isInteresting cyc then acc + cyc * x else acc in
             let mem = drawPixel cyc x mem in

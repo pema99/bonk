@@ -9,7 +9,10 @@ let posToIdx = [(x,y,z)] ((z) * 50 + y) * 50 + x in
 rec parseLines = [lines] [tree] [lst]
     match lines with
     | Cons (h, t) ->
-        let Cons (x, Cons(y, Cons(z, _))) = splitString ',' h in
+        let res = splitString ',' h in
+        let x = getOption "" (nth 0 res) in
+        let y = getOption "" (nth 1 res) in
+        let z = getOption "" (nth 2 res) in
         let pos = (toInt x, toInt y, toInt z) in
         let tree = aaInsert (posToIdx pos) 1 tree in
         parseLines t tree (Cons (pos, lst))
