@@ -38,7 +38,6 @@ let rec ftvType (t: Type) : string Set =
     match t with
     | TConst _ -> Set.empty
     | TVar a -> Set.singleton a
-    | TArrow (t1, t2) -> Set.union (ftvType t1) (ftvType t2)
     | TCtor (_, args) -> args |> List.map ftvType |> List.fold Set.union Set.empty
 
 let applyType =
@@ -46,7 +45,6 @@ let applyType =
         match t with
         | TConst _ -> t
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
-        | TArrow (t1, t2) -> TArrow (applyTypeFP s t1 , applyTypeFP s t2)
         | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
     fixedPoint applyTypeFP
 
@@ -154,7 +152,6 @@ and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     | a, b when a = b -> return Map.empty
     | TVar a, b when not (occurs a b) -> return Map.ofList [(a, b)]
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
-    | TArrow (l1, r1), TArrow (l2, r2) -> return! mguList [l1; r1] [l2; r2]
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
         return! mguList lts rts
     | _ ->
@@ -189,7 +186,6 @@ let isHNF (p: Pred) : bool =
         match p with
         | TVar _ -> true
         | TConst _ -> false
-        | TArrow (_, _) -> false
         | TCtor (_, _) -> false
     cont (snd p) // TODO: Is this fine?
 
@@ -218,7 +214,7 @@ let instanceOf ((_, instances): Class) (ty: Type) : InferM<bool> = infer {
     match ty with
     | TConst tc ->
         return List.contains (TConst tc) instances
-    | TArrow _ | TCtor _ ->
+    | TCtor _ ->
         // Technically this should apply to type vars as well, but my logic is too brittle for that.
         let! state = get
         let overloads = List.map (fun impl -> fst <| mgu ty impl state) instances
@@ -250,7 +246,6 @@ let reduce (ps: Pred Set) : InferM<Pred Set> = infer {
 let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
     match t with
     | TVar _ | TConst _ -> Set.empty
-    | TArrow (l, r) -> Set.union (gatherUserTypesUsages l) (gatherUserTypesUsages r)
     | TCtor (kind, lts) ->
         let inner = List.map gatherUserTypesUsages lts
         let inner = List.fold Set.union Set.empty inner
@@ -307,14 +302,14 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
         | Some sc ->
             // Instantiate it with new fresh variables
             match! instantiate sc with
-            | ps, TArrow (inp, TCtor (KSum name, oup)) -> 
+            | ps, TCtor (KArrow, [inp; TCtor (KSum name, oup)]) -> 
                 // Make a fresh type variable for the pattern being bound
                 let! tv = fresh
                 // Gather constrains from the inner pattern matched with the fresh type variable
                 let! env = gatherPatternConstraints env pat (Set.union pd ps, tv) poly
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
-                do! unify (TArrow (inp, TCtor (KSum name, oup))) (TArrow (tv, ty))
+                do! unify (TCtor (KArrow, [inp; TCtor (KSum name, oup)])) (TCtor (KArrow, [tv; ty]))
                 return env
             | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
         | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
@@ -368,7 +363,7 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         let! tv = fresh
         let! (p1, t1), tf = inferExpr f
         let! (p2, t2), tx = inferExpr x
-        do! unify t1 (TArrow (t2, tv))
+        do! unify t1 (TCtor (KArrow, [t2; tv]))
         let qt = (Set.union p1 p2, tv)
         return qt, mkTypedExpr (EApp (tf, tx)) qt inExp.span
     | ELam (x, e) ->
@@ -377,14 +372,14 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
             let! tv = fresh
             let! _ = getTypeEnv
             let! (p1, t1), te = withTypeEnv x (toScheme tv) (inferExpr e)
-            let qt = (p1, TArrow (tv, t1))
+            let qt = (p1, TCtor (KArrow, [tv; t1]))
             return qt, mkTypedExpr (ELam (PName x, te)) qt inExp.span
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
             let! env = getTypeEnv
             let! env = gatherPatternConstraints env (PTuple x) (Set.empty, (TCtor (KProduct, tvs))) false
             let! (p1, t1), te = inTypeEnv env (inferExpr e)
-            let qt = (p1, TArrow (TCtor (KProduct, tvs), t1))
+            let qt = (p1, TCtor (KArrow, [TCtor (KProduct, tvs); t1]))
             return qt, mkTypedExpr (ELam (PTuple x, te)) qt inExp.span
         | _->
             return! typeError <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
@@ -405,7 +400,7 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         let! tv = fresh
         let scheme = Map.find op opSchemes
         let! (p3, inst) = instantiate scheme
-        do! unify (TArrow (t1, TArrow (t2, tv))) inst
+        do! unify (TCtor (KArrow, [t1; TCtor (KArrow, [t2; tv])])) inst
         let qt = (Set.unionMany [p1; p2; p3], tv)
         return qt, mkTypedExpr (EOp (tl, op, tr)) qt inExp.span
     | ETuple es ->
@@ -563,7 +558,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         // Put placeholder constructors for each variant in the environment
         let! _ = getTypeEnv
         let! nenv = mapM (fun (case, typ) -> infer {
-                            let! sc = generalize (Set.empty, (TArrow (typ, ret)))
+                            let! sc = generalize (Set.empty, (TCtor (KArrow, [typ; ret])))
                             return case, sc
                          }) cases
         return (nenv, [name, (typs, cases)], [], []), mkTypedDecl (DUnion (name, typs, cases)) inDecl.span

@@ -19,8 +19,6 @@ let rec compatible (l: QualType) (r: QualType) : bool =
         true
     | (qs, TVar a), b | b, (qs, TVar a) ->
         true // TODO!!!
-    | (ql, TArrow (lf, lt)), (qr, TArrow (rf, rt)) -> // arrow types, check both sides
-        compatible (ql, lf) (qr, rf) && compatible (ql, lt) (qr, rt)
     | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
         let qls = List.map (fun a -> ql, a) ls
         let qrs = List.map (fun a -> qr, a) rs
@@ -29,7 +27,7 @@ let rec compatible (l: QualType) (r: QualType) : bool =
 
 let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
     match overload, args with
-    | { kind = ELam (_, rest); data = (qt, TArrow (a, _)) }, h :: t ->
+    | { kind = ELam (_, rest); data = (qt, TCtor (KArrow, [a; _])) }, h :: t ->
         compatible (qt, a) h && candidate rest t
     | _, [] -> true 
     | _ -> false

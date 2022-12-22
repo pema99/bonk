@@ -138,7 +138,6 @@ let rec renameInType (map: Map<string, Type>) (ty: Type) : Type =
     match ty with
     | TVar name -> Map.tryFind name map |> Option.defaultValue ty
     | TCtor (a, tys) -> TCtor (a, List.map (renameInType map) tys)
-    | TArrow (a, b) -> TArrow (renameInType map a, renameInType map b)
     | _ -> ty
 
 // Instantiate the type of a union variant, given the class name, variant name, and types

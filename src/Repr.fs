@@ -92,17 +92,27 @@ and UntypedDecl = DeclRaw<unit, unit>
 and TypedExpr = ExprRaw<QualType>
 and TypedDecl = DeclRaw<QualType, unit>
 
+// Primitive types
+and PrimType =
+    | TInt
+    | TBool
+    | TFloat
+    | TString
+    | TChar
+    | TVoid
+    | TUnit
+    | TOpaque
+
 // Kinds of type constructors
 and Kind =
-    | KSum   of string
+    | KSum of string
     | KProduct
+    | KArrow
 
 // Concrete types
-// TODO: Unify these into a simpler repr
 and Type =
     | TVar   of string
-    | TConst of string
-    | TArrow of Type * Type
+    | TConst of PrimType
     | TCtor  of Kind * Type list
 
 // Type predicates, used to handle typeclasses
@@ -127,14 +137,14 @@ type SumBinding = string * (string list * (string * Type) list)
 type EnvUpdate = VarBinding list * SumBinding list * ClassBinding list * ImplBinding list
 
 // Primitive types
-let tInt = TConst "int"
-let tBool = TConst "bool"
-let tFloat = TConst "float"
-let tString = TConst "string"
-let tChar = TConst "char"
-let tVoid = TConst "void"
-let tUnit = TConst "unit"
-let tOpaque = TConst "opaque"
+let tInt = TConst TInt
+let tBool = TConst TBool
+let tFloat = TConst TFloat
+let tString = TConst TString
+let tChar = TConst TChar
+let tVoid = TConst TVoid
+let tUnit = TConst TUnit
+let tOpaque = TConst TOpaque
 
 // Just for REPL
 type Value =

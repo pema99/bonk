@@ -28,10 +28,6 @@ let prettyTypeName (i: int) : string =
 let rec renameFreshInner (t: Type) subst count =
     match t with
     | TConst _ -> t, subst, count
-    | TArrow (l, r) ->
-        let (r1, subst1, count1) = renameFreshInner l subst count
-        let (r2, subst2, count2) = renameFreshInner r subst1 count1
-        TArrow (r1, r2), subst2, count2
     | TVar a ->
         match Map.tryFind a subst with
         | Some v -> TVar v, subst, count
@@ -62,9 +58,17 @@ let renameFreshQualType (t: QualType) =
 
 let rec prettyTypeInner (t: Type) : string =
     match t with
-    | TConst v -> v
+    | TConst v ->
+        match v with
+        | TInt -> "int"
+        | TBool -> "bool"
+        | TFloat -> "float"
+        | TString -> "string"
+        | TChar -> "char"
+        | TVoid -> "void"
+        | TUnit -> "unit"
+        | TOpaque -> "opaque"
     | TVar v -> sprintf "'%s" v
-    | TArrow (l, r) -> sprintf "(%s -> %s)" (prettyTypeInner l) (prettyTypeInner r) 
     | TCtor (kind, args) ->
         match kind with
         | KProduct _ ->
@@ -81,6 +85,10 @@ let rec prettyTypeInner (t: Type) : string =
                 |> String.concat ", "
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
+        | KArrow ->
+            match args with
+            | [l; r] -> sprintf "(%s -> %s)" (prettyTypeInner l) (prettyTypeInner r)
+            | _ -> failwith "Invalid arrow type"
 
 let prettyType =
     renameFreshType >> prettyTypeInner

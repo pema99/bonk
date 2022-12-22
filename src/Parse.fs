@@ -102,7 +102,7 @@ let productP =
     |> attempt
 
 let arrowP =
-    chainR1 (productP <|> typeTermP) (tok Arrow *> just (curry TArrow))
+    chainR1 (productP <|> typeTermP) (tok Arrow *> just (fun a b -> TCtor (KArrow, [a;b])))
 
 typePImpl := arrowP
 

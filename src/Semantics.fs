@@ -121,12 +121,12 @@ let rec specializeMatrix (ctx: PatternCtx) (ctor: PatternCtor) (mat: PatternMatr
 let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor list * PatternCtor list * PatternCtor list) =
     let allCtors =
         match ctx.colTy with
-        | TConst "bool" -> [PCIntRange (0, 1)]
-        | TConst "int" -> [PCIntRange (System.Int32.MinValue, System.Int32.MaxValue)]
-        | TConst "float" -> [PCNonExhaustive]
-        | TConst "string" -> [PCNonExhaustive]
-        | TConst "char" -> [PCIntRange (int System.Char.MinValue, int System.Char.MaxValue)]
-        | TConst "unit" -> [PCTuple]
+        | TConst TBool -> [PCIntRange (0, 1)]
+        | TConst TInt -> [PCIntRange (System.Int32.MinValue, System.Int32.MaxValue)]
+        | TConst TFloat -> [PCNonExhaustive]
+        | TConst TString -> [PCNonExhaustive]
+        | TConst TChar -> [PCIntRange (int System.Char.MinValue, int System.Char.MaxValue)]
+        | TConst TUnit -> [PCTuple]
         | TCtor (KProduct, _) -> [PCTuple]
         | TCtor (KSum name, _) ->
             match Map.tryFind name ctx.env with
@@ -249,7 +249,7 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
                 return ex
             | ELam (p, _) ->
                 match snd ex.data with
-                | TArrow (inp, _) ->
+                | TCtor (KArrow, [inp; _]) ->
                     do! checkMatch env (ex.span) inp [p]
                     return ex
                 | _ -> return ex

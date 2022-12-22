@@ -90,8 +90,6 @@ let rec compatible (l: QualType) (r: QualType) : bool =
         true
     | (qs, TVar a), b | b, (qs, TVar a) ->
         true // TODO!!!
-    | (ql, TArrow (lf, lt)), (qr, TArrow (rf, rt)) -> // arrow types, check both sides
-        compatible (ql, lf) (qr, rf) && compatible (ql, lt) (qr, rt)
     | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
         let qls = List.map (fun a -> ql, a) ls
         let qrs = List.map (fun a -> qr, a) rs
@@ -100,7 +98,7 @@ let rec compatible (l: QualType) (r: QualType) : bool =
 
 let rec candidate (overload: QualType) (args: QualType list) : bool =
     match overload, args with
-    | (ql, TArrow (lf, lt)), h :: t ->
+    | (ql, TCtor (KArrow, [lf; lt])), h :: t ->
         compatible (ql, lf) h && candidate (ql, lt) t
     | _, [] -> true 
     | _ -> false
@@ -112,7 +110,7 @@ let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExp
 
 let rec calcArityType (ty: Type) : int =
     match ty with
-    | TArrow (_, b) -> 1 + calcArityType b
+    | TCtor (KArrow, [_; b]) -> 1 + calcArityType b
     | _ -> 0
 
 let rec matchPattern tenv pat (v: AbstractValue) =
