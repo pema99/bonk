@@ -7,6 +7,7 @@ open System
 open System.Globalization
 
 open Repr
+open ReprUtil
 open Lex
 
 // Helpers
@@ -14,8 +15,8 @@ let tok tar = satisfy (fst >> (=) tar)
 let parens p =  between (tok LParen) p (tok RParen)
 let optParens p = parens p <|> p
 
-let constructSpan ((_, (start, _)): Spanned<'t>) ((_, (_, stop)): Spanned<'t>) : Span =
-    (start, stop)
+let spanBetweenExprs (start: UntypedExpr) (stop: UntypedExpr) : Span =
+    (fst start.span, snd stop.span)
 
 let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
     // Get token about to be parsed
@@ -29,8 +30,19 @@ let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
     let state = state :?> ArrayCombinatorState<Spanned<Token>>
     let stop = state.Toks.[min (state.Offset-1) (state.Toks.Length-1)]
     // Construct span
-    let spanned = (res, constructSpan start stop)
-    return spanned
+    let (spanStart, _) = (snd start)
+    let (_, spanEnd) = (snd stop)
+    return (res, (spanStart, spanEnd))
+}
+
+let spannedExprP p : Com<UntypedExpr, Spanned<Token>> = com {
+    let! res = spannedP p
+    return mkExpr (fst res) (snd res)
+}
+
+let spannedDeclP p : Com<UntypedDecl, Spanned<Token>> = com {
+    let! res = spannedP p
+    return { kind = (fst res); span = (snd res); data = () }
 }
 
 let extract ex =
@@ -95,25 +107,25 @@ let arrowP =
 typePImpl := arrowP
 
 // Expressions
-let exprP, exprPImpl = declParser()
+let (exprP, exprPImpl) = declParser()
 
 let groupP =
     spannedP (parens (sepBy1 exprP (tok Comma)))
     |>> fun (s, sp) ->
-        if List.length s > 1 then (ETuple s, sp)
+        if List.length s > 1 then mkExpr (ETuple s) sp
         else List.head s
 
 let varP =
     identP
     |> attempt
     |>> EVar
-    |> spannedP
+    |> spannedExprP
 
 let lamP =
     between (tok LBrack) patP (tok RBrack)
     <+> exprP
     |>> ELam
-    |> spannedP
+    |> spannedExprP
 
 let letGroupP =
     ((tok Rec *> identP <* opP Equal) <+> exprP) <+>
@@ -122,7 +134,7 @@ let letGroupP =
     <+> exprP
     |>> fun ((a,b),c) ->
         EGroup (a::b,c)
-    |> spannedP
+    |> spannedExprP
 
 let letP =
     (tok Let) 
@@ -131,42 +143,44 @@ let letP =
     <+> exprP
     |>> (fun ((a, b), c) ->
         ELet (a, b, c))
-    |> spannedP
+    |> spannedExprP
 
 let matchP =
     tok Match *> exprP <* tok With <* opt (tok Pipe)
     <+> sepBy1 (patP <* tok Arrow <+> exprP) (tok Pipe)
     |>> EMatch
-    |> spannedP
+    |> spannedExprP
 
 let ifP =
     tok If *> exprP
     <+> tok Then *> exprP
     <+> tok Else *> exprP
     |>> (fun ((a, b), c) -> EIf (a, b, c))
-    |> spannedP
+    |> spannedExprP
 
 let opFunP =
-    (spannedP (parens (anyOpP))
+    spannedP (parens (anyOpP))
     |>> fun (op, s) ->
-        (ELam (PName "x",
-            (ELam (PName "y",
-                (EOp ((EVar "x", s), op, (EVar "y", s)), s)), s)), s))
+        (mkExpr (ELam (PName "x",
+            mkExpr (ELam (PName "y",
+                mkExpr (EOp (mkExpr (EVar "x") s, op, mkExpr (EVar "y") s)) s)) s)) s)
     |> attempt
 
-// Cons (e, ac)
 let listLiteralP =
     spannedP (between (tok LBrace) (sepBy exprP (tok Semicolon)) (tok RBrace))
     |>> fun (lst, span) ->
         lst
         |> List.rev
         |> List.fold
-            (fun acc (e, s) -> EApp ((EVar "Cons", s), (ETuple [(e, s); acc], s)), s)
-            (EApp ((EVar "Nil", span), (ELit LUnit, span)), span)
+            (fun acc e ->
+                mkExpr (EApp (
+                    mkExpr (EVar "Cons") e.span, 
+                        mkExpr (ETuple [mkExpr e.kind e.span; acc]) e.span)) e.span)
+            (mkExpr (EApp (mkExpr (EVar "Nil") span, mkExpr (ELit LUnit) span)) span)
 
 let nonAppP =
     opFunP
-    <|> (literalP |>> ELit |> spannedP)
+    <|> (literalP |>> ELit |> spannedExprP)
     <|> groupP
     <|> varP
     <|> listLiteralP
@@ -177,11 +191,11 @@ let appP =
     <|> letP
     <|> matchP
     <|> ifP
-    <|> chainL1 nonAppP (just <| fun l r -> (EApp (l, r), constructSpan l r))
+    <|> chainL1 nonAppP (just <| fun l r -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
 
 let specificBinOpP op =
     opP op
-    *> just (curry <| fun (l, r) -> (EOp (l, op, r), constructSpan l r))
+    *> just (curry <| fun (l, r) -> mkExpr (EOp (l, op, r)) (spanBetweenExprs l r))
 let chooseBinOpP = List.map (specificBinOpP) >> choice
 
 let termP = appP
@@ -192,16 +206,16 @@ let boolOpP = chainL1 comparisonP (chooseBinOpP [BoolAnd; BoolOr])
 
 let pipeRightP =
     tok PipeRight
-    *> just (curry <| fun (l, r) -> (EApp (r, l), constructSpan l r))
+    *> just (curry <| fun (l, r) -> mkExpr (EApp (r, l)) (spanBetweenExprs l r))
 let pipeLeftP =
     tok PipeLeft
-    *> just (curry <| fun (l, r) -> (EApp (l, r), constructSpan l r))
+    *> just (curry <| fun (l, r) -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
 let pipeOpP = chainR1 (chainL1 boolOpP pipeRightP) pipeLeftP
 
 let unOpP = 
     (opP Minus)
     <+> exprP
-    |>> fun (_, e) -> (EOp ((EOp (e, Minus, e), snd e), Minus, e), snd e)
+    |>> fun (_, e) -> mkExpr (EOp (mkExpr (EOp (e, Minus, e)) e.span, Minus, e)) e.span
 
 let rawP =
     com {
@@ -218,9 +232,9 @@ let rawP =
                 |> typeP
                 |> fst
             match typ with
-            | Success typ -> return ERaw (Some typ, body)
+            | Success typ -> return ERaw (Some (Set.empty, typ), body)
             | _ -> return! fail()
-    } |> spannedP
+    } |> spannedExprP
 
 exprPImpl := pipeOpP <|> unOpP <|> rawP
 
@@ -265,6 +279,7 @@ let declExprP =
 
 let declP =
     declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP
+    |> spannedDeclP
 
 let importsP =
     many (tok Import *> stringP)

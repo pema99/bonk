@@ -230,8 +230,8 @@ let runCheckM (m: CheckM<'t>) : Result<'t, string> =
 
 let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
     traverseTypedDecls (fun ex -> check {
-        match ex with
-        | TEMatch (qt, e1, bs) ->
+        match ex.kind with
+        | EMatch (e1, bs) ->
             let (_, typ) = getExprType e1
             let pats = List.map fst bs
             let patMatrix = List.map (deconstructPattern env typ >> List.singleton) pats
@@ -240,8 +240,8 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
             if List.isEmpty witnesses then
                 return ex
             else
-                // TODO: Spans in typed exprs
-                return! failure "Match is not exhaustive"
+                let f = fst ex.span
+                return! failure <| sprintf "Error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
         | _ -> return ex
     }) just decls
     |> runCheckM
