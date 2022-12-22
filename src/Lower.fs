@@ -135,23 +135,23 @@ and evalPattern (tenv: AbstractTermEnv) pat v =
     | nv ->
         List.fold (fun env (name, va) -> extend env name va) tenv nv
 
-and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = lower {
-    match e with
-    | TELit (qt, _) ->
-        return e, AVType qt
-    | TEOp (qt, l, op, r) ->
+and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> = lower {
+    match inExpr.kind with
+    | ELit (_) ->
+        return inExpr, AVType inExpr.data
+    | EOp (l, op, r) ->
         let! e1, v1 = gatherOverloadsExpr l
         let! e2, v2 = gatherOverloadsExpr r
-        return TEOp (qt, e1, op, e2), combinePartials v1 v2
-    | TEVar (qt, a) ->
+        return { inExpr with kind = EOp (e1, op, e2) }, combinePartials v1 v2
+    | EVar (a) ->
         let! tenv = getAbtractTermEnv
         match lookup tenv a with
         | Some (AVPartialTemplate (name, arity, overloads)) ->
             let! id = freshId
-            return TEVar (qt, getMonomorphizedName id), AVPartialApplied (name, arity, overloads, Set.singleton id, [])
-        | Some v -> return e, v
-        | _ -> return e, AVType qt
-    | TEApp (qt, f, x) ->
+            return { inExpr with kind = EVar (getMonomorphizedName id) }, AVPartialApplied (name, arity, overloads, Set.singleton id, [])
+        | Some v -> return inExpr, v
+        | _ -> return inExpr, AVType inExpr.data
+    | EApp (f, x) ->
         let! clos, closval = gatherOverloadsExpr f
         let! arg, argval = gatherOverloadsExpr x
         match closval with
@@ -168,34 +168,34 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
                     let resolved = Set.fold (fun acc id -> extend acc id mangled) resolved ids
                     do! set (a, (resolved, b))
                 | _ -> () // TODO: Handle error!
-            return TEApp (qt, clos, arg), AVPartialApplied (name, arity, overloads, ids, applied)
+            return { inExpr with kind = EApp (clos, arg) }, AVPartialApplied (name, arity, overloads, ids, applied)
         | _ ->
-            return TEApp (qt, clos, arg), AVType qt
-    | TELam (qt, x, t) ->
+            return { inExpr with kind = EApp (clos, arg) }, AVType inExpr.data
+    | ELam (x, t) ->
         let! body, bodyval = gatherOverloadsExpr t
-        return TELam (qt, x, body), AVType qt
-    | TELet (qt, x, v, t) ->
+        return { inExpr with kind = ELam (x, body) }, AVType inExpr.data
+    | ELet (x, v, t) ->
         let! value, valueval = gatherOverloadsExpr v
         let! body, bodyval = local (fun tenv -> evalPattern tenv x valueval) (gatherOverloadsExpr t)
-        return TELet (qt, x, value, body), bodyval
-    | TEGroup (qt, bs, rest) ->
+        return { inExpr with kind = ELet (x, value, body) }, bodyval
+    | EGroup (bs, rest) ->
         let! bss =
             mapM (fun (x, v) -> lower {
                 let! value, valueval = gatherOverloadsExpr v
                 return x, value
             }) bs
         let! rest, restval = gatherOverloadsExpr rest
-        return TEGroup (qt, bss, rest), restval
-    | TEIf (qt, c, tr, fl) ->
+        return { inExpr with kind = EGroup (bss, rest) }, restval
+    | EIf (c, tr, fl) ->
         let! cond, condval = gatherOverloadsExpr c
         let! trueb, truebval = gatherOverloadsExpr tr
         let! falseb, falsebval = gatherOverloadsExpr fl
-        return TEIf (qt, cond, trueb, falseb), combinePartials truebval falsebval
-    | TETuple (qt, es) ->
+        return { inExpr with kind = EIf (cond, trueb, falseb) }, combinePartials truebval falsebval
+    | ETuple (es) ->
         let! res = mapM gatherOverloadsExpr es
         let es, esvals = List.unzip res
-        return TETuple (qt, es), AVTuple esvals
-    | TEMatch (qt, e, xs) ->
+        return { inExpr with kind = ETuple (es) }, AVTuple esvals
+    | EMatch (e, xs) ->
         let! e, eval = gatherOverloadsExpr e
         let! xss =
             mapM (fun (pat, body) -> lower {
@@ -206,38 +206,38 @@ and gatherOverloadsExpr (e: TypedExpr) : LowerM<TypedExpr * AbstractValue> = low
         let rest, restvals = List.unzip rest
         let restvals =
             if List.length restvals = 0 then
-                AVType qt
+                AVType inExpr.data
             else
                 List.fold combinePartials (List.head restvals) restvals
-        return TEMatch (qt, e, List.zip pats rest), restvals 
-    | TERaw (qt, body) ->
-        return e, AVType qt
+        return { inExpr with kind = EMatch (e, List.zip pats rest) }, restvals 
+    | ERaw (_, body) ->
+        return inExpr, AVType inExpr.data
     }
 
 let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
-    match decl with
-    | TDExpr expr -> 
+    match decl.kind with
+    | DExpr expr -> 
         let! expr, _ = gatherOverloadsExpr expr
-        return TDExpr expr
-    | TDLet (pat, expr) ->
+        return { decl with kind = DExpr expr }
+    | DLet (pat, expr) ->
         let! e, v = gatherOverloadsExpr expr
         let! tenv = getAbtractTermEnv
         let bindings = matchPattern tenv pat v
         let tenv = extendEnv tenv bindings
         do! setAbtractTermEnv tenv
-        return TDLet (pat, e)
-    | TDGroup (es) -> // TODO Bindings
+        return { decl with kind = DLet (pat, e) }
+    | DGroup (es) -> // TODO Bindings
         let! exprs =
             mapM (fun (a, b) -> lower {
                 let! b, _ = gatherOverloadsExpr b 
                 return a, b
             }) es
-        return TDGroup exprs
-    | TDUnion (name, tvs, cases) ->
-        return TDUnion (name, tvs, cases)
-    | TDClass (blankets, pred, impls) ->
-        return TDClass (blankets, pred, impls) // TODO: Checking?
-    | TDMember (blankets, pred, impls) ->
+        return { decl with kind = DGroup exprs }
+    | DUnion (name, tvs, cases) ->
+        return { decl with kind = DUnion (name, tvs, cases) }
+    | DClass (blankets, pred, impls) ->
+        return { decl with kind = DClass (blankets, pred, impls) } // TODO: Checking?
+    | DMember (blankets, pred, impls) ->
         let addMember (s, e) = lower {
             let! tenv = getAbtractTermEnv
             match lookup tenv s with
@@ -250,7 +250,7 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
                 do! setAbtractTermEnv tenv
         }
         do! mapM_ addMember impls
-        return TDMember (blankets, pred, impls)
+        return { decl with kind = DMember (blankets, pred, impls) }
     }
 
 let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
@@ -260,10 +260,10 @@ let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
         mdecls
         |> List.map (mapTypedDecl (fun ex ->
             match ex with
-            | TEVar (pt, name) when name.StartsWith(monomorphPrefix) -> // TODO: Unsafe
+            | EVar (name) when name.StartsWith(monomorphPrefix) -> // TODO: Unsafe
                 let id = int <| name.Substring(monomorphPrefix.Length)
                 match lookup overloads id with
-                | Some mangled -> TEVar (pt, mangled)
+                | Some mangled -> EVar (mangled)
                 | _ -> ex // TODO: This is the case where a monomorphable type is ambiguous, should report it
             | _ -> ex
             ) id)
@@ -327,31 +327,32 @@ let shadowNewString (name: string) : ShadowM<string * (ShadowEnv -> ShadowEnv)> 
     return name, mapper
 }
 
-let rec renameShadowedVarsInExpr (e: TypedExpr) : ShadowM<TypedExpr> = shadow {
-    match e with
-    | TELit (qt, _) ->
-        return e
-    | TEOp (qt, l, op, r) ->
+// TODO: Use ReprUtil for this
+let rec renameShadowedVarsInExpr (inExpr: TypedExpr) : ShadowM<TypedExpr> = shadow {
+    match inExpr.kind with
+    | ELit (_) ->
+        return inExpr
+    | EOp (l, op, r) ->
         let! e1 = renameShadowedVarsInExpr l
         let! e2 = renameShadowedVarsInExpr r
-        return TEOp (qt, e1, op, e2)
-    | TEVar (qt, a) ->
+        return { inExpr with kind = EOp (e1, op, e2) }
+    | EVar (a) ->
         let! renamed = renameShadowed a
-        return TEVar (qt, renamed)
-    | TEApp (qt, f, x) ->
+        return { inExpr with kind = EVar (renamed) }
+    | EApp (f, x) ->
         let! clos = renameShadowedVarsInExpr f
         let! arg = renameShadowedVarsInExpr x
-        return TEApp (qt, clos, arg)
-    | TELam (qt, x, t) ->
+        return { inExpr with kind = EApp (clos, arg) }
+    | ELam (x, t) ->
         let! pat, mapper = shadowNewName x
         let! body = local mapper (renameShadowedVarsInExpr t)
-        return TELam (qt, pat, body)
-    | TELet (qt, x, v, t) ->
+        return { inExpr with kind = ELam (pat, body) }
+    | ELet (x, v, t) ->
         let! pat, mapper = shadowNewName x
         let! value = renameShadowedVarsInExpr v
         let! body = local mapper (renameShadowedVarsInExpr t)
-        return TELet (qt, pat, value, body)
-    | TEGroup (qt, bs, rest) ->
+        return { inExpr with kind = ELet (pat, value, body) }
+    | EGroup (bs, rest) ->
         let! bss =
             // TODO: Think this should technically be a fold over the mappers. Oh well.
             mapM (fun (x, v) -> lower {
@@ -362,16 +363,16 @@ let rec renameShadowedVarsInExpr (e: TypedExpr) : ShadowM<TypedExpr> = shadow {
         let bsss, mappers = bss |> List.unzip
         let mapper = List.fold (>>) id mappers
         let! rest = local mapper (renameShadowedVarsInExpr rest)
-        return TEGroup (qt, bsss, rest)
-    | TEIf (qt, c, tr, fl) ->
+        return { inExpr with kind = EGroup (bsss, rest) }
+    | EIf (c, tr, fl) ->
         let! cond = renameShadowedVarsInExpr c
         let! trueb = renameShadowedVarsInExpr tr
         let! falseb = renameShadowedVarsInExpr fl
-        return TEIf (qt, cond, trueb, falseb)
-    | TETuple (qt, es) ->
+        return { inExpr with kind = EIf (cond, trueb, falseb) }
+    | ETuple (es) ->
         let! res = mapM renameShadowedVarsInExpr es
-        return TETuple (qt, res)
-    | TEMatch (qt, e, xs) ->
+        return { inExpr with kind = ETuple (res) }
+    | EMatch (e, xs) ->
         let! e = renameShadowedVarsInExpr e
         let! xss =
             // Intentionally don't extract bindings here,
@@ -382,23 +383,23 @@ let rec renameShadowedVarsInExpr (e: TypedExpr) : ShadowM<TypedExpr> = shadow {
                 return pat, value 
             }) xs
         let pats, rest = List.unzip xss
-        return TEMatch (qt, e, List.zip pats rest)
-    | TERaw (qt, body) ->
-        return e
+        return { inExpr with kind = EMatch (e, List.zip pats rest) }
+    | ERaw (_, body) ->
+        return inExpr
     }
 
 let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
-    match decl with
-    | TDExpr expr -> 
+    match decl.kind with
+    | DExpr expr -> 
         let! expr = renameShadowedVarsInExpr expr
-        return TDExpr expr
-    | TDLet (pat, expr) ->
+        return { decl with kind = DExpr expr }
+    | DLet (pat, expr) ->
         let! e = renameShadowedVarsInExpr expr
         let! pat, mapper = shadowNewName pat
         let! senv = getShadowEnv
         do! setShadowEnv (mapper senv)
-        return TDLet (pat, e)
-    | TDGroup (es) -> // TODO Bindings
+        return { decl with kind = DLet (pat, e) }
+    | DGroup (es) -> // TODO Bindings
         let! exprs =
             mapM (fun (pat, e) -> lower {
                 let! e = renameShadowedVarsInExpr e
@@ -408,18 +409,18 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
                 do! setShadowEnv (mapper senv)
                 return pat, e
             }) es
-        return TDGroup exprs
-    | TDUnion (name, tvs, cases) ->
-        return TDUnion (name, tvs, cases)
-    | TDClass (blankets, pred, impls) ->
-        return TDClass (blankets, pred, impls)
-    | TDMember (blankets, pred, impls) ->
+        return { decl with kind = DGroup exprs }
+    | DUnion (name, tvs, cases) ->
+        return { decl with kind = DUnion (name, tvs, cases) }
+    | DClass (blankets, pred, impls) ->
+        return { decl with kind = DClass (blankets, pred, impls) }
+    | DMember (blankets, pred, impls) ->
         let! impls = 
             mapM (fun (name, expr) -> lower {
                 let! expr = renameShadowedVarsInExpr expr
                 return name, expr
             }) impls
-        return TDMember (blankets, pred, impls)
+        return { decl with kind = DMember (blankets, pred, impls) }
     }
 
 let renamedShadowedVarsInDecls (decls: TypedDecl list) : TypedDecl list =

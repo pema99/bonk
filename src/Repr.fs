@@ -65,7 +65,7 @@ and ExprKind<'t> =
     | ETuple of ExprRaw<'t> list
     | EMatch of ExprRaw<'t> * (Pattern * ExprRaw<'t>) list
     | EGroup of (string * ExprRaw<'t>) list * ExprRaw<'t>
-    | ERaw   of Type option * string // TODO: This should be QualType, not Type
+    | ERaw   of QualType option * string
 
 and ExprRaw<'t> = {
     kind: ExprKind<'t>
@@ -81,14 +81,16 @@ and DeclKind<'t> =
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
     | DMember of Pred Set * Pred * (string * ExprRaw<'t>) list     // blankets, pred, impls
 
-and DeclRaw<'t> = {
-    akind: DeclKind<'t>
-    aspan: Span
-    adata: 't
+and DeclRaw<'t, 'u> = {
+    kind: DeclKind<'t>
+    span: Span
+    data: 'u
 }
 
-and Expr = ExprRaw<unit>
-and Decl = DeclRaw<unit>
+and UntypedExpr = ExprRaw<unit>
+and UntypedDecl = DeclRaw<unit, unit>
+and TypedExpr = ExprRaw<QualType>
+and TypedDecl = DeclRaw<QualType, unit>
 
 // Kinds of type constructors
 and Kind =
@@ -107,27 +109,6 @@ and Type =
 and Pred = (string * Type)              // ie. (Num 'a)
 and Class = (string list * Type list)   // Requirements, Instances. ie. [Ord], [Things that implement Eq]
 and QualType = (Pred Set * Type)
-
-type TypedExpr =
-    | TEVar   of QualType * string
-    | TEApp   of QualType * TypedExpr * TypedExpr
-    | TELam   of QualType * Pattern * TypedExpr
-    | TELet   of QualType * Pattern * TypedExpr * TypedExpr
-    | TELit   of QualType * Literal
-    | TEIf    of QualType * TypedExpr * TypedExpr * TypedExpr
-    | TEOp    of QualType * TypedExpr * BinOp * TypedExpr
-    | TETuple of QualType * TypedExpr list
-    | TEMatch of QualType * TypedExpr * (Pattern * TypedExpr) list
-    | TEGroup of QualType * (string * TypedExpr) list * TypedExpr 
-    | TERaw   of QualType * string
-
-type TypedDecl =
-    | TDExpr   of TypedExpr
-    | TDLet    of Pattern * TypedExpr
-    | TDGroup  of (string * TypedExpr) list
-    | TDUnion  of string * string list * (string * Type) list 
-    | TDClass  of string * string list * (string * Type) list  // name, reqs, (fname, ftype)
-    | TDMember of Pred Set * Pred * (string * TypedExpr) list // blankets, pred, impls
 
 // Type schemes for polytypes
 type Scheme = string list * QualType

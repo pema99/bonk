@@ -15,7 +15,7 @@ let tok tar = satisfy (fst >> (=) tar)
 let parens p =  between (tok LParen) p (tok RParen)
 let optParens p = parens p <|> p
 
-let spanBetweenExprs (start: Expr) (stop: Expr) : Span =
+let spanBetweenExprs (start: UntypedExpr) (stop: UntypedExpr) : Span =
     (fst start.span, snd stop.span)
 
 let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
@@ -35,14 +35,14 @@ let spannedP p : Com<Spanned<'t>, Spanned<Token>> = com {
     return (res, (spanStart, spanEnd))
 }
 
-let spannedExprP p : Com<Expr, Spanned<Token>> = com {
+let spannedExprP p : Com<UntypedExpr, Spanned<Token>> = com {
     let! res = spannedP p
     return mkExpr (fst res) (snd res)
 }
 
-let spannedDeclP p : Com<Decl, Spanned<Token>> = com {
+let spannedDeclP p : Com<UntypedDecl, Spanned<Token>> = com {
     let! res = spannedP p
-    return { akind = (fst res); aspan = (snd res); adata = () }
+    return { kind = (fst res); span = (snd res); data = () }
 }
 
 let extract ex =
@@ -232,7 +232,7 @@ let rawP =
                 |> typeP
                 |> fst
             match typ with
-            | Success typ -> return ERaw (Some typ, body)
+            | Success typ -> return ERaw (Some (Set.empty, typ), body)
             | _ -> return! fail()
     } |> spannedExprP
 

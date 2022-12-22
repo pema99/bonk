@@ -127,35 +127,35 @@ let rec hoist pat =
 
 // Does an expression contain a speficic function call
 let rec containsCall (name: string) (ex: TypedExpr) : bool =
-    match ex with
-    | TELit (pt, v)           -> false
-    | TEVar (pt, a)           -> false
-    | TEApp (pt, TEVar (ty2, n), x) when n = name -> true
-    | TEApp (pt, f, x)        -> containsCall name f || containsCall name x
-    | TELam (pt, x, e)        -> containsCall name e
-    | TELet (pt, x, e1, e2)   -> containsCall name e1 || containsCall name e2
-    | TEIf (pt, cond, tr, fl) -> containsCall name cond || containsCall name tr || containsCall name fl
-    | TEOp (pt, l, op, r)     -> containsCall name l || containsCall name r
-    | TETuple (pt, es)        -> List.exists (containsCall name) es
-    | TEMatch (pt, e, bs)     -> List.exists (containsCall name) (List.map snd bs)
-    | TEGroup (pt, bs, rest)  -> List.exists (snd >> containsCall name) bs || containsCall name rest
-    | TERaw (pt, v)           -> false
+    match ex.kind with
+    | ELit (v)           -> false
+    | EVar (a)           -> false
+    | EApp ({ kind = EVar n }, x) when n = name -> true
+    | EApp (f, x)        -> containsCall name f || containsCall name x
+    | ELam (x, e)        -> containsCall name e
+    | ELet (x, e1, e2)   -> containsCall name e1 || containsCall name e2
+    | EIf (cond, tr, fl) -> containsCall name cond || containsCall name tr || containsCall name fl
+    | EOp (l, op, r)     -> containsCall name l || containsCall name r
+    | ETuple (es)        -> List.exists (containsCall name) es
+    | EMatch (e, bs)     -> List.exists (containsCall name) (List.map snd bs)
+    | EGroup (bs, rest)  -> List.exists (snd >> containsCall name) bs || containsCall name rest
+    | ERaw _             -> false
 
 // Is a function tail recursive given its name (all recursive calls in tail position)
 let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
-    match ex with
-    | TELit (pt, v)           -> true
-    | TEVar (pt, a)           -> true
-    | TEApp (pt, TEVar (ty2, n), x) when n = name -> not (containsCall name x)
-    | TEApp (pt, f, x)        -> isTailRecursive name f && not (containsCall name x)
-    | TELam (pt, x, e)        -> isTailRecursive name e
-    | TELet (pt, x, e1, e2)   -> isTailRecursive name e2 && not (containsCall name e1)
-    | TEIf (pt, cond, tr, fl) -> isTailRecursive name tr && isTailRecursive name fl && not (containsCall name cond)
-    | TEOp (pt, l, op, r)     -> not (containsCall name l) && not (containsCall name r)
-    | TETuple (pt, es)        -> List.forall (containsCall name >> not) es
-    | TEMatch (pt, e, bs)     -> List.forall (isTailRecursive name) (List.map snd bs) && not (containsCall name e)
-    | TEGroup (pt, bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
-    | TERaw (pt, v)           -> true
+    match ex.kind with
+    | ELit (v)           -> true
+    | EVar (a)           -> true
+    | EApp ({ kind = EVar n }, x) when n = name -> not (containsCall name x)
+    | EApp (f, x)        -> isTailRecursive name f && not (containsCall name x)
+    | ELam (x, e)        -> isTailRecursive name e
+    | ELet (x, e1, e2)   -> isTailRecursive name e2 && not (containsCall name e1)
+    | EIf (cond, tr, fl) -> isTailRecursive name tr && isTailRecursive name fl && not (containsCall name cond)
+    | EOp (l, op, r)     -> not (containsCall name l) && not (containsCall name r)
+    | ETuple (es)        -> List.forall (containsCall name >> not) es
+    | EMatch (e, bs)     -> List.forall (isTailRecursive name) (List.map snd bs) && not (containsCall name e)
+    | EGroup (bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
+    | ERaw _                 -> true
 
 // Emit a literal
 let emitLit (lit: Literal) : string =
@@ -257,26 +257,26 @@ let optimizeTailRecursion (name: string) (arity: int) (ex: JsExpr) : JsExpr =
 
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
-    match ex with
-    | TELit (pt, lit) ->
+    match ex.kind with
+    | ELit (lit) ->
         JsConst (emitLit lit)
-    | TEVar (pt, a) ->
+    | EVar (a) ->
         JsVar a
-    | TEApp (pt, f, x) ->
+    | EApp (f, x) ->
         JsCall (emitExpr f, emitExpr x)
-    | TELam (pt, x, e) ->
+    | ELam (x, e) ->
         match x with
         | PName x -> JsFunc (x, [JsReturn (emitExpr e)])
         | x ->
             let fvName = "__tmp"
             let hoisted = hoist x
-            let matcher = emitPatternMatch (JsScope []) x (TEVar ((Set.empty, tVoid), fvName)) false
+            let matcher = emitPatternMatch (JsScope []) x ({ kind = EVar fvName; span = dummySpan; data = (Set.empty, tVoid) }) false
             JsFunc (fvName, 
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @ [
                     matcher
                     JsReturn (emitExpr e)
                 ])
-    | TELet (pt, x, e1, e2) ->
+    | ELet (x, e1, e2) ->
         match x with
         | PName x ->
             JsDefer (
@@ -296,27 +296,25 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                     [ JsReturn (emitExpr e2) ]
                 )
             )
-    | TEIf (pt, cond, tr, fl) -> 
+    | EIf (cond, tr, fl) -> 
         JsDefer (JsIf (emitExpr cond, [JsReturn (emitExpr tr)], Some [JsReturn (emitExpr fl)]))
-    | TEOp (pt, l, op, r) ->
-        emitOp pt op (emitExpr l) (emitExpr r)
-    | TETuple (pt, es) ->
+    | EOp (l, op, r) ->
+        emitOp (ex.data) op (emitExpr l) (emitExpr r)
+    | ETuple (es) ->
         JsList (List.map (emitExpr) es)
-    | TEMatch (pt, ex, bs) ->
-        match snd pt with
-        | _ ->
-            let hoisted = List.collect (fun (p, _) -> hoist p) bs |> List.distinct
-            let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("_matched", JsConst (string i))) p ex true) bs
-            let sw = JsSwitch (JsVar "_matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
-            JsDefer (
-                JsScope (
-                    List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
-                    [ JsDecl ("_matched", JsConst "null") ] @
-                    beg @
-                    [sw]
-                )
+    | EMatch (e1, bs) ->
+        let hoisted = List.collect (fun (p, _) -> hoist p) bs |> List.distinct
+        let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("_matched", JsConst (string i))) p e1 true) bs
+        let sw = JsSwitch (JsVar "_matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
+        JsDefer (
+            JsScope (
+                List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
+                [ JsDecl ("_matched", JsConst "null") ] @
+                beg @
+                [sw]
             )
-    | TEGroup (pt, [x, i], rest) ->
+        )
+    | EGroup ([x, i], rest) ->
         JsDefer (
             JsScope (
                 [ JsDecl (x, emitOptimizedFuncDef x i)
@@ -324,7 +322,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                 ]
             )
         )
-    | TEGroup (pt, bs, rest) ->
+    | EGroup (bs, rest) ->
         let emitted = List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
         JsDefer (
             JsScope (
@@ -332,7 +330,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
                 [ JsReturn (emitExpr rest) ]
             )
         )
-    | TERaw (pt, body) ->
+    | ERaw (_, body) ->
         JsVar body
 
 // Emit a structure that matches a pattern and adds bindings as necessary
@@ -373,9 +371,9 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
 and emitOptimizedFuncDef (name: string) (ex: TypedExpr) : JsExpr =
     let rec getArity ex =
         match ex with
-        | TELam (pt, x, e) -> 1 +  getArity e
+        | ELam (x, e) -> 1 +  getArity e.kind
         | _ -> 0
-    let arity = getArity ex
+    let arity = getArity ex.kind
     let res = emitExpr ex
     if isTailRecursive name ex
     then optimizeTailRecursion name arity res
@@ -392,11 +390,11 @@ let optimizeStmt = traverseStmt id eliminateReturnDefer
 // Emit a top level declaration
 let emitDecl (d: TypedDecl) : JsStmt list =
     let res = 
-        match d with
-        | TDExpr e ->
+        match d.kind with
+        | DExpr e ->
             [JsIgnore (emitExpr e)]
 
-        | TDLet (x, e) ->
+        | DLet (x, e) ->
             match x with
             | PName x ->
                 [ JsDecl (x, emitExpr e) ]
@@ -406,13 +404,13 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
                 [ matcher ]
 
-        | TDGroup ([x, i]) ->
+        | DGroup ([x, i]) ->
             [ JsDecl (x, emitOptimizedFuncDef x i) ]
 
-        | TDGroup (bs) ->
+        | DGroup (bs) ->
             List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
 
-        | TDUnion (name, typs, cases) ->
+        | DUnion (name, typs, cases) ->
             let case n =
                 JsDecl (n, 
                     JsFunc ("v", 
@@ -420,10 +418,10 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                             JsObject (["tag", JsConst ("\""+n+"\""); "val", JsVar "v"]))]))
             List.map (fun (n, _) -> case n) cases
         
-        | TDClass (name, reqs, mems) ->
+        | DClass (name, reqs, mems) ->
             [JsIgnore (JsVar "// TODO TYPECLASS")]
         
-        | TDMember (blankets, pred, impls) ->
+        | DMember (blankets, pred, impls) ->
             List.map (fun (name, body) ->
                 let mangled = mangleOverload name (getExprType body)
                 JsDecl (mangled, emitExpr body)) impls

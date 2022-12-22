@@ -230,8 +230,8 @@ let runCheckM (m: CheckM<'t>) : Result<'t, string> =
 
 let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
     traverseTypedDecls (fun ex -> check {
-        match ex with
-        | TEMatch (qt, e1, bs) ->
+        match ex.kind with
+        | EMatch (e1, bs) ->
             let (_, typ) = getExprType e1
             let pats = List.map fst bs
             let patMatrix = List.map (deconstructPattern env typ >> List.singleton) pats

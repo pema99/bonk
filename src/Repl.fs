@@ -29,7 +29,7 @@ let rec compatible (l: QualType) (r: QualType) : bool =
 
 let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
     match overload, args with
-    | TELam ((qt, TArrow (a, _)), x, rest), h :: t ->
+    | { kind = ELam (x, rest); data = (qt, TArrow (a, _)) }, h :: t ->
         compatible (qt, a) h && candidate rest t
     | _, [] -> true 
     | _ -> false
@@ -40,13 +40,16 @@ let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExp
     | None -> None
 
 let rec calcArity (ex: TypedExpr) : int =
-    match ex with
-    | TELam (ty, x, rest) -> 1 + calcArity rest
+    match ex.kind with
+    | ELam (x, rest) -> 1 + calcArity rest
     | _ -> 0
 
-let rec buildApp (f: TypedExpr) (args: TypedExpr list) =
+let mkFakeExpr expr: TypedExpr =
+    { kind = expr; data = (Set.empty, tVoid); span = dummySpan }
+
+let rec buildApp (f: TypedExpr) (args: TypedExpr list): TypedExpr =
     match args with
-    | h :: t -> TEApp ((Set.empty, tVoid), buildApp f t, h)
+    | h :: t -> mkFakeExpr (EApp (buildApp f t, h))
     | [] -> f
 
 let rec matchPattern tenv pat v =
@@ -54,7 +57,7 @@ let rec matchPattern tenv pat v =
     | PName a, v ->
         Some [a, v]
     | PConstant a, v ->
-        if (eval tenv (TELit ((Set.empty, tVoid), a))) = Some v then Some []
+        if (eval tenv (mkFakeExpr <| ELit a)) = Some v then Some []
         else None
     | PTuple pats, VTuple vs ->
         let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
@@ -119,21 +122,21 @@ and binop l op r =
     | _ -> None
 
 and eval tenv (e: TypedExpr) =
-    match e with
-    | TELit (_, LUnit) -> Some VUnit
-    | TELit (_, LInt v) -> Some (VInt v)
-    | TELit (_, LBool v) -> Some (VBool v)
-    | TELit (_, LFloat v) -> Some (VFloat v)
-    | TELit (_, LString v) -> Some (VString v)
-    | TELit (_, LChar v) -> Some (VChar v)
-    | TEOp (_, l, op, r) ->
+    match e.kind with
+    | ELit (LUnit) -> Some VUnit
+    | ELit (LInt v) -> Some (VInt v)
+    | ELit (LBool v) -> Some (VBool v)
+    | ELit (LFloat v) -> Some (VFloat v)
+    | ELit (LString v) -> Some (VString v)
+    | ELit (LChar v) -> Some (VChar v)
+    | EOp (l, op, r) ->
         let v1 = eval tenv l
         let v2 = eval tenv r
         match v1, v2 with
         | Some v1, Some v2 -> binop v1 op v2
         | _ -> None
-    | TEVar (_, a) -> lookup tenv a
-    | TEApp (_, f, x) ->
+    | EVar (a) -> lookup tenv a
+    | EApp (f, x) ->
         let clos = eval tenv f
         let arg = eval tenv x
         match clos, arg with
@@ -161,13 +164,13 @@ and eval tenv (e: TypedExpr) =
             else
                 Some (VOverload (lst, arity, applied))
         | _ -> None
-    | TELam (_, x, t) -> Some (VClosure ([], x, t, tenv))
-    | TELet (_, x, v, t) ->
+    | ELam (x, t) -> Some (VClosure ([], x, t, tenv))
+    | ELet (x, v, t) ->
         match eval tenv v with
         | Some ve ->
             Option.bind (fun nenv -> eval nenv t) (evalPattern tenv x ve)
         | _ -> None
-    | TEGroup (_, bs, rest) ->
+    | EGroup (bs, rest) ->
         let bootstrap selfs v =
             match v with
             | VClosure (_, x, t, env) ->
@@ -181,19 +184,19 @@ and eval tenv (e: TypedExpr) =
             |> fun selfs -> List.map (fun (name, body) -> name, bootstrap selfs body) selfs
             |> List.fold (fun acc (name, body) -> extend acc name body) tenv
             |> fun nenv -> eval nenv rest
-    | TEIf (_, c, tr, fl) ->
+    | EIf (c, tr, fl) ->
         match eval tenv c with
         | Some (VBool v) ->
             if v 
             then eval tenv tr
             else eval tenv fl 
         | _ -> None
-    | TETuple (_, es) ->
+    | ETuple (es) ->
         let ev = List.map (eval tenv) es
         let ev = List.choose id ev
         if List.length es = List.length ev then Some (VTuple ev)
         else None
-    | TEMatch (_, e, xs) ->
+    | EMatch (e, xs) ->
         match eval tenv e with
         | Some ev ->
             xs
@@ -201,7 +204,7 @@ and eval tenv (e: TypedExpr) =
             |> List.tryPick id
             |> Option.bind (fun (env, hit) -> eval env hit)
         | _ -> None
-    | TERaw (_, body) ->
+    | ERaw (_, body) ->
         None
 
 // Repl start
@@ -222,7 +225,7 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
     do! set ((typeEnv, userEnv, classEnv, freshCount), termEnv)
     }
 
-let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
+let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
     let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
@@ -260,8 +263,8 @@ let rec handleDecl silent decl = repl {
             | _ -> ()
             }) vs
         }
-    match tdecl with
-    | Some (TDExpr expr) ->
+    match Option.map (fun x -> x.kind) tdecl with
+    | Some (DExpr expr) ->
         match! checkType "it" with
         | Some typ when not silent ->
             let opt = 
@@ -270,30 +273,30 @@ let rec handleDecl silent decl = repl {
             if Option.isNone opt then
                 printfn "Evaluation error"
         | _ -> ()
-    | Some (TDLet (pat, expr)) ->
+    | Some (DLet (pat, expr)) ->
         let vs = eval tenv expr |> Option.bind (matchPattern tenv pat)
         match vs with
         | Some vs -> do! handleBindings vs
         | None -> printfn "Evaluation failure"
-    | Some (TDGroup (es)) ->
+    | Some (DGroup (es)) ->
         let vs = List.map (fun (name, ex) ->
-            eval tenv (TEGroup ((Set.empty, tVoid), es, TEVar ((Set.empty, tVoid), name)))
+            eval tenv (mkFakeExpr (EGroup (es, mkFakeExpr (EVar name))))
             |> Option.bind (matchPattern tenv (PName name))) es
         if List.exists Option.isNone vs then printfn "Evaluation failure"
         else do! handleBindings (List.choose id vs |> List.concat)
-    | Some (TDUnion (name, tvs, cases)) ->
+    | Some (DUnion (name, tvs, cases)) ->
         let ctors = List.map fst cases
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases
         do! mapM_ (fun case -> repl {
                 let decl = {
-                    akind = DLet (PName case, mkExpr (EVar case) dummySpan)
-                    aspan = dummySpan
-                    adata = ()
+                    kind = DLet (PName case, mkExpr (EVar case) dummySpan)
+                    span = dummySpan
+                    data = ()
                 }
                 return! handleDecl silent decl 
                 }) names
-    | Some (TDMember (blankets, pred, impls)) ->
+    | Some (DMember (blankets, pred, impls)) ->
         let inst = blankets, pred
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv

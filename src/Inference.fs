@@ -86,7 +86,7 @@ let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
 let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
 let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
 let withSpan x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x) m
-let withSpanOf x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x.span) m
+let withSpanOf (x: UntypedExpr) m = local (fun (te, ue, ce, sp) -> te, ue, ce, x.span) m
 let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
 let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
 let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
@@ -325,7 +325,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
-and inferBinding (pat: Pattern) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
+and inferBinding (pat: Pattern) (e1: UntypedExpr) (e2: UntypedExpr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
     // Infer the type of the value being bound
     let! (p1, t1), te1 = inferExpr e1
     // Gather constraints (substitutions, bindings) from the pattern
@@ -338,7 +338,7 @@ and inferBinding (pat: Pattern) (e1: Expr) (e2: Expr) (poly: bool) : InferM<Qual
     }
 
 // Main inference
-and inferExpr (e: Expr) : InferM<QualType * TypedExpr> = infer {
+and inferExpr (e: UntypedExpr) : InferM<QualType * TypedExpr> = infer {
     // Infer the type in the new environment
     let! (res, ex) = inferExprInner e
     // After that, collect any new substitutions from the previous inference
@@ -348,21 +348,21 @@ and inferExpr (e: Expr) : InferM<QualType * TypedExpr> = infer {
     return ty, (replaceType ex ty)
     }
 
-and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
-    withSpanOf e <| infer {
-    match e.kind with
-    | ELit (LUnit)     -> return let ty = (Set.empty, tUnit)   in ty, TELit (ty, LUnit)
-    | ELit (LInt v)    -> return let ty = (Set.empty, tInt)    in ty, TELit (ty, LInt v)
-    | ELit (LBool v)   -> return let ty = (Set.empty, tBool)   in ty, TELit (ty, LBool v)
-    | ELit (LFloat v)  -> return let ty = (Set.empty, tFloat)  in ty, TELit (ty, LFloat v)
-    | ELit (LString v) -> return let ty = (Set.empty, tString) in ty, TELit (ty, LString v)
-    | ELit (LChar v)   -> return let ty = (Set.empty, tChar)   in ty, TELit (ty, LChar v)
+and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
+    withSpanOf inExp <| infer {
+    match inExp.kind with
+    | ELit (LUnit)     -> return let ty = (Set.empty, tUnit)   in ty, mkTypedExpr (ELit (LUnit)) ty inExp.span
+    | ELit (LInt v)    -> return let ty = (Set.empty, tInt)    in ty, mkTypedExpr (ELit (LInt v)) ty inExp.span
+    | ELit (LBool v)   -> return let ty = (Set.empty, tBool)   in ty, mkTypedExpr (ELit (LBool v)) ty inExp.span
+    | ELit (LFloat v)  -> return let ty = (Set.empty, tFloat)  in ty, mkTypedExpr (ELit (LFloat v)) ty inExp.span
+    | ELit (LString v) -> return let ty = (Set.empty, tString) in ty, mkTypedExpr (ELit (LString v)) ty inExp.span
+    | ELit (LChar v)   -> return let ty = (Set.empty, tChar)   in ty, mkTypedExpr (ELit (LChar v)) ty inExp.span
     | EVar a ->
         let! env = getTypeEnv
         match lookup env a with
         | Some s ->
             let! res = instantiate s
-            return res, (TEVar (res, a))
+            return res, mkTypedExpr (EVar (a)) res inExp.span
         | None -> return! typeError <| sprintf "Use of unbound variable '%s'." a
     | EApp (f, x) ->
         let! tv = fresh
@@ -370,7 +370,7 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! (p2, t2), tx = inferExpr x
         do! unify t1 (TArrow (t2, tv))
         let qt = (Set.union p1 p2, tv)
-        return qt, TEApp (qt, tf, tx)
+        return qt, mkTypedExpr (EApp (tf, tx)) qt inExp.span
     | ELam (x, e) ->
         match x with
         | PName x ->
@@ -378,19 +378,19 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
             let! env = getTypeEnv
             let! (p1, t1), te = withTypeEnv x (toScheme tv) (inferExpr e)
             let qt = (p1, TArrow (tv, t1))
-            return qt, TELam (qt, PName x, te)
+            return qt, mkTypedExpr (ELam (PName x, te)) qt inExp.span
         | PTuple x ->
             let! tvs = mapM (fun _ -> fresh) x
             let! env = getTypeEnv
             let! env = gatherPatternConstraints env (PTuple x) (Set.empty, (TCtor (KProduct, tvs))) false
             let! (p1, t1), te = inTypeEnv env (inferExpr e)
             let qt = (p1, TArrow (TCtor (KProduct, tvs), t1))
-            return qt, TELam (qt, PTuple x, te)
+            return qt, mkTypedExpr (ELam (PTuple x, te)) qt inExp.span
         | _->
             return! typeError <| sprintf "Unimplemented match in lambda. Couldn't match '%A' with '%A'." e x
     | ELet (x, e1, e2) ->
         let! qt, te1, te2 = inferBinding x e1 e2 true
-        return qt, TELet (qt, x, te1, te2)
+        return qt, mkTypedExpr (ELet (x, te1, te2)) qt inExp.span
     | EIf (cond, tr, fl) ->
         let! (p1, t1), tc = inferExpr cond
         let! (p2, t2), tt = inferExpr tr
@@ -398,7 +398,7 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! s4 = unify t1 tBool
         let! s5 = unify t2 t3
         let qt = (Set.unionMany [p1; p2; p3], t2)
-        return qt, TEIf (qt, tc, tt, tf)
+        return qt, mkTypedExpr (EIf (tc, tt, tf)) qt inExp.span
     | EOp (l, op, r) ->
         let! (p1, t1), tl = inferExpr l
         let! (p2, t2), tr = inferExpr r
@@ -407,13 +407,13 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! (p3, inst) = instantiate scheme
         let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
         let qt = (Set.unionMany [p1; p2; p3], tv)
-        return qt, TEOp (qt, tl, op, tr)
+        return qt, mkTypedExpr (EOp (tl, op, tr)) qt inExp.span
     | ETuple es ->
         let! res = mapM inferExpr es
         let scs, xs = List.unzip res
         let ps, typs = List.unzip scs
         let qt = (List.fold Set.union Set.empty ps, TCtor (KProduct, typs))
-        return (qt, TETuple (qt, xs))
+        return (qt, mkTypedExpr (ETuple xs) qt inExp.span)
     | EMatch (e, bs) ->
         // Scan over all match branches gathering constraints from pattern matching along the way
         let! res = mapM (fun (pat, expr) -> infer {
@@ -425,7 +425,7 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         let! uni = mapM (fun (l, r) -> unify l r) uni
         // Compose all intermediate substitutions
         let qt = (List.fold Set.union Set.empty ps, List.head typs)
-        return qt, TEMatch (qt, List.head te1, List.zip (List.map fst bs) te2)
+        return qt, mkTypedExpr (EMatch (List.head te1, List.zip (List.map fst bs) te2)) qt inExp.span
     | EGroup (bs, rest) ->
         // Generate fresh vars for each binding, and put then in the environment
         let! tvs = mapM (fun _ -> fresh) bs
@@ -455,26 +455,26 @@ and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
         // Infer the body/rhs of the binding under the gathered constraints
         let! (p2, t2), te2 = inTypeEnv env (inferExpr rest)
         let qt = (p2, t2)
-        return qt, TEGroup (qt, List.zip names tes, te2)
+        return qt, mkTypedExpr (EGroup (List.zip names tes, te2)) qt inExp.span
     | ERaw (typ, body) ->
         match typ with
         | Some typ ->
             // TODO: Check typeclasses when I am able to parse QualTypes for raw blocks
             let! usr = getUserEnv
-            let usages = gatherUserTypesUsages typ
+            let usages = gatherUserTypesUsages (snd typ)
             if not <| Set.forall (checkUserTypeUsage usr) usages then
                 let bad =
                     Set.filter (checkUserTypeUsage usr >> not) usages
                     |> Set.map fst
                     |> String.concat ", "
                 return! typeError <| sprintf "Use of undeclared type constructors in raw block: %s." bad
-            return (Set.empty, typ), TERaw ((Set.empty, typ), body)
+            return typ, mkTypedExpr (ERaw (Some typ, body)) (Set.empty, tOpaque) inExp.span
         | None ->
-            return (Set.empty, tOpaque), TERaw ((Set.empty, tOpaque), body)
+            return (Set.empty, tOpaque), mkTypedExpr (ERaw (Some (Set.empty, tOpaque), body)) (Set.empty, tOpaque) inExp.span
     }
 
 // Infer and expression and then solve constraints
-let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> =
+let inferExprTop (e: UntypedExpr) : InferM<QualType * TypedExpr> =
     withSpanOf e <| infer {
     // Infer the type of the expression
     let! qt, te = inferExpr e
@@ -514,15 +514,15 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
     | _ -> [] // TODO
 
 // Infer a declaration. Returns an update to the environment.
-let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
-    match d.akind with
+let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl> = infer {
+    match inDecl.kind with
     | DExpr e ->
         let! qt, te = inferExprTop e
-        return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), TDExpr (te)
+        return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), mkTypedDecl (DExpr (te)) inDecl.span
     | DLet (name, e) ->
         let! qt, te = inferExprTop e
         let bindings = gatherVarBindings name qt
-        return (bindings, [], [], []), TDLet (name, te)
+        return (bindings, [], [], []), mkTypedDecl (DLet (name, te)) inDecl.span
     | DGroup (ds) ->
         let names, exs = List.unzip ds
         // TODO: This is sort of a hack, should fix
@@ -531,11 +531,11 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         let tes =
             List.zip names tes
             |> List.collect (fun (name, te) ->
-                match te with
-                | TEGroup (pt, bs, rest) -> List.filter (fst >> (=) name) bs
+                match te.kind with
+                | EGroup (bs, rest) -> List.filter (fst >> (=) name) bs
                 | _ -> [])
         let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
-        return (bindings, [], [], []), TDGroup (tes)
+        return (bindings, [], [], []), mkTypedDecl (DGroup (tes)) inDecl.span
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
@@ -566,11 +566,11 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
                             let! sc = generalize (Set.empty, (TArrow (typ, ret)))
                             return case, sc
                          }) cases
-        return (nenv, [name, (typs, cases)], [], []), TDUnion (name, typs, cases)
+        return (nenv, [name, (typs, cases)], [], []), mkTypedDecl (DUnion (name, typs, cases)) inDecl.span
     | DClass (name, reqs, mems) ->
         let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])
-        return (vars, [], [cls], []), TDClass (name, reqs, mems)
+        return (vars, [], [cls], []), mkTypedDecl (DClass (name, reqs, mems)) inDecl.span
     | DMember (blankets, pred, exprs) ->
         // TODO: Semantic checking
         // o Check that the typeclass exists
@@ -615,12 +615,12 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
         // let! ps = reduce (List.concat apreds @ List.concat epreds)
         // Make the implementation to extend the class environment with
         // Return the class implementation and the type-annotated expression for each function
-        return ([], [], [], [pred]), TDMember (blankets, pred, List.zip names aexprs)
+        return ([], [], [], [pred]), mkTypedDecl (DMember (blankets, pred, List.zip names aexprs)) inDecl.span
     }
 
 // TODO: Deduplicate some of the code in Repl
 // Infer a decl, update the environment underways
-let rec inferDecl (d: Decl) : InferM<TypedDecl> = infer {
+let rec inferDecl (d: UntypedDecl) : InferM<TypedDecl> = infer {
     let applyEnvUpdate (up: EnvUpdate) : InferM<unit> = infer {
         let! (typeEnv, userEnv, classEnv, span), other = get
         let (typeUp, userUp, classUp, implUp) = up
@@ -636,5 +636,5 @@ let rec inferDecl (d: Decl) : InferM<TypedDecl> = infer {
     }
 
 // Infer multiple decls, update the environment underways
-let inferDecls (decls: Decl list) : InferM<TypedDecl list> =
+let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
     mapM inferDecl decls
