@@ -8,6 +8,7 @@ open Inference
 open Prelude
 open Lower
 open CodeGen
+open Semantics
 
 let loadCodeFile (from: string) (path: string) : string =
     let fromPath = if from = "" then "" else Path.GetDirectoryName from
@@ -57,7 +58,9 @@ let startCompile prelude output files =
         |> List.reduce (joinResult (fun a b -> a @ b))
     match ast with
     | Success decls ->
-        let res, ((_,_,_,loc),_) = inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
+        let res, ((typeEnv,userEnv,classEnv,loc),_) =
+            inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
+        let res = Result.bind (checkMatches userEnv) res
         match res with
         | Ok decls ->
             let decls = lowerDecls decls

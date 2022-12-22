@@ -1,7 +1,7 @@
 module Tests
 
 open Repr
-open Inference
+open ReprUtil
 open Prelude
 open Parse
 open Repr

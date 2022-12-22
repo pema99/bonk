@@ -9,9 +9,11 @@
 module Inference
 
 open Repr
+open ReprUtil
 open Monad
 open Pretty
 open Prelude
+open Semantics
 
 // Substitutions
 type Substitution = Map<string, Type>
@@ -80,9 +82,6 @@ let applyEnv =
     fixedPoint applyEnvFP
 
 // Environment helpers
-let extend env x s = Map.add x s env
-let lookup env x = Map.tryFind x env
-let remove env x = Map.remove x env
 let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
 let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
 let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
@@ -102,7 +101,6 @@ let getTypeEnv = infer { // This just applies the current substitution whenever 
     let! subs = getSubstitution
     return applyEnv subs env
 }
-let extendEnv env up = List.fold (fun env (name, v) -> extend env name v) env up
 let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
     match lookup cls name with
     | Some (reqs, impls) -> extend cls name (reqs, inst :: impls)
@@ -263,110 +261,11 @@ let rec gatherUserTypesUsages (t: Type) : Set<string * int> =
 // Check if a usage of a user type is valid (correct arity)
 let rec checkUserTypeUsage (usr: UserEnv) (name: string, arity: int) : bool =
     match lookup usr name with
-    | Some v when v = arity -> true
+    | Some (v, _) when List.length v = arity -> true
     | _ -> false
 
-// Replace a type in a typed expression
-let replaceType (ex: TypedExpr) (ty: QualType) : TypedExpr =
-    match ex with
-    | TELit (pt, v)           -> TELit (ty, v)
-    | TEVar (pt, a)           -> TEVar (ty, a)
-    | TEApp (pt, f, x)        -> TEApp (ty, f, x) 
-    | TELam (pt, x, e)        -> TELam (ty, x, e)
-    | TELet (pt, x, e1, e2)   -> TELet (ty, x, e1, e2)
-    | TEIf (pt, cond, tr, fl) -> TEIf (ty, cond, tr, fl)
-    | TEOp (pt, l, op, r)     -> TEOp (ty, l, op, r)
-    | TETuple (pt, es)        -> TETuple (ty, es)
-    | TEMatch (pt, e, bs)     -> TEMatch (ty, e, bs)
-    | TEGroup (pt, a, b)      -> TEGroup (ty, a, b)
-    | TERaw (pt, body)        -> TERaw (ty, body)
-
-// Get type out of a typed expression
-let getExprType ex = 
-    match ex with
-    | TELit (pt, v)           -> pt
-    | TEVar (pt, a)           -> pt
-    | TEApp (pt, f, x)        -> pt
-    | TELam (pt, x, e)        -> pt
-    | TELet (pt, x, e1, e2)   -> pt
-    | TEIf (pt, cond, tr, fl) -> pt
-    | TEOp (pt, l, op, r)     -> pt
-    | TETuple (pt, es)        -> pt
-    | TEMatch (pt, e, bs)     -> pt
-    | TEGroup (pt, a, b)      -> pt
-    | TERaw (pt, body)        -> pt
-
-// Traverse a typed AST and apply some transformation to each type
-let rec traverseTypedExpr (s: QualType -> InferM<QualType>) (ex: TypedExpr) : InferM<TypedExpr> = infer {
-    match ex with
-    | TELit (pt, v) ->
-        let! pt = s pt
-        return TELit (pt, v)
-    | TEVar (pt, a) ->
-        let! pt = s pt
-        return TEVar (pt, a)
-    | TEApp (pt, f, x) ->
-        let! pt = s pt
-        let! f = traverseTypedExpr s f
-        let! x = traverseTypedExpr s x
-        return TEApp (pt, f, x) 
-    | TELam (pt, x, e) ->
-        let! pt = s pt
-        let! e = traverseTypedExpr s e
-        return TELam (pt, x, e)
-    | TELet (pt, x, e1, e2) ->
-        let! pt = s pt
-        let! e1 = traverseTypedExpr s e1
-        let! e2 = traverseTypedExpr s e2
-        return TELet (pt, x, e1, e2)
-    | TEIf (pt, cond, tr, fl) ->
-        let! pt = s pt
-        let! cond = traverseTypedExpr s cond
-        let! tr = traverseTypedExpr s tr
-        let! fl = traverseTypedExpr s fl
-        return TEIf (pt, cond, tr, fl)
-    | TEOp (pt, l, op, r) ->
-        let! pt = s pt
-        let! l = traverseTypedExpr s l
-        let! r = traverseTypedExpr s r
-        return TEOp (pt, l, op, r)
-    | TETuple (pt, es) ->
-        let! pt = s pt
-        let! es = mapM (traverseTypedExpr s) es
-        return TETuple (pt, es)
-    | TEMatch (pt, e, bs) ->
-        let! pt = s pt
-        let! e = traverseTypedExpr s e
-        let bs1 = List.map fst bs
-        let! bs2 = mapM (snd >> traverseTypedExpr s) bs
-        return TEMatch (pt, e, List.zip bs1 bs2)
-    | TEGroup (pt, bs, rest) ->
-        let! pt = s pt
-        let bs1 = List.map fst bs
-        let! bs2 = mapM (snd >> traverseTypedExpr s) bs
-        let! rest = traverseTypedExpr s rest
-        return TEGroup (pt, List.zip bs1 bs2, rest)
-    | TERaw (pt, body) ->
-        let! pt = s pt
-        return TERaw (pt, body)
-    }
-
-(*let rec traverseTypedExpr (ty: QualType) (ex: TypedExpr) : InferM<TypedExpr> =
-    match (ty, ex) with
-    | (ty, TELit (_, v)) -> TELit (ty, v)
-    | (ty, TEVar (_, a)) -> TEVar (ty, a)
-    | TEApp (pt, f, x) ->
-    | TELam (pt, x, e) ->
-    | TELet (pt, x, e1, e2) ->
-    | TEIf (pt, cond, tr, fl) ->
-    | TEOp (pt, l, op, r) ->
-    | TETuple (pt, es) ->
-    | TEMatch (pt, e, bs) ->
-    | TEGroup (pt, bs, rest) ->
-    | (ty, TERaw (pt, body)) -> TERaw (ty, body) *)
-
 let rec applyTypedExpr (s: Substitution) (ex: TypedExpr) : InferM<TypedExpr> =
-    traverseTypedExpr (applyQualType s >> just) ex
+    mapTypeInTypedExpr (applyQualType s >> just) ex
 
 // Given a pattern and a type to match, recursively walk the pattern and type, gathering information along the way.
 // Information gathered is in form of substitutions and changes to the typing environment (bindings). If the 'poly'
@@ -597,7 +496,7 @@ let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
         }
     // Traverse the AST and get the most up to date type for each node
     // I don't do this along the way since it is expensive
-    let! te = traverseTypedExpr fixType te
+    let! te = mapTypeInTypedExpr fixType te
     // Do the same for the single topmost returned type
     let! qt = fixType qt
     return qt, te
@@ -640,7 +539,7 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
-        let nusr = extend usr name (List.length typs)
+        let nusr = extend usr name (typs, cases)
         // Gather all user type usages
         let usages = List.map gatherUserTypesUsages (List.map snd cases)
         let usages = List.fold Set.union Set.empty usages
@@ -667,7 +566,7 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
                             let! sc = generalize (Set.empty, (TArrow (typ, ret)))
                             return case, sc
                          }) cases
-        return (nenv, [name, (List.length typs)], [], []), TDUnion (name, typs, cases)
+        return (nenv, [name, (typs, cases)], [], []), TDUnion (name, typs, cases)
     | DClass (name, reqs, mems) ->
         let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])

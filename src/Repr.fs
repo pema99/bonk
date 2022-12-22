@@ -77,10 +77,10 @@ and Decl =
 // Kinds of type constructors
 and Kind =
     | KSum   of string
-    | KConst of string 
     | KProduct
 
 // Concrete types
+// TODO: Unify these into a simpler repr
 and Type =
     | TVar   of string
     | TConst of string
@@ -124,8 +124,8 @@ type ImplBinding = string * Type
 type TypeEnv = Map<string, Scheme> // name -> scheme
 type VarBinding = string * Scheme
 
-type UserEnv = Map<string, int>    // name -> arity
-type SumBinding = string * int
+type UserEnv = Map<string, (string list * (string * Type) list)>    // name -> tvars, (string * type) list
+type SumBinding = string * (string list * (string * Type) list)
 
 type EnvUpdate = VarBinding list * SumBinding list * ClassBinding list * ImplBinding list
 
