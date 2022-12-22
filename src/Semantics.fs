@@ -3,7 +3,9 @@
 module Semantics
 
 open Repr
+open ReprUtil
 open Pretty
+open Monad
 
 // The code below performs exhaustiveness checking for pattern matching.
 // It is quite heavily based on the Rust compilers implementation:
@@ -53,8 +55,11 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
         { ctor = PCWildcard; fields = []; ty = ty }
     | (PTuple ps, TCtor (KProduct, tys)) ->
         { ctor = PCTuple; fields = List.map2 (deconstructPattern env) tys ps; ty = ty }
-    | (PUnion (name, pat), TCtor (KSum _, tys)) ->
-        { ctor = PCVariant name; fields = List.map (fun nty -> deconstructPattern env nty pat) tys; ty = ty } // TODO: Is this right?!!!!!!!!!
+    | (PUnion (variant, pat), TCtor (KSum klass, tys)) ->
+        // To find the fields, we need to instantiate the specific variant
+        // since it might be generic.
+        let instCaseTy = instantiateVariant env klass variant tys
+        { ctor = PCVariant variant; fields = [deconstructPattern env instCaseTy pat]; ty = ty }
     | (PConstant c, ty) ->
         let ctor = 
             match c with
@@ -72,17 +77,19 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
 let wildcardsFromTypes (tys: Type list) : PatternFields =
     List.map (fun ty -> { ctor = PCWildcard; fields = []; ty = ty}) tys
 
-let wildcards (colTy: Type) (ctor: PatternCtor) : PatternFields =
-    match (ctor, colTy) with
+let wildcards (ctx: PatternCtx) (ctor: PatternCtor) : PatternFields =
+    match (ctor, ctx.colTy) with
     | (PCTuple, TCtor (KProduct, tys)) -> wildcardsFromTypes tys
-    | (PCVariant _, TCtor (KSum _, tys)) -> wildcardsFromTypes tys // TODO: Is this right?!!!!!!!!
+    | (PCVariant variant, TCtor (KSum klass, tys)) ->
+        let instCaseTy = instantiateVariant ctx.env klass variant tys
+        wildcardsFromTypes [instCaseTy]
     | _ -> []
 
 // Specialize 'pat' with 'ctor', yielding either nothing if the constructor doesn't match,
 // or the fields contained within 'pat' if it does.
-let rec specialize (colTy: Type) (ctor: PatternCtor) (pat: DeconstructedPattern) : PatternStack =
+let rec specialize (ctx: PatternCtx) (ctor: PatternCtor) (pat: DeconstructedPattern) : PatternStack =
     match (pat.ctor, ctor) with
-    | (PCWildcard, _) -> wildcards colTy ctor 
+    | (PCWildcard, _) -> wildcards ctx ctor 
     | _ -> pat.fields
 
 // Does 'self' match a subset of the values that 'other' matches?
@@ -100,14 +107,14 @@ let rec isCoveredBy (self: PatternCtor) (other: PatternCtor) : bool =
     | _ -> failwith "Incompatible constructors"
 
 // Specialization for an entire matrix.
-let rec popHeadConstructor (colTy: Type) (pat: PatternStack) (ctor: PatternCtor) : PatternStack =
-    let newFields = pat |> List.head |> specialize colTy ctor
+let rec popHeadConstructor (ctx: PatternCtx) (pat: PatternStack) (ctor: PatternCtor) : PatternStack =
+    let newFields = pat |> List.head |> specialize ctx ctor
     newFields @ List.tail pat
 
-let rec specializeMatrix (colTy: Type) (ctor: PatternCtor) (mat: PatternMatrix) : PatternMatrix =
+let rec specializeMatrix (ctx: PatternCtx) (ctor: PatternCtor) (mat: PatternMatrix) : PatternMatrix =
     mat
     |> List.filter (fun row -> isCoveredBy ctor (List.head row).ctor)
-    |> List.map (fun row -> popHeadConstructor colTy row ctor)
+    |> List.map (fun row -> popHeadConstructor ctx row ctor)
 
 // Split the wildcard pattern for a type into all possible pattern constructors for the type,
 // modulo those already matched by patterns in the matrix, ie. 'ctors'.
@@ -189,7 +196,7 @@ let applyConstructorMatrix (ctx: PatternCtx) (witnesses: Witness list) (mat: Pat
             let newPats =
                 missingCtors
                 |> List.map (fun missing ->
-                    let wilds = wildcards ctx.colTy missing
+                    let wilds = wildcards ctx missing
                     { ctor = missing; fields = wilds; ty = ctx.colTy })
             witnesses
             |> List.collect (fun witness ->
@@ -209,28 +216,32 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
         let splitCtors = splitConstructor ctx vCtor (List.map (fun row -> (List.head row).ctor) rows)
         let ret =
             splitCtors |> List.collect (fun ctor ->
-                let specMatrix = specializeMatrix (ctx.colTy) ctor rows
-                let v = popHeadConstructor (ctx.colTy) v ctor
+                let specMatrix = specializeMatrix ctx ctor rows
+                let v = popHeadConstructor ctx v ctor
                 let usefulness = isUseful ctx.env specMatrix v
                 applyConstructorMatrix ctx usefulness rows ctor)
         ret
 
-let testFoo () =
-    let fakeUEnv: UserEnv = Map.ofList [
-        "Option", (["a"], [("Some", TVar "a"); ("None", tUnit)])
-    ]
-    let fakeType = TCtor (KSum "Option", [tBool])
-    let fakePats: PatternMatrix = [
-        //[deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool true)))]
-        [deconstructPattern fakeUEnv fakeType (PUnion ("Some", PConstant (LBool false)))]
-        [deconstructPattern fakeUEnv fakeType (PUnion ("None", PName "_"))]
-        //[deconstructPattern fakeUEnv fakeType (PConstant (LBool false))]
+// Essentially identity monad used for error checking
+type CheckM<'t> = ReaderStateM<unit,unit,'t>
+let check = state
+let runCheckM (m: CheckM<'t>) : Result<'t, string> =
+    m ((), ()) |> fst
 
-        //[deconstructPattern fakeType (PUnion ("None", PConstant (LUnit)))]
-        //[deconstructPattern fakeType (PName "_")]
-    ]
-    let fakeNewPat: PatternStack = [deconstructPattern fakeUEnv fakeType (PName "_")]
-    let usefulness = isUseful fakeUEnv fakePats fakeNewPat
-    printfn "Useful: %A" (List.isEmpty usefulness |> not)
-    printfn "%A\n" usefulness
-    ()
+let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
+    traverseTypedDecls (fun ex -> check {
+        match ex with
+        | TEMatch (qt, e1, bs) ->
+            let (_, typ) = getExprType e1
+            let pats = List.map fst bs
+            let patMatrix = List.map (deconstructPattern env typ >> List.singleton) pats
+            let wildcardPat = [deconstructPattern env typ (PName "_")]
+            let witnesses = isUseful env patMatrix wildcardPat
+            if List.isEmpty witnesses then
+                return ex
+            else
+                // TODO: Spans in typed exprs
+                return! failure "Match is not exhaustive"
+        | _ -> return ex
+    }) just decls
+    |> runCheckM

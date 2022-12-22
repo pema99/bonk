@@ -26,7 +26,8 @@ rec solution = [lst] [chooser] [curr]
         | ('C', 'X') -> solution tail chooser (curr + score + 6)
         | ('A', 'Z') -> solution tail chooser (curr + score + 0)
         | ('B', 'X') -> solution tail chooser (curr + score + 0)
-        | ('C', 'Y') -> solution tail chooser (curr + score + 0))
+        | ('C', 'Y') -> solution tail chooser (curr + score + 0)
+        | _ -> curr)
     | Nil () -> curr
 in
 
@@ -45,6 +46,7 @@ let makeChoice = [theirs] [outcome]
     | ('C', 'X') -> 'Y'
     | ('C', 'Y') -> 'Z'
     | ('C', 'Z') -> 'X'
+    | _ -> 'X'
 in
 
 let _ = print "Part 2 solution: " in

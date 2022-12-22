@@ -88,6 +88,7 @@ rec compare = [l] [r]
         compare (Lst ({Lit lv})) rv
     | (lv, Lit rv) ->
         compare lv (Lst ({Lit rv}))
+    | _ -> unknown
 and compareList = [l] [r]
     match (l, r) with
     | (Cons (lh, lt), Cons (rh, rt)) ->
@@ -125,3 +126,4 @@ let bidx = find ([(x, i)] compare bdiv x = unknown) sortedWithIdx in
 match (aidx, bidx) with
 | (Some (a, ai), Some (b, bi)) ->
     print (toString ((ai + 1) * (bi + 1)) + "\n")
+| _ -> ()

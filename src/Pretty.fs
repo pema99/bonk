@@ -81,7 +81,6 @@ let rec prettyTypeInner (t: Type) : string =
                 |> String.concat ", "
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
-        | _ -> "<Invalid>"   
 
 let prettyType =
     renameFreshType >> prettyTypeInner

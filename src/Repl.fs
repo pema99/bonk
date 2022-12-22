@@ -1,6 +1,7 @@
 module Repl
 
 open Repr
+open ReprUtil
 open Inference
 open Monad
 open Pretty

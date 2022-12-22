@@ -1,7 +1,7 @@
 module Lower
 
 open Repr
-open Inference
+open ReprUtil
 open Monad
 open Pretty
 
@@ -252,31 +252,6 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
         do! mapM_ addMember impls
         return TDMember (blankets, pred, impls)
     }
-
-// Map over typed expr
-let rec mapTypedExpr fe ex : TypedExpr =
-    match ex with
-    | TELit (pt, v)           -> fe <| TELit (pt, v)
-    | TEVar (pt, a)           -> fe <| TEVar (pt, a)
-    | TEApp (pt, f, x)        -> fe <| TEApp (pt, mapTypedExpr fe f, mapTypedExpr fe x) 
-    | TELam (pt, x, e)        -> fe <| TELam (pt, x, mapTypedExpr fe e)
-    | TELet (pt, x, e1, e2)   -> fe <| TELet (pt, x, mapTypedExpr fe e1, mapTypedExpr fe e2)
-    | TEIf (pt, cond, tr, fl) -> fe <| TEIf (pt, mapTypedExpr fe cond, mapTypedExpr fe tr, mapTypedExpr fe fl)
-    | TEOp (pt, l, op, r)     -> fe <| TEOp (pt, mapTypedExpr fe l, op, mapTypedExpr fe r)
-    | TETuple (pt, es)        -> fe <| TETuple (pt, List.map (mapTypedExpr fe) es)
-    | TEMatch (pt, e, bs)     -> fe <| TEMatch (pt, mapTypedExpr fe e, List.map (fun (a, b) -> a, mapTypedExpr fe b) bs)
-    | TEGroup (pt, a, b)      -> fe <| TEGroup (pt, List.map (fun (a, b) -> a, mapTypedExpr fe b) a, mapTypedExpr fe b)
-    | TERaw (pt, body)        -> fe <| TERaw (pt, body)
-
-// Map over typed decl
-let mapTypedDecl fe fd decl = 
-    match decl with
-    | TDExpr expr                      -> fd <| TDExpr (mapTypedExpr fe expr)
-    | TDLet (pat, expr)                -> fd <| TDLet (pat, mapTypedExpr fe expr)
-    | TDGroup (es)                     -> fd <| TDGroup (List.map (fun (a, b) -> a, mapTypedExpr fe b) es)
-    | TDUnion (name, tvs, cases)       -> fd <| TDUnion (name, tvs, cases)
-    | TDClass (blankets, pred, impls)  -> fd <| TDClass (blankets, pred, impls)
-    | TDMember (blankets, pred, impls) -> fd <| TDMember (blankets, pred, impls)
 
 let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
     let res, (_, (overloads, _)) = mapM gatherOverloadsDecl decls (Map.empty, (Map.empty, 0))

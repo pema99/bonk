@@ -2,7 +2,7 @@ module CodeGen
 
 open System.IO
 open Repr
-open Inference
+open ReprUtil
 open Lower
 
 // JS AST
