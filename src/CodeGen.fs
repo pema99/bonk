@@ -168,14 +168,6 @@ let emitLit (lit: Literal) : string =
     | LChar v -> sprintf "\'%c\'.charCodeAt(0)" v
     | LUnit -> "\"<unit>\""
 
-// Emit a pattern
-let rec emitPat (pat: Pattern) : string =
-    match pat with
-    | PName x -> x
-    | PTuple x -> sprintf "[%s]" (List.map emitPat x |> String.concat ", ")
-    | PConstant x -> emitLit x
-    | _ -> failwith "TODO PAT"
-
 // Emit a binary operation
 let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
     match op with
@@ -269,7 +261,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         match x with
         | PName x -> JsFunc (x, [JsReturn (emitExpr e)])
         | x ->
-            let fvName = "__tmp"
+            let fvName = "$tmp"
             let hoisted = hoist x
             let matcher = emitPatternMatch (JsScope []) x ({ kind = EVar fvName; span = dummySpan; data = (Set.empty, tVoid) }) false
             JsFunc (fvName, 
@@ -305,12 +297,12 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         JsList (List.map (emitExpr) es)
     | EMatch (e1, bs) ->
         let hoisted = List.collect (fun (p, _) -> hoist p) bs |> List.distinct
-        let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("_matched", JsConst (string i))) p e1 true) bs
-        let sw = JsSwitch (JsVar "_matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
+        let beg = List.mapi (fun i (p, _) -> emitPatternMatch (JsAssign ("$matched", JsConst (string i))) p e1 true) bs
+        let sw = JsSwitch (JsVar "$matched", List.mapi (fun i (_, e) -> string i, [ JsReturn (emitExpr e) ]) bs)
         JsDefer (
             JsScope (
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @
-                [ JsDecl ("_matched", JsConst "null") ] @
+                [ JsDecl ("$matched", JsConst "null") ] @
                 beg @
                 [sw]
             )
@@ -339,9 +331,9 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
 and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternatives: bool) : JsStmt =
     let rec cont pat expr next =
         match pat with
-        | PName a -> // name matches with anything // TODO: Don't use hardcoded match name, generate a unique one
+        | PName a -> // name matches with anything
             if hasAlternatives then
-                JsIf (JsOp (JsVar "_matched", "===", JsConst "null" ),
+                JsIf (JsOp (JsVar "$matched", "===", JsConst "null" ),
                     [ JsAssign (a, expr)
                       next
                     ],
@@ -420,7 +412,7 @@ let emitDecl (d: TypedDecl) : JsStmt list =
             List.map (fun (n, _) -> case n) cases
         
         | DClass (name, reqs, mems) ->
-            [JsIgnore (JsVar "// TODO TYPECLASS")]
+            []
         
         | DMember (blankets, pred, impls) ->
             List.map (fun (name, body) ->

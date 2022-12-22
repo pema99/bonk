@@ -76,9 +76,9 @@ let mangleOverload (func: string) (ts: QualType) : string =
     |> prettyQualType
     |> sprintf "%s_%s" func
     |> zEncode
-    |> sprintf "_%s" // Add underscore for reserved name
+    |> sprintf "$%s" // Add $ for reserved name
 
-let monomorphPrefix = "_monomorph"
+let monomorphPrefix = "$monomorph"
 let getMonomorphizedName id : string =
     monomorphPrefix + string id
 
@@ -279,10 +279,9 @@ let renameShadowed name = shadow {
     match lookup senv name with
     | Some v ->
         if v = 0 then return name
-        else return sprintf "_%s%i" name v
+        else return sprintf "$%s%i" name v
     | _ -> return name
 } 
-//let shadowName name = fun (ate, id) -> Ok ("__" + name + string id), (ate,  id + 1)
 
 let rec getNamesInPattern (pat: Pattern) : string list =
     match pat with
@@ -404,7 +403,7 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
             mapM (fun (pat, e) -> lower {
                 let! e = renameShadowedVarsInExpr e
                 let! pat, mapper = shadowNewName (PName pat)
-                let pat = match pat with PName n -> n | _ -> "_failure"
+                let pat = match pat with PName n -> n | _ -> "$failure"
                 let! senv = getShadowEnv
                 do! setShadowEnv (mapper senv)
                 return pat, e

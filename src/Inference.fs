@@ -606,7 +606,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         let apreds, atyps = List.unzip aqtypes
         // Unify 'this' with the actual type we know it should be
         do! unify typ tv
-        // Unify the actual and inferred function types. TODO: Should this be coerce?
+        // Unify the actual and inferred function types.
         do! mapM_ (fun (a, b) -> unify a b) (List.zip etyps atyps)
         // Apply all substitutions thus far to the inferred types
         let! subs = getSubstitution
