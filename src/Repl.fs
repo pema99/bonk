@@ -224,7 +224,7 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
 
 let runInfer (decl: Decl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
-    let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, ((0,0),(0,0))), (Map.empty, freshCount))
+    let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
@@ -286,7 +286,11 @@ let rec handleDecl silent decl = repl {
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
         let names, typs = List.unzip cases
         do! mapM_ (fun case -> repl {
-                let decl = DLet (PName case, (EVar case, ((0,0),(0,0))))
+                let decl = {
+                    akind = DLet (PName case, mkExpr (EVar case) dummySpan)
+                    aspan = dummySpan
+                    adata = ()
+                }
                 return! handleDecl silent decl 
                 }) names
     | Some (TDMember (blankets, pred, impls)) ->

@@ -59,7 +59,7 @@ let startCompile prelude output files =
     match ast with
     | Success decls ->
         let res, ((typeEnv,userEnv,classEnv,loc),_) =
-            inferDecls decls ((funSchemes, Map.empty, classes, ((0,0),(0,0))), (Map.empty, 0))
+            inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
         let res = Result.bind (checkMatches userEnv) res
         match res with
         | Ok decls ->

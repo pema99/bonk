@@ -5,6 +5,10 @@ module ReprUtil
 open Repr
 open Monad
 
+// General useful repr stuff
+let mkExpr (kind: ExprKind<unit>) (span: Span) : Expr =
+    { kind = kind; span = span; data = () }
+
 // Env helpers
 let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env

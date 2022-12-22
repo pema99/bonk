@@ -4,6 +4,7 @@ module Repr
 type Loc = (int * int)
 type Span = (Loc * Loc)
 type Spanned<'t> = ('t * Span)
+let dummySpan = ((0, 0), (0, 0))
 
 // Literals
 type Literal =
@@ -53,26 +54,41 @@ and Pattern =
     | PConstant of Literal
 
 // Expression AST
-and Expr =
+and ExprKind<'t> =
     | EVar   of string
-    | EApp   of Spanned<Expr> * Spanned<Expr>
-    | ELam   of Pattern * Spanned<Expr>
-    | ELet   of Pattern * Spanned<Expr> * Spanned<Expr>
+    | EApp   of ExprRaw<'t> * ExprRaw<'t>
+    | ELam   of Pattern * ExprRaw<'t>
+    | ELet   of Pattern * ExprRaw<'t> * ExprRaw<'t>
     | ELit   of Literal
-    | EIf    of Spanned<Expr> * Spanned<Expr> * Spanned<Expr>
-    | EOp    of Spanned<Expr> * BinOp * Spanned<Expr>
-    | ETuple of Spanned<Expr> list
-    | EMatch of Spanned<Expr> * (Pattern * Spanned<Expr>) list
-    | EGroup of (string * Spanned<Expr>) list * Spanned<Expr> 
+    | EIf    of ExprRaw<'t> * ExprRaw<'t> * ExprRaw<'t>
+    | EOp    of ExprRaw<'t> * BinOp * ExprRaw<'t>
+    | ETuple of ExprRaw<'t> list
+    | EMatch of ExprRaw<'t> * (Pattern * ExprRaw<'t>) list
+    | EGroup of (string * ExprRaw<'t>) list * ExprRaw<'t>
     | ERaw   of Type option * string // TODO: This should be QualType, not Type
 
-and Decl =
-    | DExpr   of Spanned<Expr>
-    | DLet    of Pattern * Spanned<Expr>
-    | DGroup  of (string * Spanned<Expr>) list
+and ExprRaw<'t> = {
+    kind: ExprKind<'t>
+    span: Span
+    data: 't
+}
+
+and DeclKind<'t> =
+    | DExpr   of ExprRaw<'t>
+    | DLet    of Pattern * ExprRaw<'t>
+    | DGroup  of (string * ExprRaw<'t>) list
     | DUnion  of string * string list * (string * Type) list 
     | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | DMember of Pred Set * Pred * (string * Spanned<Expr>) list     // blankets, pred, impls
+    | DMember of Pred Set * Pred * (string * ExprRaw<'t>) list     // blankets, pred, impls
+
+and DeclRaw<'t> = {
+    akind: DeclKind<'t>
+    aspan: Span
+    adata: 't
+}
+
+and Expr = ExprRaw<unit>
+and Decl = DeclRaw<unit>
 
 // Kinds of type constructors
 and Kind =

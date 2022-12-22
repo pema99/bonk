@@ -86,7 +86,7 @@ let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
 let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
 let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
 let withSpan x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x) m
-let withSpanOf x m = local (fun (te, ue, ce, sp) -> te, ue, ce, snd x) m
+let withSpanOf x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x.span) m
 let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
 let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
 let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
@@ -279,7 +279,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
     // Constants match with anything that matches the type
     | PConstant v, (_, ty) ->
         // This is fine since literals are always unambiguous. No new predicates can occur.
-        let! (_, t1), _ = inTypeEnv env (inferExpr (ELit v, ((0,0),(0,0))))
+        let! (_, t1), _ = inTypeEnv env (inferExpr (mkExpr (ELit v) dummySpan))
         do! unify ty t1
         return env
     // Tuple patterns match with same-sized tuples
@@ -325,7 +325,7 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
 // Given an environment, a pattern, and 2 expressions being related by the pattern, attempt to
 // infer the type of expression 2. Example are let bindings `let pat = e1 in e2` and match
 // expressions `match e1 with pat -> e2`. Poly flag implies whether to polymorphise (only for lets).
-and inferBinding (pat: Pattern) (e1: Spanned<Expr>) (e2: Spanned<Expr>) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
+and inferBinding (pat: Pattern) (e1: Expr) (e2: Expr) (poly: bool) : InferM<QualType * TypedExpr * TypedExpr> = infer {
     // Infer the type of the value being bound
     let! (p1, t1), te1 = inferExpr e1
     // Gather constraints (substitutions, bindings) from the pattern
@@ -338,7 +338,7 @@ and inferBinding (pat: Pattern) (e1: Spanned<Expr>) (e2: Spanned<Expr>) (poly: b
     }
 
 // Main inference
-and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
+and inferExpr (e: Expr) : InferM<QualType * TypedExpr> = infer {
     // Infer the type in the new environment
     let! (res, ex) = inferExprInner e
     // After that, collect any new substitutions from the previous inference
@@ -348,9 +348,9 @@ and inferExpr (e: Spanned<Expr>) : InferM<QualType * TypedExpr> = infer {
     return ty, (replaceType ex ty)
     }
 
-and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
+and inferExprInner (e: Expr) : InferM<QualType * TypedExpr> =
     withSpanOf e <| infer {
-    match fst e with
+    match e.kind with
     | ELit (LUnit)     -> return let ty = (Set.empty, tUnit)   in ty, TELit (ty, LUnit)
     | ELit (LInt v)    -> return let ty = (Set.empty, tInt)    in ty, TELit (ty, LInt v)
     | ELit (LBool v)   -> return let ty = (Set.empty, tBool)   in ty, TELit (ty, LBool v)
@@ -474,7 +474,7 @@ and inferExprInner (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
     }
 
 // Infer and expression and then solve constraints
-let inferExprTop (e: Spanned<Expr>) : InferM<QualType * TypedExpr> =
+let inferExprTop (e: Expr) : InferM<QualType * TypedExpr> =
     withSpanOf e <| infer {
     // Infer the type of the expression
     let! qt, te = inferExpr e
@@ -515,7 +515,7 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
 
 // Infer a declaration. Returns an update to the environment.
 let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
-    match d with
+    match d.akind with
     | DExpr e ->
         let! qt, te = inferExprTop e
         return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), TDExpr (te)
@@ -526,7 +526,7 @@ let rec inferDeclImmediate (d: Decl) : InferM<EnvUpdate * TypedDecl> = infer {
     | DGroup (ds) ->
         let names, exs = List.unzip ds
         // TODO: This is sort of a hack, should fix
-        let! res = mapM (fun name -> inferExprTop ((EGroup (ds, (EVar name, ((0,0),(0,0))))), ((0,0),(0,0)))) names
+        let! res = mapM (fun name -> inferExprTop (mkExpr (EGroup (ds, (mkExpr (EVar name) dummySpan))) dummySpan)) names
         let qts, tes = List.unzip res
         let tes =
             List.zip names tes
