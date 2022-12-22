@@ -160,6 +160,5 @@ let lex allowMore txt =
         |> many (tokenP)
     let state = state :?> MultiLineTextCombinatorState
     match res with
-    | Success _ when (Seq.forall ((=) ';') (state.Source.Trim())) || allowMore -> ()
-    | _ -> printfn "Lexing error at line %i, column %i." state.Line state.Column
-    res
+    | Success v when (Seq.forall ((=) ';') (state.Source.Trim())) || allowMore -> Ok v
+    | _ -> Error (sprintf "Lexing error at line %i, column %i." state.Line state.Column)

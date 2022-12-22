@@ -429,4 +429,4 @@ let renamedShadowedVarsInDecls (decls: TypedDecl list) : TypedDecl list =
     | Ok mdecls -> mdecls
     | _ -> decls
 
-let lowerDecls = monomorphizeDecls >> renamedShadowedVarsInDecls
+let lowerProgram = monomorphizeDecls >> renamedShadowedVarsInDecls

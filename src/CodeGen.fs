@@ -4,6 +4,7 @@ open System.IO
 open Repr
 open ReprUtil
 open Lower
+open Prelude
 
 // JS AST
 type JsBlock = JsStmt list
@@ -426,3 +427,9 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 let mangled = mangleOverload name (getExprType body)
                 JsDecl (mangled, emitExpr body)) impls
     List.map (optimizeStmt) res
+
+let emitProgram (decls: TypedDecl list) =
+    let jsAst = List.collect emitDecl decls
+    let jsOutput = pprJsBlock 0 jsAst
+    let jsOutput = jsInstrincs + jsOutput
+    jsOutput

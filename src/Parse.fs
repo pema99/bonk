@@ -290,22 +290,21 @@ let programP =
 let runParse (kind: Com<'t, Spanned<Token>>) allowMore txt =
     let lexed = lex allowMore txt
     match lexed with
-    | Success v ->
+    | Ok toks ->
         let res, state =
-            v
+            toks
             |> List.toArray
             |> mkArrayParser
             |> kind
         let state = state :?> ArrayCombinatorState<Spanned<Token>>
         match res with
-        | Success v when (state.Offset >= state.Toks.Length-1) || allowMore -> ()
+        | Success v when (state.Offset >= state.Toks.Length-1) || allowMore -> Ok v
         | _ ->
             let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
             let line = fst (fst span)
             let col = snd (fst span)
-            printfn "Parsing error at line %i, column %i: Unexpected token '%A'." line col tok 
-        res
-    | err -> copyFailure err
+            Error (sprintf "Parsing error at line %i, column %i: Unexpected token '%A'." line col tok)
+    | Error err -> Error err
 
 let parseDecl = runParse declP false
 let parseImports = runParse importsP true

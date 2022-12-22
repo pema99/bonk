@@ -638,3 +638,11 @@ let rec inferDecl (d: UntypedDecl) : InferM<TypedDecl> = infer {
 // Infer multiple decls, update the environment underways
 let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
     mapM inferDecl decls
+
+// Infer entire program and return the useful parts
+let inferProgram (decls: UntypedDecl list) : Result<(UserEnv * TypedDecl list),string> =
+    let res, ((typeEnv,userEnv,classEnv,loc),_) =
+        inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+    match res with
+    | Ok typedDecls -> Ok (userEnv, typedDecls)
+    | Error err -> Error err

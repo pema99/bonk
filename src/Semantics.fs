@@ -234,9 +234,8 @@ let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : 
     let witnesses = isUseful env patMatrix wildcardPat
     if not <| List.isEmpty witnesses then
         let f = fst sp
-        do! failure <| sprintf "Error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
+        do! failure <| sprintf "Semantic error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
     }
-
 
 let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
     traverseTypedDecls 
@@ -265,3 +264,6 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
         })
         decls
     |> runCheckM
+
+let checkProgram (env: UserEnv, decls: TypedDecl list) : Result<TypedDecl list, string> =
+    checkMatches env decls

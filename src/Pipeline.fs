@@ -9,6 +9,7 @@ open Prelude
 open Lower
 open CodeGen
 open Semantics
+open Lex
 
 let loadCodeFile (from: string) (path: string) : string =
     let fromPath = if from = "" then "" else Path.GetDirectoryName from
@@ -38,7 +39,7 @@ let resolveImports prelude files =
             let content = loadCodeFile from file
             let visited = Map.add file content visited
             match parseImports content with
-            | Success imports ->
+            | Ok imports ->
                 imports |> List.fold (
                     fun (visited, acc) file ->
                         walkImports from visited acc file
@@ -50,26 +51,25 @@ let resolveImports prelude files =
     List.distinct files
     |> List.map (fun file -> Map.find file visited)
 
+let combineResult a b =
+    match a, b with
+    | Ok al, Ok ab -> Ok (al @ ab)
+    | _, Error err | Error err, _ -> Error err
+
+let parsePrograms =
+    List.map parseProgram
+    >> List.reduce combineResult
+
+let pipeline prelude =
+    resolveImports prelude
+    >> parsePrograms
+    >> Result.bind inferProgram
+    >> Result.bind checkProgram
+    >> Result.map lowerProgram
+    >> Result.map emitProgram
+
 let startCompile prelude output files =
-    let ast =
-        files
-        |> resolveImports prelude
-        |> List.map parseProgram
-        |> List.reduce (joinResult (fun a b -> a @ b))
-    match ast with
-    | Success decls ->
-        let res, ((typeEnv,userEnv,classEnv,loc),_) =
-            inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
-        let res = Result.bind (checkMatches userEnv) res
-        match res with
-        | Ok decls ->
-            let decls = lowerDecls decls
-            let jsAst = List.collect emitDecl decls
-            let jsOutput = pprJsBlock 0 jsAst
-            let jsOutput = jsInstrincs + jsOutput
-            File.WriteAllText(output, jsOutput)
-        | Error err -> printfn "%s" err
-    | Failure -> printfn "Parsing error: Unknown"
-    | FailureWith (err, loc) -> printfn "Parsing error (%A): %s" loc err
-    | CompoundFailure errs -> Seq.iter (fun (err, loc) -> printfn "Parsing error (%A): %s" loc err) errs
-    ()
+    match pipeline prelude files with
+    | Ok js -> File.WriteAllText(output, js)
+    | Error err -> printfn "%s" err
+
