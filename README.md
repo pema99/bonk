@@ -1,18 +1,22 @@
 # Bonk
 Bonk, son of [Gunk](https://github.com/pema99/gunk), cousin of [Plonk](https://github.com/pema99/plonk).
-Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently either intepreted (slow and with no tail-call optimizations) or compiled to JavaScript.
+Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently either interpreted or compiled to JavaScript.
 
 # Features
-- Basic expressions. IE. `if`, `let`, function application and abstraction, arithmetic
+- Basic expressions. IE. `if`, `let`, function application and abstraction, arithmetic.
 - Algebraic datatypes: Tuples and user-defined discriminated unions.
 - Full type inference. Types of expressions can be inferred without any type annotations.
-- ML-style match expressions
-- Pattern matching both in `let` and `match` constructs.
+- ML-style match expressions with exhaustiveness checking.
+- Pattern matching both in `let` and `match` constructs, as well as in inputs to lambdas.
 - Parametric polymorphism. Functions can be generic.
-- Recursion via a fixed-point combinator named `rec`.
-- A _very_ work-in-progress implementation of typeclasses.
-- A _very_ work-in-progress [JavaScript backend](https://gist.github.com/pema99/935b915a3197b5222183bf6ac4bb8308).
-- An working interpreter/REPL that also provides type information.
+- A working interpreter/REPL that also provides type information.
+- A [JavaScript backend](https://gist.github.com/pema99/935b915a3197b5222183bf6ac4bb8308).
+- JavaScript interop via raw-JavaScript expression blocks.
+- Recursion (including mutual recursion) is supported, with tail call optimization.
+- A _very_ work-in-progress implementation of typeclasses for ad-hoc polymorphism.
+- List literals as syntax sugar for `Cons`-lists.
+- Pipeline operators for function application: `|>`, `<|`.
+- Import statements to work with programs spanning multiple files.
 - A tiny standard library (see `lib/bonk/prelude.bonk`).
 
 # Example code
@@ -66,9 +70,7 @@ dotnet run bless
 
 # To do (maybe, stuff I'm looking at)
 - Rust-style traits/typeclasses for ad-hoc polymorphism
-- Exhaustiveness checking for pattern matching
 - Type ascription
-- JavaScript codegen
 
 # Fluff
 - Dependencies are cringe.
