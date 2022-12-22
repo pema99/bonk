@@ -44,7 +44,7 @@ let resolveImports prelude files =
                     fun (visited, acc) file ->
                         walkImports from visited acc file
                     ) (visited, acc @ (imports @ [file]))
-            | err -> visited, acc
+            | _ -> visited, acc
     let (visited, files) =
         files
         |> Seq.fold (fun (visited, acc) file -> walkImports file visited acc file) (visited, preimport)

@@ -67,7 +67,7 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
             | LChar v   -> PCIntRange (int v, int v)
             | LInt v    -> PCIntRange (v, v)
             | LUnit     -> PCTuple
-            | LFloat v  -> PCOpaque
+            | LFloat _  -> PCOpaque
             | LString _ -> PCOpaque
         { ctor = ctor; fields = []; ty = ty }
     | _ ->
@@ -128,7 +128,7 @@ let rec splitWildcard (ctx: PatternCtx) (ctors: PatternCtor list) : (PatternCtor
         | TConst "char" -> [PCIntRange (int System.Char.MinValue, int System.Char.MaxValue)]
         | TConst "unit" -> [PCTuple]
         | TCtor (KProduct, _) -> [PCTuple]
-        | TCtor (KSum name, tys) ->
+        | TCtor (KSum name, _) ->
             match Map.tryFind name ctx.env with
             | Some (_, variants) -> List.map (fst >> PCVariant) variants
             | None -> failwith "Invalid variant" // TODO: Handle error
@@ -209,7 +209,7 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
     match v with
     | [] when List.isEmpty rows -> [[]] // Useful, with trivial witness
     | [] -> []                          // Not useful
-    | h::t ->                           // Recursive case
+    | h::_ ->                           // Recursive case
         let colTy = h.ty
         let vCtor = h.ctor
         let ctx = { colTy = colTy; env = env }
@@ -244,12 +244,12 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
             | EMatch (e1, bs) ->
                 do! checkMatch env (ex.span) (snd e1.data) (List.map fst bs)
                 return ex
-            | ELet (p, e1, e2) ->
+            | ELet (p, e1, _) ->
                 do! checkMatch env (ex.span) (snd e1.data) [p]
                 return ex
-            | ELam (p, e) ->
+            | ELam (p, _) ->
                 match snd ex.data with
-                | TArrow (inp, oup) ->
+                | TArrow (inp, _) ->
                     do! checkMatch env (ex.span) inp [p]
                     return ex
                 | _ -> return ex

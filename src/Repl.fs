@@ -29,7 +29,7 @@ let rec compatible (l: QualType) (r: QualType) : bool =
 
 let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
     match overload, args with
-    | { kind = ELam (x, rest); data = (qt, TArrow (a, _)) }, h :: t ->
+    | { kind = ELam (_, rest); data = (qt, TArrow (a, _)) }, h :: t ->
         compatible (qt, a) h && candidate rest t
     | _, [] -> true 
     | _ -> false
@@ -41,7 +41,7 @@ let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExp
 
 let rec calcArity (ex: TypedExpr) : int =
     match ex.kind with
-    | ELam (x, rest) -> 1 + calcArity rest
+    | ELam (_, rest) -> 1 + calcArity rest
     | _ -> 0
 
 let mkFakeExpr expr: TypedExpr =
@@ -155,7 +155,7 @@ and eval tenv (e: TypedExpr) =
                 if arity = List.length applied then impl (List.rev applied)
                 else Some (VIntrinsic (name, applied))
             | None -> None
-        | Some (VOverload (lst, arity, args)), Some v ->
+        | Some (VOverload (lst, arity, args)), Some _ ->
             let applied = x :: args
             if arity = List.length applied then
                 let typs = List.map getExprType applied
@@ -204,7 +204,7 @@ and eval tenv (e: TypedExpr) =
             |> List.tryPick id
             |> Option.bind (fun (env, hit) -> eval env hit)
         | _ -> None
-    | ERaw (_, body) ->
+    | ERaw (_, _) ->
         None
 
 // Repl start
@@ -213,7 +213,7 @@ type ReplM<'t> = StateM<InferState * TermEnv, 't>
 let repl = state
 let getTermEnv : ReplM<TermEnv> = fmap snd get
 let setTermEnv x : ReplM<unit> = fun (s, _) -> (Ok (), (s, x))
-let setFreshCount x : ReplM<unit> = fun ((a,b,c,d),e) -> (Ok (), ((a,b,c,x),e))
+let setFreshCount x : ReplM<unit> = fun ((a,b,c,_),e) -> (Ok (), ((a,b,c,x),e))
 
 let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
@@ -226,7 +226,7 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
     }
 
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
-    let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
+    let! ((typeEnv, userEnv, classEnv, freshCount), _) = get
     let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
@@ -279,15 +279,15 @@ let rec handleDecl silent decl = repl {
         | Some vs -> do! handleBindings vs
         | None -> printfn "Evaluation failure"
     | Some (DGroup (es)) ->
-        let vs = List.map (fun (name, ex) ->
+        let vs = List.map (fun (name, _) ->
             eval tenv (mkFakeExpr (EGroup (es, mkFakeExpr (EVar name))))
             |> Option.bind (matchPattern tenv (PName name))) es
         if List.exists Option.isNone vs then printfn "Evaluation failure"
         else do! handleBindings (List.choose id vs |> List.concat)
-    | Some (DUnion (name, tvs, cases)) ->
+    | Some (DUnion (_, _, cases)) ->
         let ctors = List.map fst cases
         do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
-        let names, typs = List.unzip cases
+        let names, _ = List.unzip cases
         do! mapM_ (fun case -> repl {
                 let decl = {
                     kind = DLet (PName case, mkExpr (EVar case) dummySpan)
@@ -297,7 +297,7 @@ let rec handleDecl silent decl = repl {
                 return! handleDecl silent decl 
                 }) names
     | Some (DMember (blankets, pred, impls)) ->
-        let inst = blankets, pred
+        let _ = blankets, pred
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv
             match lookup env s with
@@ -377,7 +377,7 @@ let runRepl stdlib : ReplM<unit> = repl {
 
 let runReplAction prelude action =
     let funSchemes = if prelude then funSchemes else Map.empty
-    action ((funSchemes, Map.empty, classes, 0), Map.map (fun k v -> VIntrinsic (k, [])) funSchemes)
+    action ((funSchemes, Map.empty, classes, 0), Map.map (fun k _ -> VIntrinsic (k, [])) funSchemes)
     |> fst
 
 let startRepl builtins stdlib =

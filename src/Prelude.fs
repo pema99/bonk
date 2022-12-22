@@ -58,7 +58,7 @@ let toFloat v =
     | [VString v] -> Some (VFloat (float v))
     | [VChar v] -> Some (VFloat (float v))
     | [VInt v] -> Some (VFloat (float v))
-    | [a] -> Some (VFloat 0.0)
+    | [_] -> Some (VFloat 0.0)
     | _ -> None
 
 let toString v =
@@ -68,7 +68,7 @@ let toString v =
     | [VBool v] -> Some (VString (string v))
     | [VChar v] -> Some (VString (string v))
     | [VInt v] -> Some (VString (string v))
-    | [a] -> Some (VString "")
+    | [_] -> Some (VString "")
     | _ -> None
 
 let toBool v =
@@ -79,7 +79,7 @@ let toBool v =
     | [VBool v] -> Some (VBool v)
     | [VChar v] -> Some (VBool (v <> char 0))
     | [VInt v] -> Some (VBool (v <> 0))
-    | [a] -> Some (VBool false)
+    | [_] -> Some (VBool false)
     | _ -> None
     
 let toChar v =
@@ -88,7 +88,7 @@ let toChar v =
     | [VString v] -> Some (VChar (char v))
     | [VChar v] -> Some (VChar (char v))
     | [VInt v] -> Some (VChar (char v))
-    | [a] -> Some (VChar (char 0))
+    | [_] -> Some (VChar (char 0))
     | _ -> None
 
 let toInt v =
@@ -98,7 +98,7 @@ let toInt v =
     | [VBool v] -> Some (VInt (if v then 1 else 0))
     | [VChar v] -> Some (VInt (int v))
     | [VInt v] -> Some (VInt (int v))
-    | [a] -> Some (VInt 0)
+    | [_] -> Some (VInt 0)
     | _ -> None
 
 let mathOp1 f v =

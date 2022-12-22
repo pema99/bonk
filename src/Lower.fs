@@ -32,7 +32,7 @@ type ResolvedOverloads = Map<int, string>
 type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't>
 let lower = state
 let getAbtractTermEnv = fun (ate, s) -> Ok ate, (ate, s)
-let setAbtractTermEnv env = fun (ate, s) -> Ok (), (env, s)
+let setAbtractTermEnv env = fun (_, s) -> Ok (), (env, s)
 let freshId = fun (ate, (overloads, id)) -> Ok id, (ate, (overloads, id + 1))
 
 let zEncode: string -> string = 
@@ -112,14 +112,14 @@ let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExp
 
 let rec calcArityType (ty: Type) : int =
     match ty with
-    | TArrow (a, b) -> 1 + calcArityType b
+    | TArrow (_, b) -> 1 + calcArityType b
     | _ -> 0
 
 let rec matchPattern tenv pat (v: AbstractValue) =
     match pat, v with
     | PName a, v ->
         [a, v]
-    | PConstant a, v ->
+    | PConstant _, _ ->
         []
     | PTuple pats, AVTuple vs ->
         let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
@@ -153,7 +153,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
         | _ -> return inExpr, AVType inExpr.data
     | EApp (f, x) ->
         let! clos, closval = gatherOverloadsExpr f
-        let! arg, argval = gatherOverloadsExpr x
+        let! arg, _ = gatherOverloadsExpr x
         match closval with
         | AVPartialApplied (name, arity, overloads, ids, args) ->
             let applied = (getExprType x) :: args
@@ -172,7 +172,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
         | _ ->
             return { inExpr with kind = EApp (clos, arg) }, AVType inExpr.data
     | ELam (x, t) ->
-        let! body, bodyval = gatherOverloadsExpr t
+        let! body, _ = gatherOverloadsExpr t
         return { inExpr with kind = ELam (x, body) }, AVType inExpr.data
     | ELet (x, v, t) ->
         let! value, valueval = gatherOverloadsExpr v
@@ -181,13 +181,13 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
     | EGroup (bs, rest) ->
         let! bss =
             mapM (fun (x, v) -> lower {
-                let! value, valueval = gatherOverloadsExpr v
+                let! value, _ = gatherOverloadsExpr v
                 return x, value
             }) bs
         let! rest, restval = gatherOverloadsExpr rest
         return { inExpr with kind = EGroup (bss, rest) }, restval
     | EIf (c, tr, fl) ->
-        let! cond, condval = gatherOverloadsExpr c
+        let! cond, _ = gatherOverloadsExpr c
         let! trueb, truebval = gatherOverloadsExpr tr
         let! falseb, falsebval = gatherOverloadsExpr fl
         return { inExpr with kind = EIf (cond, trueb, falseb) }, combinePartials truebval falsebval
@@ -196,7 +196,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
         let es, esvals = List.unzip res
         return { inExpr with kind = ETuple (es) }, AVTuple esvals
     | EMatch (e, xs) ->
-        let! e, eval = gatherOverloadsExpr e
+        let! e, _ = gatherOverloadsExpr e
         let! xss =
             mapM (fun (pat, body) -> lower {
                 let! value = gatherOverloadsExpr body
@@ -210,7 +210,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
             else
                 List.fold combinePartials (List.head restvals) restvals
         return { inExpr with kind = EMatch (e, List.zip pats rest) }, restvals 
-    | ERaw (_, body) ->
+    | ERaw (_, _) ->
         return inExpr, AVType inExpr.data
     }
 
@@ -273,7 +273,7 @@ type ShadowEnv = Map<string, int>
 type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't>
 let shadow = state
 let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
-let setShadowEnv env = fun (ate, s) -> Ok (), (env, s)
+let setShadowEnv env = fun (_, s) -> Ok (), (env, s)
 let renameShadowed name = shadow {
     let! senv = getShadowEnv
     match lookup senv name with
@@ -383,7 +383,7 @@ let rec renameShadowedVarsInExpr (inExpr: TypedExpr) : ShadowM<TypedExpr> = shad
             }) xs
         let pats, rest = List.unzip xss
         return { inExpr with kind = EMatch (e, List.zip pats rest) }
-    | ERaw (_, body) ->
+    | ERaw (_, _) ->
         return inExpr
     }
 

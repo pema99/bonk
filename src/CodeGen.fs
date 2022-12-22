@@ -129,30 +129,30 @@ let rec hoist pat =
 // Does an expression contain a speficic function call
 let rec containsCall (name: string) (ex: TypedExpr) : bool =
     match ex.kind with
-    | ELit (v)           -> false
-    | EVar (a)           -> false
-    | EApp ({ kind = EVar n }, x) when n = name -> true
+    | ELit (_)           -> false
+    | EVar (_)           -> false
+    | EApp ({ kind = EVar n }, _) when n = name -> true
     | EApp (f, x)        -> containsCall name f || containsCall name x
-    | ELam (x, e)        -> containsCall name e
-    | ELet (x, e1, e2)   -> containsCall name e1 || containsCall name e2
+    | ELam (_, e)        -> containsCall name e
+    | ELet (_, e1, e2)   -> containsCall name e1 || containsCall name e2
     | EIf (cond, tr, fl) -> containsCall name cond || containsCall name tr || containsCall name fl
-    | EOp (l, op, r)     -> containsCall name l || containsCall name r
+    | EOp (l, _, r)     -> containsCall name l || containsCall name r
     | ETuple (es)        -> List.exists (containsCall name) es
-    | EMatch (e, bs)     -> List.exists (containsCall name) (List.map snd bs)
+    | EMatch (_, bs)     -> List.exists (containsCall name) (List.map snd bs)
     | EGroup (bs, rest)  -> List.exists (snd >> containsCall name) bs || containsCall name rest
     | ERaw _             -> false
 
 // Is a function tail recursive given its name (all recursive calls in tail position)
 let rec isTailRecursive (name: string) (ex: TypedExpr) : bool =
     match ex.kind with
-    | ELit (v)           -> true
-    | EVar (a)           -> true
+    | ELit (_)           -> true
+    | EVar (_)           -> true
     | EApp ({ kind = EVar n }, x) when n = name -> not (containsCall name x)
     | EApp (f, x)        -> isTailRecursive name f && not (containsCall name x)
-    | ELam (x, e)        -> isTailRecursive name e
-    | ELet (x, e1, e2)   -> isTailRecursive name e2 && not (containsCall name e1)
+    | ELam (_, e)        -> isTailRecursive name e
+    | ELet (_, e1, e2)   -> isTailRecursive name e2 && not (containsCall name e1)
     | EIf (cond, tr, fl) -> isTailRecursive name tr && isTailRecursive name fl && not (containsCall name cond)
-    | EOp (l, op, r)     -> not (containsCall name l) && not (containsCall name r)
+    | EOp (l, _, r)     -> not (containsCall name l) && not (containsCall name r)
     | ETuple (es)        -> List.forall (containsCall name >> not) es
     | EMatch (e, bs)     -> List.forall (isTailRecursive name) (List.map snd bs) && not (containsCall name e)
     | EGroup (bs, rest)  -> isTailRecursive name rest && not (List.exists (snd >> containsCall name) bs)
@@ -169,7 +169,7 @@ let emitLit (lit: Literal) : string =
     | LUnit -> "\"<unit>\""
 
 // Emit a binary operation
-let emitOp ((preds, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
+let emitOp ((_, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
     match op with
     | Plus      -> JsOp (l, "+", r)
     | Minus     -> JsOp (l, "-", r)
@@ -217,7 +217,7 @@ let optimizeTailRecursion (name: string) (arity: int) (ex: JsExpr) : JsExpr =
         let rec injectMuts ex =
             traverseStmt ( // TODO: Needs to be a fold to handle shadowing
                 function
-                | JsCall (f, x) as e ->
+                | JsCall (_, _) as e ->
                     match getTailCallsParams e with
                     | Some es ->
                         let lhs = sprintf "[%s]" (parms |> String.concat ", ")
@@ -364,7 +364,7 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
 and emitOptimizedFuncDef (name: string) (ex: TypedExpr) : JsExpr =
     let rec getArity ex =
         match ex with
-        | ELam (x, e) -> 1 +  getArity e.kind
+        | ELam (_, e) -> 1 +  getArity e.kind
         | _ -> 0
     let arity = getArity ex.kind
     let res = emitExpr ex
@@ -403,7 +403,7 @@ let emitDecl (d: TypedDecl) : JsStmt list =
         | DGroup (bs) ->
             List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
 
-        | DUnion (name, typs, cases) ->
+        | DUnion (_, _, cases) ->
             let case n =
                 JsDecl (n, 
                     JsFunc ("v", 
@@ -411,10 +411,10 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                             JsObject (["tag", JsConst ("\""+n+"\""); "val", JsVar "v"]))]))
             List.map (fun (n, _) -> case n) cases
         
-        | DClass (name, reqs, mems) ->
+        | DClass (_, _, _) ->
             []
         
-        | DMember (blankets, pred, impls) ->
+        | DMember (_, _, impls) ->
             List.map (fun (name, body) ->
                 let mangled = mangleOverload name (getExprType body)
                 JsDecl (mangled, emitExpr body)) impls

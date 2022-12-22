@@ -83,16 +83,16 @@ let applyEnv =
 
 // Environment helpers
 let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
-let setSubstitution x = fun (r, (c, d)) -> Ok (), (r, (x, d))
+let setSubstitution x = fun (r, (_, d)) -> Ok (), (r, (x, d))
 let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
-let withSpan x m = local (fun (te, ue, ce, sp) -> te, ue, ce, x) m
-let withSpanOf (x: UntypedExpr) m = local (fun (te, ue, ce, sp) -> te, ue, ce, x.span) m
+let withSpan x m = local (fun (te, ue, ce, _) -> te, ue, ce, x) m
+let withSpanOf (x: UntypedExpr) m = local (fun (te, ue, ce, _) -> te, ue, ce, x.span) m
 let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
 let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
 let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
-let inTypeEnv x m = local (fun (te, ue, ce, sp) -> x, ue, ce, sp) m
-let inUserEnv x m = local (fun (te, ue, ce, sp) -> te, x, ce, sp) m
-let inClassEnv x m = local (fun (te, ue, ce, sp) -> te, ue, x, sp) m
+let inTypeEnv x m = local (fun (_, ue, ce, sp) -> x, ue, ce, sp) m
+let inUserEnv x m = local (fun (te, _, ce, sp) -> te, x, ce, sp) m
+let inClassEnv x m = local (fun (te, ue, _, sp) -> te, ue, x, sp) m
 let withTypeEnv x sc m = local (fun (te, ue, ce, sp) -> extend te x sc, ue, ce, sp) m
 let withUserEnv x sc m = local (fun (te, ue, ce, sp) -> te, extend ue x sc, ce, sp) m
 let withClassEnv x sc m = local (fun (te, ue, ce, sp) -> te, ue, extend ce x sc, sp) m
@@ -172,7 +172,7 @@ let unify (t1: Type) (t2: Type) : InferM<unit> = infer {
 let supers (i: string) : InferM<string list> = infer {
     let! cls = getClassEnv
     match lookup cls i with
-    | Some (is, its) -> return is
+    | Some (is, _) -> return is
     | None -> return []
     }
 
@@ -189,8 +189,8 @@ let isHNF (p: Pred) : bool =
         match p with
         | TVar _ -> true
         | TConst _ -> false
-        | TArrow (l, r) -> false
-        | TCtor (_, typs) -> false
+        | TArrow (_, _) -> false
+        | TCtor (_, _) -> false
     cont (snd p) // TODO: Is this fine?
 
 // Convert a list of predicate to head normal form.
@@ -214,7 +214,7 @@ let isRelevant (ty: Type) (p: Pred) : bool =
 
 // Is a given type an instance of a given typeclass?
 // TODO: This is very basic constraint solving. Need something more sophisticated.
-let instanceOf ((reqs, instances): Class) (ty: Type) : InferM<bool> = infer {
+let instanceOf ((_, instances): Class) (ty: Type) : InferM<bool> = infer {
     match ty with
     | TConst tc ->
         return List.contains (TConst tc) instances
@@ -375,7 +375,7 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         match x with
         | PName x ->
             let! tv = fresh
-            let! env = getTypeEnv
+            let! _ = getTypeEnv
             let! (p1, t1), te = withTypeEnv x (toScheme tv) (inferExpr e)
             let qt = (p1, TArrow (tv, t1))
             return qt, mkTypedExpr (ELam (PName x, te)) qt inExp.span
@@ -395,8 +395,8 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         let! (p1, t1), tc = inferExpr cond
         let! (p2, t2), tt = inferExpr tr
         let! (p3, t3), tf = inferExpr fl
-        let! s4 = unify t1 tBool
-        let! s5 = unify t2 t3
+        do! unify t1 tBool
+        do! unify t2 t3
         let qt = (Set.unionMany [p1; p2; p3], t2)
         return qt, mkTypedExpr (EIf (tc, tt, tf)) qt inExp.span
     | EOp (l, op, r) ->
@@ -405,7 +405,7 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         let! tv = fresh
         let scheme = Map.find op opSchemes
         let! (p3, inst) = instantiate scheme
-        let! s3 = unify (TArrow (t1, TArrow (t2, tv))) inst
+        do! unify (TArrow (t1, TArrow (t2, tv))) inst
         let qt = (Set.unionMany [p1; p2; p3], tv)
         return qt, mkTypedExpr (EOp (tl, op, tr)) qt inExp.span
     | ETuple es ->
@@ -422,7 +422,7 @@ and inferExprInner (inExp: UntypedExpr) : InferM<QualType * TypedExpr> =
         let ps, typs = List.unzip scs
         // Unify every match branch
         let uni = List.pairwise typs
-        let! uni = mapM (fun (l, r) -> unify l r) uni
+        do! mapM_ (fun (l, r) -> unify l r) uni
         // Compose all intermediate substitutions
         let qt = (List.fold Set.union Set.empty ps, List.head typs)
         return qt, mkTypedExpr (EMatch (List.head te1, List.zip (List.map fst bs) te2)) qt inExp.span
@@ -524,7 +524,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         let bindings = gatherVarBindings name qt
         return (bindings, [], [], []), mkTypedDecl (DLet (name, te)) inDecl.span
     | DGroup (ds) ->
-        let names, exs = List.unzip ds
+        let names, _ = List.unzip ds
         // TODO: This is sort of a hack, should fix
         let! res = mapM (fun name -> inferExprTop (mkExpr (EGroup (ds, (mkExpr (EVar name) dummySpan))) dummySpan)) names
         let qts, tes = List.unzip res
@@ -532,7 +532,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
             List.zip names tes
             |> List.collect (fun (name, te) ->
                 match te.kind with
-                | EGroup (bs, rest) -> List.filter (fst >> (=) name) bs
+                | EGroup (bs, _) -> List.filter (fst >> (=) name) bs
                 | _ -> [])
         let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
         return (bindings, [], [], []), mkTypedDecl (DGroup (tes)) inDecl.span
@@ -561,7 +561,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         // Guess an inferred type
         let ret = TCtor (KSum name, List.map TVar typs)
         // Put placeholder constructors for each variant in the environment
-        let! env = getTypeEnv
+        let! _ = getTypeEnv
         let! nenv = mapM (fun (case, typ) -> infer {
                             let! sc = generalize (Set.empty, (TArrow (typ, ret)))
                             return case, sc
@@ -641,7 +641,7 @@ let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
 
 // Infer entire program and return the useful parts
 let inferProgram (decls: UntypedDecl list) : Result<(UserEnv * TypedDecl list),string> =
-    let res, ((typeEnv,userEnv,classEnv,loc),_) =
+    let res, ((_,userEnv,_,_),_) =
         inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
     match res with
     | Ok typedDecls -> Ok (userEnv, typedDecls)
