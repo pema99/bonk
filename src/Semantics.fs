@@ -240,8 +240,8 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
             if List.isEmpty witnesses then
                 return ex
             else
-                // TODO: Spans in typed exprs
-                return! failure "Match is not exhaustive"
+                let f = fst ex.span
+                return! failure <| sprintf "Error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
         | _ -> return ex
     }) just decls
     |> runCheckM
