@@ -127,8 +127,8 @@ let findTests() =
             let desc = if rxDesc.Match(content).Groups.Count > 1 then rxDesc.Match(content).Groups.[1].Value else fname
             if mode.Contains "values" && mode.Contains "types" then
                 [
-                    desc + ", test types.", fun () -> testTypes prelude fname
-                    desc + ", test value.", fun () -> testValues prelude fname
+                    desc + ", test types", fun () -> testTypes prelude fname
+                    desc + ", test value", fun () -> testValues prelude fname
                 ]
             else if mode.Contains "values" then
                 [
