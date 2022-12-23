@@ -52,6 +52,13 @@ let readFile v =
     | [VString v] -> Some (VString (System.IO.File.ReadAllText v))
     | _ -> None
 
+let writeFile v =
+    match v with
+    | [VString v; VString c] ->
+        System.IO.File.WriteAllText(v, c)
+        Some VUnit
+    | _ -> None
+
 let toFloat v =
     match v with
     | [VFloat v] -> Some (VFloat (float v))
@@ -121,6 +128,7 @@ let funSchemes: Map<string, Scheme> = Map.ofList [
     "print",        ([],    (set [], TCtor (KArrow, [tString; tUnit])))
     "read",         ([],    (set [], TCtor (KArrow, [tUnit; tString])))
     "readFile",     ([],    (set [], TCtor (KArrow, [tString; tString])))
+    "writeFile",    ([],    (set [], TCtor (KArrow, [tString; TCtor (KArrow, [tString; tUnit])])))
     "toFloat",      (["a"], (set ["ToFloat", TVar "a"],  TCtor (KArrow, [TVar "a"; tFloat])))
     "toString",     (["a"], (set ["ToString", TVar "a"], TCtor (KArrow, [TVar "a"; tString])))
     "toBool",       (["a"], (set ["ToBool", TVar "a"],   TCtor (KArrow, [TVar "a"; tBool])))
@@ -173,6 +181,7 @@ let funImpures = Set.ofList [
     "print"
     "read"
     "readFile"
+    "writeFile"
 ]
 
 // Intrinsic functions that the compiler can't verify the purity of,
