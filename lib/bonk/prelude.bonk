@@ -8,6 +8,7 @@ let ignore = [k] () in
 let curry = [f] [a] [b] f (a, b) in 
 let uncurry = [f] [(a, b)] f a b in 
 let not = [b] if b then false else true in 
+let id = [x] x in
 
 // --- Numbers module ---
 let negi = [i] 0 - i in
@@ -227,6 +228,34 @@ let unzip = [lst]
     in
     let (l, r) = inner lst (Nil ()) (Nil ()) in
     (reverse l, reverse r)
+in
+
+let concat = [lst]
+    fold append (Nil ()) lst
+in
+
+let collect = [f] [lst]
+    concat (map f lst)
+in
+
+let indexed = [lst]
+    zip (iota (length lst)) lst
+in
+
+let zipWith = [f] [lst1] [lst2]
+    map (uncurry f) (zip lst1 lst2)
+in
+
+let filterMap = [f] [lst]
+    collect ([x]
+        match f x with
+        | Some y -> Cons (y, Nil ())
+        | None _ -> Nil () 
+    ) lst
+in
+
+let filterPick = [f] [lst]
+    head (filterMap f lst)
 in
 
 rec stringToList = [str]
