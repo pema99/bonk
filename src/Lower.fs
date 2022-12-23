@@ -281,14 +281,6 @@ let renameShadowed name = shadow {
     | _ -> return name
 } 
 
-let rec getNamesInPattern (pat: Pattern) : string list =
-    match pat with
-    | PName a -> [a]
-    | PConstant _ -> []
-    | PTuple pats -> pats |> List.collect getNamesInPattern
-    | PUnion (_, pat) -> getNamesInPattern pat
-
-
 let rec renameShadowedVarsInPattern (pat: Pattern) : ShadowM<Pattern> = shadow {
     match pat with
     | PName a ->
@@ -310,7 +302,7 @@ let shadowNewName (pat: Pattern) : ShadowM<Pattern * (ShadowEnv -> ShadowEnv)> =
         | name :: rest ->
             let senv = extend senv name (1 + (lookup senv name |> Option.defaultValue (-1)))
             cont rest senv
-    let senv = cont (getNamesInPattern pat) senv
+    let senv = cont (freeInPattern pat |> Set.toList) senv
     let mapper = fun _ -> senv
     let! pat = local mapper (renameShadowedVarsInPattern pat)
     return pat, mapper

@@ -60,32 +60,34 @@ let identP =
 let wordP =
     identP
     |>> function
-        | "let"    -> Let
-        | "in"     -> In
-        | "if"     -> If
-        | "then"   -> Then
-        | "else"   -> Else
-        | "sum"    -> Sum
-        | "match"  -> Match
-        | "with"   -> With
-        | "member" -> Member
-        | "class"  -> Class
-        | "of"     -> Of
-        | "rec"    -> Rec
-        | "and"    -> And
-        | "import" -> Import
-        | "true"   -> Lit (LBool true)
-        | "false"  -> Lit (LBool false)
-        | "int"    -> TypeDesc (tInt)
-        | "char"   -> TypeDesc (tChar)
-        | "bool"   -> TypeDesc (tBool)
-        | "float"  -> TypeDesc (tFloat)
-        | "string" -> TypeDesc (tString)
-        | "void"   -> TypeDesc (tVoid)
-        | "unit"   -> TypeDesc (tUnit)
-        | "opaque" -> TypeDesc (tOpaque)
-        | "this"   -> TypeDesc (TVar "this")
-        | ident    -> Ident (ident)
+        | "let"     -> Let
+        | "in"      -> In
+        | "if"      -> If
+        | "then"    -> Then
+        | "else"    -> Else
+        | "sum"     -> Sum
+        | "match"   -> Match
+        | "with"    -> With
+        | "member"  -> Member
+        | "class"   -> Class
+        | "of"      -> Of
+        | "rec"     -> Rec
+        | "and"     -> And
+        | "import"  -> Import
+        | "true"    -> Lit (LBool true)
+        | "false"   -> Lit (LBool false)
+        | "int"     -> TypeDesc (tInt)
+        | "char"    -> TypeDesc (tChar)
+        | "bool"    -> TypeDesc (tBool)
+        | "float"   -> TypeDesc (tFloat)
+        | "string"  -> TypeDesc (tString)
+        | "void"    -> TypeDesc (tVoid)
+        | "unit"    -> TypeDesc (tUnit)
+        | "opaque"  -> TypeDesc (tOpaque)
+        | "this"    -> TypeDesc (TVar "this")
+        | "impure"  -> Qual (QImpure)
+        | "memoize" -> Qual (QMemoize)
+        | ident     -> Ident (ident)
 
 // Literals
 let floatP = 

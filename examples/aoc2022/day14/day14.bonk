@@ -22,7 +22,7 @@ in
 let posToIdx = [(x, y)] y * 1000 + x in
 let idxToY = [idx] idx / 1000 in
 
-let printf = $'a -> ()$(x) => console.log(x)$$ in
+impure let printf = $'a -> unit$(x) => console.log(x)$$ in
 
 rec addPath = [(fx,fy)] [(tx,ty)] [tree]
     if fx = tx && fy = ty then

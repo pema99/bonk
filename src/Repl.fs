@@ -43,9 +43,6 @@ let rec calcArity (ex: TypedExpr) : int =
     | ELam (_, rest) -> 1 + calcArity rest
     | _ -> 0
 
-let mkFakeExpr expr: TypedExpr =
-    { kind = expr; data = (Set.empty, tVoid); span = dummySpan }
-
 let rec buildApp (f: TypedExpr) (args: TypedExpr list): TypedExpr =
     match args with
     | h :: t -> mkFakeExpr (EApp (buildApp f t, h))
@@ -297,6 +294,7 @@ let rec handleDecl silent decl = repl {
                 let decl = {
                     kind = DLet (PName case, mkExpr (EVar case) dummySpan)
                     span = dummySpan
+                    qualifiers = Set.empty
                     data = ()
                 }
                 return! handleDecl silent decl 

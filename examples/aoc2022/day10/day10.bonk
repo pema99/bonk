@@ -41,7 +41,7 @@ let (acc, mem) = solution lines 1 1 0 (Nil ()) in
 let _ = print (toString (acc) + "\n") in
 
 // Part 2
-rec printMem = [mem] [i]
+impure rec printMem = [mem] [i]
     match mem with
     | Cons (h, t) ->
         let _ = print (h) in

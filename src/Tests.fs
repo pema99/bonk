@@ -87,31 +87,7 @@ let testPrelude() =
     match runReplAction true action with
     | Ok s -> compareOrBless "prelude" s
     | _ -> Error "Failed to run REPL action."
-
-let tests = [
-    "Prelude types match", testPrelude
-    "Let polymorphism works", fun () -> testTypes false "let_polymorphism"
-    "Let polymorphism works for groups", fun () -> testTypes false "rec_let_polymorphism"
-    "Simple value test", fun () -> testValues true "simple_value"
-    "Simple typeclass test #1", fun () -> testTypes false "simple_typeclass_types"
-    "Simple typeclass test #2", fun () -> testValues true "simple_typeclass_values"
-    "Strange parsing edgecase", fun () -> testValues true "strange_parse"
-    "Typeclass instance for constructed type", fun () -> testTypes false "typeclass_constructed_type"
-    "Basic overload resolution works", fun () -> testValues true "overload_resolution"
-    "Wrong typeclass implementation fails #1", fun () -> testValues false "typeclass_invalid"
-    "Wrong typeclass implementation fails #2", fun () -> testValues false "typeclass_invalid_self"
-    "Outdated environment regression", fun () -> testTypes false "outdated_env_bug"
-    "Duplicate typeclass mentions", fun () -> testTypes false "duplicate_classes"
-    "Two types, same typeclass", fun () -> testTypes false "two_types_same_typeclass"
-    "Mutual recursion values", fun () -> testValues true "mutual_recursion"
-    "Mutual recursion types", fun () -> testTypes true "mutual_recursion"
-    "Simple raw black usage", fun () -> testTypes false "raw_blocks_simple"
-    "Wide operators parse correctly", fun () -> testTypes false "wide_operator"
-    "Typeclasses for polymorphic types", fun () -> testValues true "typeclass_polymorphic"
-    "Missing typeclass causes error", fun () -> testValues true "typeclass_missing"
-    "Invalid typeclass for polymorphic types", fun () -> testValues true "typeclass_polymorphic_invalid"
-]
-
+    
 let findTests() =
     let rxMode = System.Text.RegularExpressions.Regex("//\s*Mode:\s*([A-Za-z, ]*)")
     let rxPrelude = System.Text.RegularExpressions.Regex("//\s*Prelude:\s*([A-Za-z]*)")

@@ -4,11 +4,11 @@
 
 // Typed raw block
 // console_log :: 'a -> unit
-let console_log = [x] $unit$ console.log(x) $$ in
+impure let console_log = [x] $unit$ console.log(x) $$ in
 
 // Untyped raw block
 // console_log_untyped :: 'a -> opaque
-let console_log_untyped = [x] $$ console.log(x) $$ in
+impure let console_log_untyped = [x] $$ console.log(x) $$ in
 
 // Use them it!
 let _ = console_log "hello world" in

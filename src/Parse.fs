@@ -40,11 +40,6 @@ let spannedExprP p : Com<UntypedExpr, Spanned<Token>> = com {
     return mkExpr (fst res) (snd res)
 }
 
-let spannedDeclP p : Com<UntypedDecl, Spanned<Token>> = com {
-    let! res = spannedP p
-    return { kind = (fst res); span = (snd res); data = () }
-}
-
 let extract ex =
     satisfy (ex >> Option.isSome)
     |>> ex
@@ -58,6 +53,7 @@ let identP    = extract (function (Ident v, _) -> Some v | _ -> None)
 let literalP  = extract (function (Lit v, _) -> Some v | _ -> None)
 let stringP   = extract (function (Lit (LString v), _) -> Some v | _ -> None)
 let typeDescP = extract (function (TypeDesc v, _) -> Some v | _ -> None)
+let qualP     = extract (function (Qual v, _) -> Some v | _ -> None)
 
 // Patterns
 let patP, patPImpl = declParser()
@@ -277,9 +273,19 @@ let declImplP =
 let declExprP =
     exprP |>> DExpr
 
+let qualifiersP =
+    many qualP |>> Set.ofList
+
 let declP =
-    declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP
-    |> spannedDeclP
+    qualifiersP <+>
+    (declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP)
+    |> spannedP
+    |>> fun ((quals, decl), span) -> {
+            kind = decl;
+            span = span;
+            qualifiers = quals
+            data = ()
+        }
 
 let importsP =
     many (tok Import *> stringP)
@@ -298,7 +304,8 @@ let runParse (kind: Com<'t, Spanned<Token>>) allowMore txt =
             |> kind
         let state = state :?> ArrayCombinatorState<Spanned<Token>>
         match res with
-        | Success v when (state.Offset >= state.Toks.Length-1) || allowMore -> Ok v
+        | Success v when (state.Offset >= state.Toks.Length-1) || allowMore ->
+            Ok v
         | _ ->
             let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
             let line = fst (fst span)
