@@ -51,7 +51,7 @@ let rbPrint = [tree]
         match tree with
         | RBEmpty _ -> ()
         | RBNode (k, v, color, l, r) ->
-            let istring = fold (+) "" (replicate "  " indent) in
+            let istring = fold (+) "" (replicate indent "  ") in
             let cstring = if color then "B" else "R" in
             let _ = print (istring + cstring + "(" + toString k + ", " + toString v + ")\n") in
             let _ = rbPrintInner l (indent + 1) in

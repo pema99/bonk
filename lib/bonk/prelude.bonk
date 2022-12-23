@@ -119,7 +119,7 @@ let iota = [n]
     inner (n-1) (Nil ())
 in
 
-let replicate = [v] [n]
+let replicate = [n] [v]
     rec inner = [i] [acc]
         if i <= 0 then acc
         else inner (i-1) (Cons (v, acc))

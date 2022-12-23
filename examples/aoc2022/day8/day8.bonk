@@ -20,7 +20,7 @@ let transpose = [lines]
             let tails = transposeInner len t in
             map ([(h1, t1)] Cons (h1, t1)) (zip h tails)
         | Nil () ->
-            replicate (Nil ()) len
+            replicate len (Nil ())
     in
     let len = length (getOption (Nil ()) (head lines)) in
     transposeInner len lines

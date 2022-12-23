@@ -31,7 +31,7 @@ rec expand = [lines] [acc]
         let dir = getOption "" (nth 0 res) in
         let len = getOption "" (nth 1 res) in
         let len = toInt len in
-        let steps = replicate dir len in
+        let steps = replicate len dir in
         let acc = append acc steps in
         expand t acc
     | Nil () -> acc
@@ -68,5 +68,5 @@ let acc = solution steps (Cons ((0, 0), Nil ())) (0, 0) (Nil ()) in
 let _ = print (toString (length acc) + "\n") in
 
 // Part 2
-let acc = solution steps (replicate (0, 0) 9) (0, 0) (Nil ()) in
+let acc = solution steps (replicate 9 (0, 0)) (0, 0) (Nil ()) in
 let _ = print (toString (length acc) + "\n") in

@@ -145,7 +145,7 @@ impure let aaPrint = [tree]
         match tree with
         | AAEmpty _ -> ()
         | AANode (n, l, k, v, r) ->
-            let istring = fold (+) "" (replicate "  " indent) in
+            let istring = fold (+) "" (replicate indent "  ") in
             let _ = print (istring + toString n + "(" + toString k + ", " + toString v + ")\n") in
             let _ = aaPrintInner l (indent + 1) in
             aaPrintInner r (indent + 1)

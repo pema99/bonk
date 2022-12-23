@@ -32,14 +32,14 @@ let runCommand = [stacks] [line]
             match fst acc with
             | Cons (fh, ft) -> (ft, Cons (fh, snd acc))
             | _ -> (fstack, tstack)
-        ) (fstack, tstack) (replicate 0 num)
+        ) (fstack, tstack) (replicate num 0)
     in
     replace f fafter (replace t tafter stacks)
 in
 
 // Part 1
 let header = reverse (take 8 lines) in
-let crates = fold parseCrates (replicate (Nil ()) 9) header in
+let crates = fold parseCrates (replicate 9 (Nil ())) header in
 
 let commands = skip 10 lines in
 let crates1 = fold runCommand crates commands in

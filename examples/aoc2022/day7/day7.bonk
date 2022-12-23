@@ -99,7 +99,7 @@ let _ = print (toString smallestDirSize + "\n") in
 
 // For debugging
 impure rec printDirs = [tree] [indent]
-    let is = listToString (replicate " " indent) in
+    let is = listToString (replicate indent " ") in
     match tree with
     | Dir (name, contents) ->
         let _ = print (is + name + "/\n") in

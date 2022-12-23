@@ -96,7 +96,7 @@ rec simulate = [divisor] [rounds] [round] [monkeys] [counts]
 in
 
 let solve = [divisor] [rounds]
-    let res = simulate divisor rounds 0 monkeys (replicate 0 (length monkeys)) in
+    let res = simulate divisor rounds 0 monkeys (replicate (length monkeys) 0) in
 
     rec findMax = [lst] [m] [mi] [i]
         match lst with
