@@ -13,4 +13,4 @@ impure let console_log_untyped = [x] $$ console.log(x) $$ in
 // Use them it!
 let _ = console_log "hello world" in
 let _ = console_log 1337 in
-let _ = console_log_untyped 420 in
+impure let _ = console_log_untyped 420 in

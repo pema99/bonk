@@ -238,7 +238,7 @@ let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : 
         do! failure <| sprintf "Semantic error at line %i, column %i: Match is not exhaustive." (fst f) (snd f)
     }
 
-let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list, string> =
+let checkMatches (env: UserEnv) (decls: TypedDecl list) : CheckM<TypedDecl list> =
     traverseTypedDecls 
         (fun ex -> check {
             match ex.kind with
@@ -264,13 +264,13 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : Result<TypedDecl list,
             | _ -> return decl
         })
         decls
-    |> runCheckM
 
 // Function coloring analysis
-type ColorM<'t> = ReaderStateM<unit,string Set * string Set,'t>
+// Fun impures, exceptions, class impures
+type ColorM<'t> = ReaderStateM<unit,string Set * string Set * string Set,'t>
 let color = state
 let runColorM (m: ColorM<'t>) : Result<'t, string> =
-    m ((), (funImpures, funImpureExceptions)) |> fst
+    m ((), (funImpures, funImpureExceptions, Set.empty)) |> fst
 
 // Helpers to set state
 let getImpures = fmap snd get
@@ -318,13 +318,13 @@ let rec isInherentlyPureType (ty: Type) : bool =
     | TCtor (KSum _, tys) ->
         List.forall isInherentlyPureType tys
 
-let checkPurity (decls: TypedDecl list) : Result<TypedDecl list, string> =
+let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
     traverseTypedDecls
         (just)
         (fun decl -> check {
             let hasImpureQual = Set.contains QImpure decl.qualifiers
             let! sets = getImpures
-            let (impures, excepts) = sets
+            let (impures, excepts, classImpures) = sets
             match decl.kind with
             | DLet (PName name, _)
             | DGroup ([name, _]) when Set.contains name excepts ->
@@ -337,7 +337,7 @@ let checkPurity (decls: TypedDecl list) : Result<TypedDecl list, string> =
                 let isImpure = (not isInherentlyPure) && (hasImpureQual || isBodyImpure)
                 if isImpure then
                     let impures = Set.union impures (freeInPattern p)
-                    do! setImpures (impures, excepts)
+                    do! setImpures (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
                     let f = fst decl.span
                     return! failure <| sprintf "Semantic error at line %i, column %i: Impure binding must be marked with an impure qualifier." (fst f) (snd f)
@@ -350,11 +350,30 @@ let checkPurity (decls: TypedDecl list) : Result<TypedDecl list, string> =
                 let isImpure = (not isInherentlyPure) && (hasImpureQual || isBodyImpure)
                 if isImpure then
                     let impures = Set.union impures (List.map fst bs |> Set.ofList)
-                    do! setImpures (impures, excepts)
+                    do! setImpures (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
                     let f = fst decl.span
                     return! failure <| sprintf "Semantic error at line %i, column %i: Impure binding must be marked with an impure qualifier." (fst f) (snd f)
                 else
+                    return decl
+            | DClass (name, _, _) when hasImpureQual ->
+                // TODO: Make this more granular
+                let classImpures = Set.add name classImpures
+                do! setImpures (impures, excepts, classImpures)
+                return decl
+            | DMember (_, (name, _), impls) ->
+                let isClassImpure = Set.contains name classImpures
+                let isBodyImpures = List.map (fun (impl, ex) ->
+                    let isBodyImpure = not <| isExprPure impures ex
+                    let isInherentlyPure = isInherentlyPureType (snd ex.data)
+                    impl, (not isInherentlyPure) && (hasImpureQual || isBodyImpure)) impls
+                if List.exists snd isBodyImpures && not isClassImpure then
+                    let f = fst decl.span
+                    return! failure <| sprintf "Semantic error at line %i, column %i: Impure bindings are not allowed in typeclasses unless the typeclass has the impure qualifier." (fst f) (snd f)
+                else
+                    let implImpures = List.filter snd isBodyImpures |> List.map fst
+                    let impures = Set.union impures (Set.ofList implImpures)
+                    do! setImpures (impures, excepts, classImpures)
                     return decl
             | _ ->
                 if Set.isEmpty decl.qualifiers then
@@ -364,10 +383,9 @@ let checkPurity (decls: TypedDecl list) : Result<TypedDecl list, string> =
                     return! failure <| sprintf "Semantic error at line %i, column %i: Qualifiers are invalid for this type of syntax element." (fst f) (snd f)
         })
         decls
-    |> runColorM
 
 // Put it all together
 let checkProgram (env: UserEnv, decls: TypedDecl list) : Result<TypedDecl list, string> =
     decls
-    |> checkMatches env
-    |> Result.bind checkPurity
+    |> (checkMatches env >> runCheckM)
+    |> Result.bind (checkPurity >> runColorM)

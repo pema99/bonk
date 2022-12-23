@@ -34,7 +34,7 @@ let compareOrBless name content =
         Ok ()
 
 let listTypes = repl {
-    let! ((typeEnv, _, _, _), termEnv) = get
+    let! ((typeEnv, _, _, _), _, termEnv) = get
     let names = Map.toList typeEnv |> List.map fst
     return
         names

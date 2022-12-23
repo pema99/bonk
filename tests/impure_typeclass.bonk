@@ -1,0 +1,11 @@
+// Mode: values
+// Prelude: true
+// Description: Impure typeclass without annotation
+
+class MyClass =
+    | foo : this -> this
+
+member string of MyClass =
+    | foo : [x] let _ = print x in x
+
+let a = foo "bar" in
