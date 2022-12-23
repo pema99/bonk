@@ -13,6 +13,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - A [JavaScript backend](https://gist.github.com/pema99/935b915a3197b5222183bf6ac4bb8308).
 - JavaScript interop via raw-JavaScript expression blocks.
 - Recursion (including mutual recursion) is supported, with tail call optimization.
+- Purity analysis. All functions which have side effects must be annotated as impure.
 - A _very_ work-in-progress implementation of typeclasses for ad-hoc polymorphism.
 - List literals as syntax sugar for `Cons`-lists.
 - Pipeline operators for function application: `|>`, `<|`.
