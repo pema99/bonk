@@ -43,9 +43,6 @@ let rec calcArity (ex: TypedExpr) : int =
     | ELam (_, rest) -> 1 + calcArity rest
     | _ -> 0
 
-let mkFakeExpr expr: TypedExpr =
-    { kind = expr; data = (Set.empty, tVoid); span = dummySpan }
-
 let rec buildApp (f: TypedExpr) (args: TypedExpr list): TypedExpr =
     match args with
     | h :: t -> mkFakeExpr (EApp (buildApp f t, h))
@@ -208,32 +205,43 @@ and eval tenv (e: TypedExpr) =
 
 // Repl start
 type InferState = TypeEnv * UserEnv * ClassEnv * int
-type ReplM<'t> = StateM<InferState * TermEnv, 't>
+type CheckState = unit * (Set<string> * Set<string> * Set<string>)
+type ReplM<'t> = StateM<InferState * CheckState * TermEnv, 't>
 let repl = state
-let getTermEnv : ReplM<TermEnv> = fmap snd get
-let setTermEnv x : ReplM<unit> = fun (s, _) -> (Ok (), (s, x))
-let setFreshCount x : ReplM<unit> = fun ((a,b,c,_),e) -> (Ok (), ((a,b,c,x),e))
+let getTermEnv : ReplM<TermEnv> = fmap (fun (_,_,a) -> a) get
+let setTermEnv x : ReplM<unit> = fun (s, b, _) -> (Ok (), (s, b, x))
+let setFreshCount x : ReplM<unit> = fun ((a,b,c,_),d,e) -> (Ok (), ((a,b,c,x),d,e))
 
-let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
-    let! ((typeEnv, userEnv, classEnv, freshCount), termEnv) = get
+let applyEnvUpdate (up: EnvUpdate) (check: CheckState) : ReplM<unit> = repl {
+    let! ((typeEnv, userEnv, classEnv, freshCount), _, termEnv) = get
     let (typeUp, userUp, classUp, implUp) = up
     let typeEnv = extendEnv typeEnv typeUp
     let userEnv = extendEnv userEnv userUp
     let classEnv = extendEnv classEnv classUp
     let classEnv = List.fold addClassInstance classEnv implUp
-    do! set ((typeEnv, userEnv, classEnv, freshCount), termEnv)
+    do! set ((typeEnv, userEnv, classEnv, freshCount), check, termEnv)
     }
 
+// Returns state of checking, just for the REPL
+let runColorMRepl (checkState: CheckState) (m: ColorM<'t>) =
+    let (res, state) = m checkState
+    res |> Result.map (fun a -> a, state)
+
+let checkProgramRepl (env: UserEnv, checkState: CheckState, decls: TypedDecl list) =
+    decls
+    |> (checkMatches env >> runCheckM)
+    |> Result.bind (checkPurity >> runColorMRepl checkState)
+
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
-    let! ((typeEnv, userEnv, classEnv, freshCount), _) = get
+    let! ((typeEnv, userEnv, classEnv, freshCount), checkState, _) = get
     let res, ((_,uenv,_,_), (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
-        let tdecl = checkProgram (uenv, [tdecl]) |> Result.map (List.head)
+        let tdecl = checkProgramRepl (uenv, checkState, [tdecl]) |> Result.map (fun (res, state) -> List.head res, state)
         match tdecl with
-        | Ok tdecl ->
-            do! applyEnvUpdate update
+        | Ok (tdecl, checkState) ->
+            do! applyEnvUpdate update checkState
             return update, Some tdecl
         | Error err ->
             printfn "%s" err
@@ -244,7 +252,7 @@ let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     }
 
 let checkType (name: string) : ReplM<string option> = repl {
-    let! ((typeEnv, _, _, _), _) = get
+    let! ((typeEnv, _, _, _), _, _) = get
     match lookup typeEnv name with
     | Some (_, typ) -> return Some (typ |> prettyQualType)
     | None -> return None
@@ -297,6 +305,7 @@ let rec handleDecl silent decl = repl {
                 let decl = {
                     kind = DLet (PName case, mkExpr (EVar case) dummySpan)
                     span = dummySpan
+                    qualifiers = Set.empty
                     data = ()
                 }
                 return! handleDecl silent decl 
@@ -353,7 +362,7 @@ let runRepl stdlib : ReplM<unit> = repl {
             | 'f' when ops.Length > 1 ->
                 do! loadLibrary false (System.IO.File.ReadAllText ops.[1])
             | 's' ->
-                let! ((typeEnv, _, _, _), termEnv) = get
+                let! ((typeEnv, _, _, _), _, termEnv) = get
                 let filter = if ops.Length > 1 then ops.[1] else ""
                 let names = Map.toList typeEnv |> List.map fst
                 names
@@ -380,9 +389,12 @@ let runRepl stdlib : ReplM<unit> = repl {
             do! runExpr (readUntilSemicolon input)
 }
 
-let runReplAction prelude action =
+let runReplAction prelude (action: ReplM<'t>) =
     let funSchemes = if prelude then funSchemes else Map.empty
-    action ((funSchemes, Map.empty, classes, 0), Map.map (fun k _ -> VIntrinsic (k, [])) funSchemes)
+    action (
+        (funSchemes, Map.empty, classes, 0),                // Infer state
+        ((),(funImpures, funImpureExceptions, Set.empty)),  // Check state
+        Map.map (fun k _ -> VIntrinsic (k, [])) funSchemes) // Term state
     |> fst
 
 let startRepl builtins stdlib =

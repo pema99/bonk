@@ -12,8 +12,18 @@ let mkExpr (kind: ExprKind<unit>) (span: Span) : UntypedExpr =
 let mkTypedExpr (ex: ExprKind<QualType>) (ty: QualType) (sp: Span) : TypedExpr =
     { kind = ex; data = ty; span = sp }
 
-let mkTypedDecl (ex: DeclKind<QualType>) (sp: Span) : TypedDecl =
-    { kind = ex; data = (); span = sp }
+let mkTypedDecl (ex: DeclKind<QualType>) (quals: Qualifier Set) (sp: Span) : TypedDecl =
+    { kind = ex; data = (); qualifiers = quals; span = sp }
+
+let mkFakeExpr expr: TypedExpr =
+    { kind = expr; data = dummyQualType; span = dummySpan }
+
+let rec freeInPattern (pat: Pattern) : string Set =
+    match pat with
+    | PName a -> Set.singleton a
+    | PConstant _ -> Set.empty
+    | PTuple pats -> pats |> List.map freeInPattern |> Set.unionMany
+    | PUnion (_, pat) -> freeInPattern pat
 
 // Env helpers
 let extend env x s = Map.add x s env

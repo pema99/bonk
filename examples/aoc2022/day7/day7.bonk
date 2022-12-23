@@ -98,7 +98,7 @@ let smallestDirSize = fold min 70000000 dirSizes in
 let _ = print (toString smallestDirSize + "\n") in
 
 // For debugging
-rec printDirs = [tree] [indent]
+impure rec printDirs = [tree] [indent]
     let is = listToString (replicate " " indent) in
     match tree with
     | Dir (name, contents) ->

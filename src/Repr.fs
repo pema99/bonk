@@ -24,6 +24,10 @@ type BinOp =
     | BoolAnd | BoolOr
     | Modulo
 
+type Qualifier =
+    | QImpure
+    | QMemoize
+
 // Tokens
 type Token =
     // Operators, literals, identifiers, types
@@ -31,6 +35,7 @@ type Token =
     | Lit of Literal
     | Ident of string
     | TypeDesc of Type
+    | Qual of Qualifier
     | RawBlock of Spanned<Token> list * string
     // Keywords
     | Let | In
@@ -84,6 +89,7 @@ and DeclKind<'t> =
 and DeclRaw<'t, 'u> = {
     kind: DeclKind<'t>
     span: Span
+    qualifiers: Qualifier Set
     data: 'u
 }
 
@@ -145,6 +151,10 @@ let tChar = TConst TChar
 let tVoid = TConst TVoid
 let tUnit = TConst TUnit
 let tOpaque = TConst TOpaque
+
+// Dummy values when we need to construct fake expressions
+let dummyType = tVoid
+let dummyQualType = (Set.empty, dummyType)
 
 // Just for REPL
 type Value =

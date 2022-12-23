@@ -1,0 +1,9 @@
+// Mode: values
+// Prelude: true
+// Description: Impure on invalid syntax element
+
+// This should be valid
+impure rec x = [y] y in
+
+// But this should not
+impure sum Stack 'a = Stack (List 'a)

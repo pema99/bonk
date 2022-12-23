@@ -263,7 +263,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
         | x ->
             let fvName = "$tmp"
             let hoisted = hoist x
-            let matcher = emitPatternMatch (JsScope []) x ({ kind = EVar fvName; span = dummySpan; data = (Set.empty, tVoid) }) false
+            let matcher = emitPatternMatch (JsScope []) x ({ kind = EVar fvName; span = dummySpan; data = dummyQualType }) false
             JsFunc (fvName, 
                 List.map (fun n -> JsDecl (n, JsConst "null")) hoisted @ [
                     matcher

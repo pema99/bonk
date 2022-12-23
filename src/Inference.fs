@@ -513,11 +513,11 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
     match inDecl.kind with
     | DExpr e ->
         let! qt, te = inferExprTop e
-        return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), mkTypedDecl (DExpr (te)) inDecl.span
+        return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), mkTypedDecl (DExpr (te)) inDecl.qualifiers inDecl.span
     | DLet (name, e) ->
         let! qt, te = inferExprTop e
         let bindings = gatherVarBindings name qt
-        return (bindings, [], [], []), mkTypedDecl (DLet (name, te)) inDecl.span
+        return (bindings, [], [], []), mkTypedDecl (DLet (name, te)) inDecl.qualifiers inDecl.span
     | DGroup (ds) ->
         let names, _ = List.unzip ds
         // TODO: This is sort of a hack, should fix
@@ -530,7 +530,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
                 | EGroup (bs, _) -> List.filter (fst >> (=) name) bs
                 | _ -> [])
         let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
-        return (bindings, [], [], []), mkTypedDecl (DGroup (tes)) inDecl.span
+        return (bindings, [], [], []), mkTypedDecl (DGroup (tes)) inDecl.qualifiers inDecl.span
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
         let! usr = getUserEnv
@@ -561,11 +561,11 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
                             let! sc = generalize (Set.empty, (TCtor (KArrow, [typ; ret])))
                             return case, sc
                          }) cases
-        return (nenv, [name, (typs, cases)], [], []), mkTypedDecl (DUnion (name, typs, cases)) inDecl.span
+        return (nenv, [name, (typs, cases)], [], []), mkTypedDecl (DUnion (name, typs, cases)) inDecl.qualifiers inDecl.span
     | DClass (name, reqs, mems) ->
         let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])
-        return (vars, [], [cls], []), mkTypedDecl (DClass (name, reqs, mems)) inDecl.span
+        return (vars, [], [cls], []), mkTypedDecl (DClass (name, reqs, mems)) inDecl.qualifiers inDecl.span
     | DMember (blankets, pred, exprs) ->
         // TODO: Semantic checking
         // o Check that the typeclass exists
@@ -610,7 +610,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         // let! ps = reduce (List.concat apreds @ List.concat epreds)
         // Make the implementation to extend the class environment with
         // Return the class implementation and the type-annotated expression for each function
-        return ([], [], [], [pred]), mkTypedDecl (DMember (blankets, pred, List.zip names aexprs)) inDecl.span
+        return ([], [], [], [pred]), mkTypedDecl (DMember (blankets, pred, List.zip names aexprs)) inDecl.qualifiers inDecl.span
     }
 
 // TODO: Deduplicate some of the code in Repl

@@ -168,6 +168,21 @@ let funImpls = Map.ofList [
     "ceil",         (mathOp1 ceil,  1)
 ]
 
+// Instrinsic functions that are impure
+let funImpures = Set.ofList [
+    "print"
+    "read"
+    "readFile"
+]
+
+// Intrinsic functions that the compiler can't verify the purity of,
+// but which should still be considered pure.
+let funImpureExceptions = Set.ofList [
+    "_rawToString"
+    "_charToString"
+]
+
+// Builtin classes
 let classes: ClassEnv = Map.ofList [
     "Num", ([], [
         tInt

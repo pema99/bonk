@@ -3,7 +3,7 @@ sum AATree 'k 'v =
     | AANode int * (AATree 'k 'v) * 'k * 'v * (AATree 'k 'v) // level, left, key, value, right
     | AAEmpty unit
 
-let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint) =
+let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Helpers
     let skew = [tree]
         match tree with
@@ -137,21 +137,20 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint) =
         fold ([tree] [(key, val)] aaInsert key val tree) aaEmpty lst
     in
 
-    // Printing
-    let aaPrint = [tree]
-        rec aaPrintInner = [tree] [indent]
-            match tree with
-            | AAEmpty _ -> ()
-            | AANode (n, l, k, v, r) ->
-                let istring = fold (+) "" (replicate "  " indent) in
-                let _ = print (istring + toString n + "(" + toString k + ", " + toString v + ")\n") in
-                let _ = aaPrintInner l (indent + 1) in
-                aaPrintInner r (indent + 1)
-        in
-        aaPrintInner tree 0
-    in
+    (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList)
+in
 
-    (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList, aaPrint)
+impure let aaPrint = [tree]
+    rec aaPrintInner = [tree] [indent]
+        match tree with
+        | AAEmpty _ -> ()
+        | AANode (n, l, k, v, r) ->
+            let istring = fold (+) "" (replicate "  " indent) in
+            let _ = print (istring + toString n + "(" + toString k + ", " + toString v + ")\n") in
+            let _ = aaPrintInner l (indent + 1) in
+            aaPrintInner r (indent + 1)
+    in
+    aaPrintInner tree 0
 in
 
 // --- Stacks ---

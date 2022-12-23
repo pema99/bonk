@@ -1,0 +1,8 @@
+// Mode: values
+// Prelude: true
+// Description: Impure function without annotation
+
+let foo = [x]
+    let _ = print x in
+    ()
+in
