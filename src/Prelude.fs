@@ -156,6 +156,8 @@ let funImpls = Map.ofList [
     "substring",    (substring,     3)
     "print",        (print,         1)
     "read",         (read,          1)
+    "readFile",     (readFile,      1)
+    "writeFile",    (writeFile,     2)
     "toFloat",      (toFloat,       1) 
     "toString",     (toString,      1) 
     "toBool",       (toBool,        1) 

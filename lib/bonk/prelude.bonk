@@ -338,3 +338,6 @@ let splitString = [sep] [str]
                 splitInner f (s + 1) acc
     in reverse (splitInner 0 0 (Nil ()))
 in
+
+impure let printf = [x] print (toString x) in
+impure let printfn = [x] print (toString x + "\n") in
