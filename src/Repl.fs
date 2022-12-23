@@ -9,6 +9,7 @@ open Combinator
 open Parse
 open Prelude
 open CodeGen
+open Semantics
 
 // Evaluation
 let rec compatible (l: QualType) (r: QualType) : bool =
@@ -225,12 +226,18 @@ let applyEnvUpdate (up: EnvUpdate) : ReplM<unit> = repl {
 
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), _) = get
-    let res, (_, (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
+    let res, ((_,uenv,_,_), (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
-        do! applyEnvUpdate update
-        return update, Some tdecl
+        let tdecl = checkProgram (uenv, [tdecl]) |> Result.map (List.head)
+        match tdecl with
+        | Ok tdecl ->
+            do! applyEnvUpdate update
+            return update, Some tdecl
+        | Error err ->
+            printfn "%s" err
+            return ([], [], [], []), None
     | Error err ->
         printfn "%s" err
         return ([], [], [], []), None

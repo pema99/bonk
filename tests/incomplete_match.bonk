@@ -1,0 +1,7 @@
+// Mode: values
+// Prelude: true
+// Description: Inexhaustive pattern matching
+
+match Some true with
+| Some true -> 1
+| None () -> 2
