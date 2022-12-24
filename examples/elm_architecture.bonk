@@ -1,0 +1,113 @@
+// This example shows a toy implementation of the Elm architecture.
+// When compiled, this will produce a single JavaScript file which
+// can be included in a HTML file to render the classic counter app.
+
+// --- Boilerplate code ---
+sum Value 'a =
+    | Text string
+    | Op 'a
+
+sum Attribute 'a =
+    Attribute string * Value 'a
+
+sum Html 'a =
+    | Html string * (List (Attribute 'a)) * (List (Html 'a))
+    | RawHtml string
+
+let node = [tag] [attrs] [htmls]
+    Html (tag, attrs, htmls)
+in
+
+let div = node "div" in
+let button = node "button" in
+let text = [str] RawHtml str in
+
+let on = [event] [handler]
+    Attribute (event, Op handler)
+in
+
+let onClick = on "click" in
+
+impure let sandbox = $'model -> ('msg -> 'model -> 'model) -> ('model -> Html 'msg) -> unit$
+    (init) => (update) => (view) => {
+        let listToArray = (lst) => {
+            let extracted = [];
+            while (lst.tag === "Cons") {
+                extracted.push(lst.val[0]);
+                lst = lst.val[1];
+            }
+            return extracted;
+        }
+
+        let model = init;
+        let rendered = view(model);
+
+        let render = (node, html) => {
+            switch (html.tag) {
+                case "Html":
+                    let [name, attrsRaw, childenRaw] = html.val;
+                    let el = document.createElement(name);
+                    node.appendChild(el);
+                    let attrs = listToArray(attrsRaw);
+                    let children = listToArray(childenRaw);
+                    for (let i = 0; i < attrs.length; i++) {
+                        let [name, val] = attrs[i].val;
+                        switch (val.tag) {
+                            case "Text":
+                                el.setAttribute(name, val.val);
+                                break;
+                            case "Op":
+                                el.addEventListener(name, () => {
+                                    model = update(val.val)(model);
+                                    rendered = view(model);
+                                    document.body.innerHTML = "";
+                                    render(document.body, rendered);
+                                });
+                                break;
+                        }
+                    }
+                    for (let i = 0; i < children.length; i++) {
+                        render(el, children[i]);
+                    }
+                    break;
+                case "RawHtml":
+                    node.innerHTML = html.val;
+                    break;
+            }
+        }
+
+        render(document.body, rendered);
+    }
+$$ in
+
+// -- Model --
+sum Model = Model int
+let modelToString = [model] let Model val = model in toString val in
+
+let init =
+    Model 0
+in
+
+// -- Update --
+sum Msg =
+    | Increment unit
+    | Decrement unit
+
+let update = [msg] [model]
+    let Model val = model in
+    match msg with
+    | Increment _ -> Model (val + 1)
+    | Decrement _ -> Model (val - 1)
+in
+
+// -- View --
+let view = [model]
+  div {}
+    { button { onClick (Decrement()) } { text "-" }
+    ; div {} { text (modelToString model) }
+    ; button { onClick (Increment()) } { text "+" }
+    }
+in
+
+// -- Program --
+let _ = sandbox init update view in
