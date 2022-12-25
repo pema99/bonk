@@ -1,0 +1,11 @@
+// Mode: values
+// Prelude: false
+// Description: Cut off expression parsing
+
+// When we have an invalid expression which is discovered invalid deep into parsing,
+// the correct location should be in the error
+
+let foo = 
+    let b = [o]a if true then 1 else 1
+    in
+in
