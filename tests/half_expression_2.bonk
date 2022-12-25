@@ -1,11 +1,11 @@
 // Mode: values
 // Prelude: false
-// Description: Cut off expression parsing #1
+// Description: Cut off expression parsing #2
 
 // When we have an invalid expression which is discovered invalid deep into parsing,
 // the correct location should be in the error
 
+let a = 3 in
 let foo = 
-    let b = [o]a if true then 1 else 1
-    in
+    let c = "foobar" + 1337 in
 in

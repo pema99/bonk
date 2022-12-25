@@ -284,11 +284,11 @@ let declP =
     (com {
         let! next = look
         match fst next with
-        | Let -> return! declLetP
-        | Rec -> return! declLetGroupP
-        | Sum -> return! declSumP
-        | Class -> return! declClassP
-        | Member -> return! declImplP
+        | Let    -> return! must declLetP
+        | Rec    -> return! must declLetGroupP
+        | Sum    -> return! must declSumP
+        | Class  -> return! must declClassP
+        | Member -> return! must declImplP
         | _ -> return! declExprP
     })
     |> spannedP

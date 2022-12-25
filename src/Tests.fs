@@ -91,7 +91,7 @@ let testPrelude() =
 let findTests() =
     let rxMode = System.Text.RegularExpressions.Regex("//\s*Mode:\s*([A-Za-z, ]*)")
     let rxPrelude = System.Text.RegularExpressions.Regex("//\s*Prelude:\s*([A-Za-z]*)")
-    let rxDesc = System.Text.RegularExpressions.Regex("//\s*Description:\s*([A-Za-z, ]*)")
+    let rxDesc = System.Text.RegularExpressions.Regex("//\s*Description:\s*([A-Za-z, #0-9]*)")
     let tests = 
         Directory.GetFiles("tests", "*.bonk")
         |> Seq.collect (fun path ->
