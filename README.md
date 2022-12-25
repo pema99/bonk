@@ -37,7 +37,7 @@ let total =
 in
 
 // We can do the same thing more succintly with the pipeline operator.
-// Bonk supports shadowing, so we can shadow the previous binding.
+// Bonk supports shadowing, so we can shadow the previous binding:
 let total =
     iota 20
     |> map ([x] x * x)
