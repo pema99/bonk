@@ -51,22 +51,13 @@ let resolveImports prelude files =
     List.distinct files
     |> List.map (fun file -> Map.find file visited)
 
-let combineResult a b =
-    match a, b with
-    | Ok al, Ok ab -> Ok (al @ ab)
-    | _, Error err | Error err, _ -> Error err
-
-let parsePrograms =
-    List.map parseProgram
-    >> List.reduce combineResult
-
 let pipeline prelude =
     resolveImports prelude
     >> parsePrograms
-    >> Result.bind inferProgram
-    >> Result.bind checkProgram
-    >> Result.map lowerProgram
-    >> Result.map emitProgram
+    >> Result.bind inferPrograms
+    >> Result.bind checkPrograms
+    >> Result.map lowerPrograms
+    >> Result.map emitPrograms
 
 let startCompile prelude output files =
     match pipeline prelude files with

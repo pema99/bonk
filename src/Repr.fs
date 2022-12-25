@@ -95,8 +95,10 @@ and DeclRaw<'t, 'u> = {
 
 and UntypedExpr = ExprRaw<unit>
 and UntypedDecl = DeclRaw<unit, unit>
+and UntypedProgram = UntypedDecl list
 and TypedExpr = ExprRaw<QualType>
 and TypedDecl = DeclRaw<QualType, unit>
+and TypedProgram = TypedDecl list
 
 // Primitive types
 and PrimType =

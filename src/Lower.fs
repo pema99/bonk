@@ -251,12 +251,12 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
         return { decl with kind = DMember (blankets, pred, impls) }
     }
 
-let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
-    let res, (_, (overloads, _)) = mapM gatherOverloadsDecl decls (Map.empty, (Map.empty, 0))
+let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
+    let res, (_, (overloads, _)) = mapM (mapM gatherOverloadsDecl) decls (Map.empty, (Map.empty, 0))
     match res with
     | Ok mdecls ->
         mdecls
-        |> List.map (mapTypedDecl (fun ex ->
+        |> List.map (List.map (mapTypedDecl (fun ex ->
             match ex with
             | EVar (name) when name.StartsWith(monomorphPrefix) -> // TODO: Unsafe
                 let id = int <| name.Substring(monomorphPrefix.Length)
@@ -264,7 +264,7 @@ let monomorphizeDecls (decls: TypedDecl list) : TypedDecl list =
                 | Some mangled -> EVar (mangled)
                 | _ -> ex // TODO: This is the case where a monomorphable type is ambiguous, should report it
             | _ -> ex
-            ) id)
+            ) id))
     | _ -> decls
 
 type ShadowEnv = Map<string, int>
@@ -412,10 +412,10 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
         return { decl with kind = DMember (blankets, pred, impls) }
     }
 
-let renamedShadowedVarsInDecls (decls: TypedDecl list) : TypedDecl list =
-    let res, _ = mapM renamedShadowedVarsInDecl decls (Map.empty, ())
+let renamedShadowedVarsInPrograms (decls: TypedProgram list) : TypedProgram list =
+    let res, _ = mapM (mapM renamedShadowedVarsInDecl) decls (Map.empty, ())
     match res with
     | Ok mdecls -> mdecls
     | _ -> decls
 
-let lowerProgram = monomorphizeDecls >> renamedShadowedVarsInDecls
+let lowerPrograms = monomorphizePrograms >> renamedShadowedVarsInPrograms

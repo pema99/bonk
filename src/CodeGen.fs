@@ -420,7 +420,8 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 JsDecl (mangled, emitExpr body)) impls
     List.map (optimizeStmt) res
 
-let emitProgram (decls: TypedDecl list) =
+let emitPrograms (decls: TypedProgram list) =
+    let decls = List.concat decls
     let jsAst = List.collect emitDecl decls
     let jsOutput = pprJsBlock 0 jsAst
     let jsOutput = jsInstrincs + jsOutput

@@ -385,7 +385,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
         decls
 
 // Put it all together
-let checkProgram (env: UserEnv, decls: TypedDecl list) : Result<TypedDecl list, string> =
+let checkPrograms (env: UserEnv, decls: TypedProgram list) : Result<TypedProgram list, string> =
     decls
-    |> (checkMatches env >> runCheckM)
-    |> Result.bind (checkPurity >> runColorM)
+    |> (mapM (checkMatches env) >> runCheckM)
+    |> Result.bind (mapM checkPurity >> runColorM)

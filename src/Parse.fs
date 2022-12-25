@@ -316,3 +316,9 @@ let runParse (kind: Com<'t, Spanned<Token>>) allowMore txt =
 let parseDecl = runParse declP false
 let parseImports = runParse importsP true
 let parseProgram = runParse programP false
+
+let parsePrograms (programs: string list) : Result<UntypedProgram list, string> =
+    let results = List.map parseProgram programs
+    match List.tryFind (function Error _ -> true | _ -> false) results with
+    | Some (Error err) -> Error err
+    | _ -> Ok (List.choose (function Error _ -> None | Ok v -> Some v) results)

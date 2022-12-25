@@ -635,9 +635,9 @@ let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
     mapM inferDecl decls
 
 // Infer entire program and return the useful parts
-let inferProgram (decls: UntypedDecl list) : Result<(UserEnv * TypedDecl list),string> =
+let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list),string> =
     let res, ((_,userEnv,_,_),_) =
-        inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+        mapM inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
     match res with
     | Ok typedDecls -> Ok (userEnv, typedDecls)
     | Error err -> Error err
