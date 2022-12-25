@@ -16,8 +16,20 @@ let mkString = List.toArray >> System.String
 let whitespaceP = many (oneOf [' '; '\r'; '\n'; '\t']) *> just ()
 let whitespacedP p = between whitespaceP p whitespaceP
 
+let spannedP p : Com<Spanned<'t>, char> = com {
+    let! state = com.get()
+    let state = state :?> MultiLineTextCombinatorState
+    let start = (state.Line, state.Column)
+    let! res = p
+    let! state = com.get()
+    let state = state :?> MultiLineTextCombinatorState
+    let stop = (state.Line, state.Column)
+    let spanned = (res, (start, stop))
+    return spanned
+}
+
 // Symbols
-let operatorP = com {
+let operatorP = spannedP <| com {
     let! l = item
     let! r = opt look
     match l, r with
@@ -55,7 +67,6 @@ let operatorP = com {
 let identP = 
     eatWhile1 isAlphaNumeric
     |>> mkString
-    |> whitespacedP
 
 let wordP =
     identP
@@ -88,6 +99,8 @@ let wordP =
         | "impure"  -> Qual (QImpure)
         | "memoize" -> Qual (QMemoize)
         | ident     -> Ident (ident)
+    |> spannedP
+    |> whitespacedP
 
 // Literals
 let floatP = 
@@ -123,6 +136,7 @@ let literalP =
     <|> intP
     <|> attempt charP
     |>> Lit
+    |> spannedP
 
 // Comments
 let commentP =
@@ -130,18 +144,6 @@ let commentP =
     eatWhile ((<>) '\n') *> one '\n'
 
 // Put it all together
-let spannedP p : Com<Spanned<'t>, char> = com {
-    let! state = com.get()
-    let state = state :?> MultiLineTextCombinatorState
-    let start = (state.Line, state.Column)
-    let! res = p
-    let! state = com.get()
-    let state = state :?> MultiLineTextCombinatorState
-    let stop = (state.Line, state.Column)
-    let spanned = (res, (start, stop))
-    return spanned
-}
-
 let tokenP, tokenPImpl = declParser()
 
 // Raw JS blocks
@@ -150,10 +152,11 @@ let rawBlockP =
     <+> (eatWhile ((<>) '$') |>> mkString)
     <* (one '$' *> one '$')
     |>> RawBlock
+    |> spannedP
 
 tokenPImpl :=
     many (attempt commentP <* whitespaceP) *>
-    whitespacedP (spannedP (literalP <|> wordP <|> attempt operatorP <|> attempt rawBlockP))
+    whitespacedP (literalP <|> wordP <|> attempt operatorP <|> attempt rawBlockP)
 
 let lex allowMore txt =
     let (res, state) = 
