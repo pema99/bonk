@@ -1,5 +1,7 @@
 // Bonk has a builtin memoization keyword.
-// It only works for pure functions.
+// Return values from calls to the a memoized function will be cached,
+// preventing them from ever being computed again.
+// Note: The keyword only works for pure functions.
 
 memoize rec fib = [n]
     if n < 2 then n
