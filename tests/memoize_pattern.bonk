@@ -1,0 +1,7 @@
+// Mode: values
+// Prelude: false
+// Description: Cannot memoize pattern match
+
+memoize let (foo, bar) =
+    (1, 2)
+in

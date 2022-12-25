@@ -1,0 +1,15 @@
+// Bonk has a builtin memoization keyword.
+// It only works for pure functions.
+
+memoize rec fib = [n]
+    if n < 2 then n
+    else fib(n-1) + fib(n-2)
+in
+
+let _ = printfn (fib 400) in
+
+memoize let foo = [n]
+    fold (+) 0 (iota n)
+in
+
+let _ = printfn (foo 400) in

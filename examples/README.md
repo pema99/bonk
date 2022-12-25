@@ -13,6 +13,7 @@ Contains files reproducing various bugs. A to-do list of sorts.
 - frontpage.bonk: The example from the main readme.
 - interop.bonk: Shows JavaScript interop.
 - list_nodeps.bonk: Demonstrates lists but can run without the standard library.
+- memoize.bonk: Demonstrates automatic memoization
 - option.bonk: Shows how to use optional types.
 - rbtree.bonk: Implementation of red-black trees.
 - test.bonk: Shows very basic syntax.

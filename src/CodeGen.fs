@@ -189,64 +189,74 @@ let emitOp ((_, typ): QualType) (op: BinOp) (l: JsExpr) (r: JsExpr) : JsExpr =
         else 
             JsOp (l, "/", r)
 
-let optimizeTailRecursion (name: string) (arity: int) (ex: JsExpr) : JsExpr =
-    // Grab parameter names
-    let rec getParams ex =
-        match ex with
-        | JsFunc (xs, [ JsReturn (JsFunc (n1, n2)) ]) ->
-            xs :: getParams (JsFunc (n1, n2))
-        | JsFunc (xs, _) ->
-            [xs]
-        | _ ->
-            []
-    let parms = getParams ex
-    if List.length parms <> arity then
-        ex
-    else
-        // Grab parameters from a suspected tail call
-        let getTailCallsParams ex =
-            let rec unfoldTailCall ex =
-                match ex with
-                | JsCall (f, x) -> unfoldTailCall f |> Option.map (fun xs -> x :: xs)
-                | JsVar (x) when x = name -> Some []
-                | _ -> None
-            match unfoldTailCall ex with
-            | Some es when List.length es = arity -> Some es
-            | _ -> None
-        // Inject mutables into the function body for each tail call
-        let rec injectMuts ex =
-            traverseStmt ( // TODO: Needs to be a fold to handle shadowing
-                function
-                | JsCall (_, _) as e ->
-                    match getTailCallsParams e with
-                    | Some es ->
-                        let lhs = sprintf "[%s]" (parms |> String.concat ", ")
-                        let rhs = 
-                            es
-                            |> List.rev
-                            |> JsList
-                        JsDefer (JsScope [JsAssign (lhs, rhs)])
-                    | None -> e
-                | e -> e) id ex
-        // Inject something into the function body while matching
-        let rec injectMatch f ex =
+// Inject into body of function
+let rec injectBody f ex =
+    match ex with
+    | JsFunc (x, [JsReturn (e)]) ->
+        let rest =
+            match e with
+            | JsFunc (_, _) ->
+                [JsReturn (injectBody f e)]
+            | JsDefer blk ->
+                f blk
+            | a ->
+                f (JsReturn a)
+        JsFunc (x, rest)
+    | ex -> ex
+
+let optimizeTailRecursion (name: string) (parms: string list) (arity: int) (ex: JsExpr) : JsExpr =
+    // Grab parameters from a suspected tail call
+    let getTailCallsParams ex =
+        let rec unfoldTailCall ex =
             match ex with
-            | JsFunc (x, [JsReturn (e)]) ->
-                let rest =
-                    match e with
-                    | JsFunc (_, _) ->
-                        [JsReturn (injectMatch f e)]
-                    | JsDefer blk ->
-                        f blk
-                    | a ->
-                        [JsIgnore a]
-                JsFunc (x, rest)
-            | ex -> ex
-        injectMatch (fun inner -> [
-            JsWhile (JsConst "true", [
-                injectMuts inner
-            ])
-        ]) ex
+            | JsCall (f, x) -> unfoldTailCall f |> Option.map (fun xs -> x :: xs)
+            | JsVar (x) when x = name -> Some []
+            | _ -> None
+        match unfoldTailCall ex with
+        | Some es when List.length es = arity -> Some es
+        | _ -> None
+    // Inject mutables into the function body for each tail call
+    let rec injectMuts ex =
+        traverseStmt ( // TODO: Needs to be a fold to handle shadowing
+            function
+            | JsCall (_, _) as e ->
+                match getTailCallsParams e with
+                | Some es ->
+                    let lhs = sprintf "[%s]" (parms |> String.concat ", ")
+                    let rhs = 
+                        es
+                        |> List.rev
+                        |> JsList
+                    JsDefer (JsScope [JsAssign (lhs, rhs)])
+                | None -> e
+            | e -> e) id ex
+    // Inject something into the function body while matching
+    injectBody (fun inner -> [
+        JsWhile (JsConst "true", [
+            injectMuts inner
+        ])
+    ]) ex
+
+let optimizeMemoization (name: string) (parms: string list) (arity: int) (ex: JsExpr) : JsExpr =
+    JsDefer (
+        JsScope [
+            JsDecl ("$map", JsConst "new Map()")
+            JsDecl (name,
+                injectBody (fun inner -> [
+                    JsDecl ("$args", JsConst (sprintf "JSON.stringify([%s])" (parms |> String.concat ", ")))
+                    JsIf (JsConst "$map.has($args)", [
+                        JsReturn (JsConst "$map.get($args)")
+                    ], Some [
+                        JsDecl ("$res", JsDefer inner)
+                        JsIgnore (JsConst "$map.set($args, $res)")
+                        JsReturn (JsConst "$res")
+                    ])
+                ]) ex
+            )
+            JsReturn (JsVar name)
+        ]
+    )
+
 
 // Emit an expression
 let rec emitExpr (ex: TypedExpr) : JsExpr =
@@ -310,7 +320,7 @@ let rec emitExpr (ex: TypedExpr) : JsExpr =
     | EGroup ([x, i], rest) ->
         JsDefer (
             JsScope (
-                [ JsDecl (x, emitOptimizedFuncDef x i)
+                [ JsDecl (x, emitOptimizedFuncDef false true x i)
                   JsReturn (emitExpr rest)
                 ]
             )
@@ -361,16 +371,35 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
                 None)
     cont pat (emitExpr expr) res
 
-and emitOptimizedFuncDef (name: string) (ex: TypedExpr) : JsExpr =
+and emitOptimizedFuncDef (tryMemoize: bool) (tryTailRec: bool) (name: string) (ex: TypedExpr) : JsExpr =
+    let res = emitExpr ex
+    // Get arity
     let rec getArity ex =
         match ex with
         | ELam (_, e) -> 1 +  getArity e.kind
         | _ -> 0
     let arity = getArity ex.kind
-    let res = emitExpr ex
-    if isTailRecursive name ex
-    then optimizeTailRecursion name arity res
-    else res
+    // Grab parameter names
+    let rec getParams ex =
+        match ex with
+        | JsFunc (xs, [ JsReturn (JsFunc (n1, n2)) ]) ->
+            xs :: getParams (JsFunc (n1, n2))
+        | JsFunc (xs, _) ->
+            [xs]
+        | _ ->
+            []
+    let parms = getParams res
+    if List.length parms <> arity then
+        res
+    else
+        let tailed =
+            if tryTailRec && isTailRecursive name ex
+            then optimizeTailRecursion name parms arity res
+            else res
+        if tryMemoize then
+            optimizeMemoization name parms arity tailed
+        else
+            tailed
 
 let eliminateReturnDefer stm =
     match stm with
@@ -390,7 +419,8 @@ let emitDecl (d: TypedDecl) : JsStmt list =
         | DLet (x, e) ->
             match x with
             | PName x ->
-                [ JsDecl (x, emitExpr e) ]
+                let memoize = Set.contains QMemoize d.qualifiers
+                [ JsDecl (x, emitOptimizedFuncDef memoize false x e) ]
             | x ->
                 let hoisted = hoist x
                 let matcher = emitPatternMatch (JsScope []) x e false
@@ -398,7 +428,8 @@ let emitDecl (d: TypedDecl) : JsStmt list =
                 [ matcher ]
 
         | DGroup ([x, i]) ->
-            [ JsDecl (x, emitOptimizedFuncDef x i) ]
+            let memoize = Set.contains QMemoize d.qualifiers
+            [ JsDecl (x, emitOptimizedFuncDef memoize true x i) ]
 
         | DGroup (bs) ->
             List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs

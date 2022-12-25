@@ -322,9 +322,16 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
         (just)
         (fun decl -> check {
             let hasImpureQual = Set.contains QImpure decl.qualifiers
+            let hasMemoizeQual = Set.contains QMemoize decl.qualifiers 
             let! sets = getImpures
             let (impures, excepts, classImpures) = sets
             match decl.kind with
+            | _ when hasImpureQual && hasMemoizeQual ->
+                return! failure { span = decl.span; msg = "Impure functions cannot be memoized." }
+            | (DLet (PTuple _, _) | DLet (PUnion _, _) | DLet (PConstant _, _)) when hasMemoizeQual ->
+                return! failure { span = decl.span; msg = "Memoized functions cannot be defined with a pattern match." }
+            | (DClass _ | DMember _) when hasMemoizeQual ->
+                return! failure { span = decl.span; msg = "Memoize is an invalid qualifier for this syntax element." }
             | DLet (PName name, _)
             | DGroup ([name, _]) when Set.contains name excepts ->
                 // TODO: Handle the case where the user defines a function with the

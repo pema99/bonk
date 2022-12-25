@@ -131,7 +131,7 @@ let prettyLiteral = function
 let prettyError ({file = filename; span = span; msg = msg }) : string =
     let (start, stop) = span
     let preamble = sprintf "Error: %s\n --> %s:%i:%i\n" msg filename (fst start) (snd start)
-    if span = dummySpan then
+    if fst start <= 0 || snd start <= 0 then
         preamble
     else
         let lines = System.IO.File.ReadAllLines filename

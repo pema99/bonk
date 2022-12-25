@@ -1,0 +1,13 @@
+// Mode: values
+// Prelude: false
+// Description: Memoize invalid syntax element
+
+// Legal
+memoize let foo = [x]
+    x
+in
+
+// Illegal
+memoize class MyClass =
+    | add : this -> this -> this
+
