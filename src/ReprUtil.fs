@@ -32,7 +32,7 @@ let remove env x = Map.remove x env
 let extendEnv env up = List.fold (fun env (name, v) -> extend env name v) env up
 
 // Like Haskell traverse
-let rec traverseTypedExpr (mapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr> = state {
+let rec traverseTypedExpr (mapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr,'e> = state {
     let! mapped = mapper ex
     match mapped.kind with
     | ELit (v) ->
@@ -85,7 +85,7 @@ let getExprType (ex: TypedExpr) : QualType =
     ex.data
 
 // Monadic map over a typed expression
-let rec mapTypeInTypedExpr (s: QualType -> ReaderStateM<'a,'b,QualType>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr> =
+let rec mapTypeInTypedExpr (s: QualType -> ReaderStateM<'a,'b,QualType,'e>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr,'e> =
     traverseTypedExpr (fun ex -> state {
         let pt = getExprType ex
         let! npt = s pt
@@ -118,7 +118,7 @@ let mapTypedDecl fe fd (decl: TypedDecl) : TypedDecl =
     | DMember (blankets, pred, impls) -> { decl with kind = fd <| DMember (blankets, pred, impls) }
 
 // Haskell traverse again, but for decls
-let traverseTypedDecl (exMapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr>) (declMapper: TypedDecl -> ReaderStateM<'a,'b,TypedDecl>) (decl: TypedDecl) : ReaderStateM<'a,'b,TypedDecl> = state {
+let traverseTypedDecl (exMapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) (declMapper: TypedDecl -> ReaderStateM<'a,'b,TypedDecl,'e>) (decl: TypedDecl) : ReaderStateM<'a,'b,TypedDecl,'e> = state {
     let! decl = declMapper decl
     match decl.kind with
     | DExpr expr -> 
@@ -157,3 +157,12 @@ let instantiateVariant (env: UserEnv) (klass: string) (variant: string) (tys: Ty
     let genCaseTy = List.find (fst >> (=) variant) cases |> snd
     let map = Map.ofList (List.zip tvars tys)
     renameInType map genCaseTy
+
+// Take an action that maps over a program, and transform it into an action that maps over a named program.
+let withFileErrorInfoM action program =
+    let (file, decls) = program
+    (action decls)
+    |> fmapError
+        (fun (err: ErrorInfo) -> { file = fst program; msg = err.msg; span = err.span })
+    |> fmap
+        (fun decls -> file, decls)

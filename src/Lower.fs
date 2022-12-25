@@ -29,7 +29,7 @@ let combinePartials a b =
 type AbstractTermEnv = Map<string, AbstractValue>
 type ResolvedOverloads = Map<int, string>
 
-type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't>
+type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't, ErrorInfo>
 let lower = state
 let getAbtractTermEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setAbtractTermEnv env = fun (_, s) -> Ok (), (env, s)
@@ -252,7 +252,8 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
     }
 
 let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
-    let res, (_, (overloads, _)) = mapM (mapM gatherOverloadsDecl) decls (Map.empty, (Map.empty, 0))
+    let names, ds = List.unzip decls
+    let res, (_, (overloads, _)) = mapM (mapM gatherOverloadsDecl) ds (Map.empty, (Map.empty, 0))
     match res with
     | Ok mdecls ->
         mdecls
@@ -265,10 +266,11 @@ let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
                 | _ -> ex // TODO: This is the case where a monomorphable type is ambiguous, should report it
             | _ -> ex
             ) id))
+        |> List.zip names
     | _ -> decls
 
 type ShadowEnv = Map<string, int>
-type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't>
+type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't, ErrorInfo>
 let shadow = state
 let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setShadowEnv env = fun (_, s) -> Ok (), (env, s)
@@ -413,9 +415,10 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
     }
 
 let renamedShadowedVarsInPrograms (decls: TypedProgram list) : TypedProgram list =
-    let res, _ = mapM (mapM renamedShadowedVarsInDecl) decls (Map.empty, ())
+    let names, ds = List.unzip decls
+    let res, _ = mapM (mapM renamedShadowedVarsInDecl) ds (Map.empty, ())
     match res with
-    | Ok mdecls -> mdecls
+    | Ok mdecls -> List.zip names mdecls
     | _ -> decls
 
 let lowerPrograms = monomorphizePrograms >> renamedShadowedVarsInPrograms

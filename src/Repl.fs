@@ -206,7 +206,7 @@ and eval tenv (e: TypedExpr) =
 // Repl start
 type InferState = TypeEnv * UserEnv * ClassEnv * int
 type CheckState = unit * (Set<string> * Set<string> * Set<string>)
-type ReplM<'t> = StateM<InferState * CheckState * TermEnv, 't>
+type ReplM<'t> = StateM<InferState * CheckState * TermEnv, 't, ErrorInfo>
 let repl = state
 let getTermEnv : ReplM<TermEnv> = fmap (fun (_,_,a) -> a) get
 let setTermEnv x : ReplM<unit> = fun (s, b, _) -> (Ok (), (s, b, x))
@@ -223,7 +223,7 @@ let applyEnvUpdate (up: EnvUpdate) (check: CheckState) : ReplM<unit> = repl {
     }
 
 // Returns state of checking, just for the REPL
-let runColorMRepl (checkState: CheckState) (m: ColorM<'t>) =
+let runColorMRepl (checkState: CheckState) m =
     let (res, state) = m checkState
     res |> Result.map (fun a -> a, state)
 
@@ -231,6 +231,13 @@ let checkProgramRepl (env: UserEnv, checkState: CheckState, decls: TypedDecl lis
     decls
     |> (checkMatches env >> runCheckM)
     |> Result.bind (checkPurity >> runColorMRepl checkState)
+
+let replError (from: Loc) (err: string) =
+    let (line, col) = from
+    if from = (0, 0) then
+        printfn "Error: %s" err
+    else
+        printfn "Error at line %i, column %i: %s" line col err
 
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), checkState, _) = get
@@ -243,11 +250,11 @@ let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
         | Ok (tdecl, checkState) ->
             do! applyEnvUpdate update checkState
             return update, Some tdecl
-        | Error err ->
-            printfn "%s" err
+        | Error ({span = (from,_); msg = err }) ->
+            replError from err
             return ([], [], [], []), None
-    | Error err ->
-        printfn "%s" err
+    | Error ({span = (from,_); msg = err }) ->
+        replError from err
         return ([], [], [], []), None
     }
 

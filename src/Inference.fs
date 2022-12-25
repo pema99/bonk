@@ -24,7 +24,7 @@ let composeAll lst = List.fold compose Map.empty lst
 // The reader environment contains the known typed variables. 
 // The state is the current set of substitutions as well as an integer for generatin fresh names.
 // The span is the last known good position.
-type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv * Span, Substitution * int, 't>
+type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv * Span, Substitution * int, 't, ErrorInfo>
 let infer = state
 let fresh : InferM<Type> = fun ((te, ue, ce, err), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce, err), (s, c + 1))
 
@@ -106,11 +106,8 @@ let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
 
 // Errors
 let typeError str = infer {
-    let! f, _ = getCurrSpan
-    if f = (0, 0) then
-        return! failure <| sprintf "Typing error: %s" str
-    else
-        return! failure <| sprintf "Typing error at line %i, column %i: %s" (fst f) (snd f) str
+    let! sp = getCurrSpan
+    return! failure { msg = str; span = sp }
     }
 
 // Instantiate a monotype from a polytype
@@ -630,14 +627,11 @@ let rec inferDecl (d: UntypedDecl) : InferM<TypedDecl> = infer {
     return typedDecl
     }
 
-// Infer multiple decls, update the environment underways
-let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
-    mapM inferDecl decls
-
 // Infer entire program and return the useful parts
-let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list),string> =
+let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list), FileErrorInfo> =
+    let names, ds = List.unzip decls
     let res, ((_,userEnv,_,_),_) =
-        mapM inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+        mapM (withFileErrorInfoM (mapM inferDecl)) decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
     match res with
     | Ok typedDecls -> Ok (userEnv, typedDecls)
     | Error err -> Error err

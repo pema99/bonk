@@ -126,3 +126,23 @@ let prettyLiteral = function
     | LString v -> sprintf "\"%s\"" v
     | LChar v -> sprintf "'%c'" v
     | LUnit -> "()"
+
+// Errors
+let prettyError ({file = filename; span = span; msg = msg }) : string =
+    let (start, stop) = span
+    let preamble = sprintf "Error: %s\n --> %s:%i:%i\n" msg filename (fst start) (snd start)
+    if span = dummySpan then
+        preamble
+    else
+        let lines = System.IO.File.ReadAllLines filename
+        let line = lines.[fst start - 1]
+        let fakeLineNum = String.replicate (string (fst start)).Length " " + " | "
+        let lineNum = sprintf "%i | " (fst start)
+        let mid = sprintf "%s\n%s%s\n%s" fakeLineNum lineNum line fakeLineNum
+        if fst start = fst stop then
+            let dist = snd stop - snd start
+            let spaces = String.replicate (snd start - 1) " "
+            let caret = String.replicate dist "^"
+            preamble + mid + spaces + caret
+        else
+            preamble + mid

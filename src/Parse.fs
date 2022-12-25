@@ -181,13 +181,16 @@ let nonAppP =
     <|> varP
     <|> listLiteralP
 
-let appP =
-    lamP
-    <|> letGroupP
-    <|> letP
-    <|> matchP
-    <|> ifP
-    <|> chainL1 nonAppP (just <| fun l r -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
+let appP = com {
+    let! next = look
+    match fst next with
+    | LBrack -> return! lamP
+    | Rec -> return! letGroupP
+    | Let -> return! letP
+    | Match -> return! matchP
+    | If -> return! ifP
+    | _ -> return! chainL1 nonAppP (just <| fun l r -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
+}
 
 let specificBinOpP op =
     opP op
@@ -278,7 +281,16 @@ let qualifiersP =
 
 let declP =
     qualifiersP <+>
-    (declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP)
+    (com {
+        let! next = look
+        match fst next with
+        | Let -> return! declLetP
+        | Rec -> return! declLetGroupP
+        | Sum -> return! declSumP
+        | Class -> return! declClassP
+        | Member -> return! declImplP
+        | _ -> return! declExprP
+    })
     |> spannedP
     |>> fun ((quals, decl), span) -> {
             kind = decl;
@@ -308,17 +320,23 @@ let runParse (kind: Com<'t, Spanned<Token>>) allowMore txt =
             Ok v
         | _ ->
             let (tok, span) = state.Toks.[max 0 <| min (state.Offset) (state.Toks.Length-1)]
-            let line = fst (fst span)
-            let col = snd (fst span)
-            Error (sprintf "Parsing error at line %i, column %i: Unexpected token '%A'." line col tok)
+            Error (span, sprintf "Unexpected token '%A'." tok)
     | Error err -> Error err
 
 let parseDecl = runParse declP false
 let parseImports = runParse importsP true
 let parseProgram = runParse programP false
 
-let parsePrograms (programs: string list) : Result<UntypedProgram list, string> =
-    let results = List.map parseProgram programs
+let parsePrograms (programs: (string * string) list) : Result<UntypedProgram list, FileErrorInfo> =
+    let filenames, contents = List.unzip programs
+    let results = 
+        List.map2
+            (fun left right ->
+                right
+                |> Result.map (fun v -> left, v)
+                |> Result.mapError (fun (sp, msg) -> { msg = msg; span = sp; file = left }))
+            filenames
+            (List.map parseProgram contents)
     match List.tryFind (function Error _ -> true | _ -> false) results with
     | Some (Error err) -> Error err
     | _ -> Ok (List.choose (function Error _ -> None | Ok v -> Some v) results)
