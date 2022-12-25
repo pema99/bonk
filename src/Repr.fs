@@ -6,6 +6,13 @@ type Span = (Loc * Loc)
 type Spanned<'t> = ('t * Span)
 let dummySpan = ((0, 0), (0, 0))
 
+// Error info
+type ErrorInfo = {
+    file: string
+    span: Span
+    msg: string
+}
+
 // Literals
 type Literal =
     | LFloat  of float
@@ -95,10 +102,10 @@ and DeclRaw<'t, 'u> = {
 
 and UntypedExpr = ExprRaw<unit>
 and UntypedDecl = DeclRaw<unit, unit>
-and UntypedProgram = UntypedDecl list
+and UntypedProgram = string * UntypedDecl list
 and TypedExpr = ExprRaw<QualType>
 and TypedDecl = DeclRaw<QualType, unit>
-and TypedProgram = TypedDecl list
+and TypedProgram = string * TypedDecl list
 
 // Primitive types
 and PrimType =

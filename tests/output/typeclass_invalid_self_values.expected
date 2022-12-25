@@ -1,3 +1,3 @@
-Typing error: Failed to unify types 'bool' and 'int'.
-Typing error at line 13, column 9: Typeclass 'Show' does not have an instance for 'bool'.
+Error: Failed to unify types 'bool' and 'int'.
+Error at line 13, column 9: Typeclass 'Show' does not have an instance for 'bool'.
 

@@ -62,5 +62,5 @@ let pipeline prelude =
 let startCompile prelude output files =
     match pipeline prelude files with
     | Ok js -> File.WriteAllText(output, js)
-    | Error err -> printfn "%s" err
+    | Error (span, err) -> printfn "%s" err
 

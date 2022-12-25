@@ -106,11 +106,8 @@ let addClassInstance (cls: ClassEnv) (name: string, inst: Type) : ClassEnv =
 
 // Errors
 let typeError str = infer {
-    let! f, _ = getCurrSpan
-    if f = (0, 0) then
-        return! failure <| sprintf "Typing error: %s" str
-    else
-        return! failure <| sprintf "Typing error at line %i, column %i: %s" (fst f) (snd f) str
+    let! sp = getCurrSpan
+    return! failure (sp, str)
     }
 
 // Instantiate a monotype from a polytype
@@ -635,9 +632,10 @@ let inferDecls (decls: UntypedDecl list) : InferM<TypedDecl list> =
     mapM inferDecl decls
 
 // Infer entire program and return the useful parts
-let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list),string> =
+let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list), Span * string> =
+    let names, ds = List.unzip decls
     let res, ((_,userEnv,_,_),_) =
-        mapM inferDecls decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+        mapM inferDecls ds ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
     match res with
-    | Ok typedDecls -> Ok (userEnv, typedDecls)
+    | Ok typedDecls -> Ok (userEnv, List.zip names typedDecls)
     | Error err -> Error err

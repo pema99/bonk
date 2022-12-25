@@ -232,6 +232,13 @@ let checkProgramRepl (env: UserEnv, checkState: CheckState, decls: TypedDecl lis
     |> (checkMatches env >> runCheckM)
     |> Result.bind (checkPurity >> runColorMRepl checkState)
 
+let replError (from: Loc) (err: string) =
+    let (line, col) = from
+    if from = (0, 0) then
+        printfn "Error: %s" err
+    else
+        printfn "Error at line %i, column %i: %s" line col err
+
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), checkState, _) = get
     let res, ((_,uenv,_,_), (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
@@ -243,11 +250,11 @@ let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
         | Ok (tdecl, checkState) ->
             do! applyEnvUpdate update checkState
             return update, Some tdecl
-        | Error err ->
-            printfn "%s" err
+        | Error ((from,_), err) ->
+            replError from err
             return ([], [], [], []), None
-    | Error err ->
-        printfn "%s" err
+    | Error ((from,_), err) ->
+        replError from err
         return ([], [], [], []), None
     }
 

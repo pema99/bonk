@@ -1,6 +1,8 @@
 module Monad
 
-type StateM<'s, 't> = 's -> Result<'t, string> * 's
+open Repr
+
+type StateM<'s, 't> = 's -> Result<'t, Span * string> * 's
 
 type StateBuilder() =
     member inline this.Return (v: 't) : StateM<'s, 't> =
