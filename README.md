@@ -1,6 +1,6 @@
 # Bonk
 Bonk, son of [Gunk](https://github.com/pema99/gunk), cousin of [Plonk](https://github.com/pema99/plonk).
-Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a purely functional language with the goal of having very few abstractions while still being somewhat usable. It is currently either interpreted or compiled to JavaScript.
+Yet another toy language I started working on, mainly to play with Hindley-Milner type inference. Bonk is a functional language with the goal of having very few abstractions while still being somewhat usable. It can be interpreted or compiled to JavaScript.
 
 # Features
 - Basic expressions. IE. `if`, `let`, function application and abstraction, arithmetic.
@@ -29,7 +29,7 @@ I've also [implemented a few common persistent data structures](https://github.c
 Other than that, the following program typechecks and runs. Syntax subject to change.
 ```fs
 // Bonk ships with a small standard library.
-// Let's use them to calculate the sum of the 20 first square numbers which are even:
+// Let's use it to calculate the sum of the 20 first square numbers which are even:
 let total =
     let first20 = iota 20 in
     let squares = map ([x] x * x) first20 in
@@ -38,7 +38,7 @@ let total =
 in
 
 // We can do the same thing more succintly with the pipeline operator.
-// Bonk supports shadowing, so we can shadow the previous binding.
+// Bonk supports shadowing, so we can shadow the previous binding:
 let total =
     iota 20
     |> map ([x] x * x)
