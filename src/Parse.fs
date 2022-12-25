@@ -315,12 +315,16 @@ let parseDecl = runParse declP false
 let parseImports = runParse importsP true
 let parseProgram = runParse programP false
 
-let parsePrograms (programs: string list) : Result<UntypedProgram list, Span * string> =
+let parsePrograms (programs: (string * string) list) : Result<UntypedProgram list, FileErrorInfo> =
+    let filenames, contents = List.unzip programs
     let results = 
         List.map2
-            (fun left right -> Result.map (fun v -> left, v) right)
-            programs
-            (List.map parseProgram programs)
+            (fun left right ->
+                right
+                |> Result.map (fun v -> left, v)
+                |> Result.mapError (fun (sp, msg) -> { msg = msg; span = sp; file = left }))
+            filenames
+            (List.map parseProgram contents)
     match List.tryFind (function Error _ -> true | _ -> false) results with
     | Some (Error err) -> Error err
     | _ -> Ok (List.choose (function Error _ -> None | Ok v -> Some v) results)

@@ -1,15 +1,13 @@
 module Pipeline
 
 open System.IO
-open Repr
 open Parse
-open Combinator
 open Inference
 open Prelude
 open Lower
 open CodeGen
 open Semantics
-open Lex
+open Pretty
 
 let loadCodeFile (from: string) (path: string) : string =
     let fromPath = if from = "" then "" else Path.GetDirectoryName from
@@ -49,7 +47,7 @@ let resolveImports prelude files =
         files
         |> Seq.fold (fun (visited, acc) file -> walkImports file visited acc file) (visited, preimport)
     List.distinct files
-    |> List.map (fun file -> Map.find file visited)
+    |> List.map (fun file -> file, Map.find file visited)
 
 let pipeline prelude =
     resolveImports prelude
@@ -62,5 +60,5 @@ let pipeline prelude =
 let startCompile prelude output files =
     match pipeline prelude files with
     | Ok js -> File.WriteAllText(output, js)
-    | Error (span, err) -> printfn "%s" err
+    | Error (err) -> printfn "%s" (prettyError err)
 

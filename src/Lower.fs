@@ -29,7 +29,7 @@ let combinePartials a b =
 type AbstractTermEnv = Map<string, AbstractValue>
 type ResolvedOverloads = Map<int, string>
 
-type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't>
+type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't, ErrorInfo>
 let lower = state
 let getAbtractTermEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setAbtractTermEnv env = fun (_, s) -> Ok (), (env, s)
@@ -270,7 +270,7 @@ let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
     | _ -> decls
 
 type ShadowEnv = Map<string, int>
-type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't>
+type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't, ErrorInfo>
 let shadow = state
 let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setShadowEnv env = fun (_, s) -> Ok (), (env, s)

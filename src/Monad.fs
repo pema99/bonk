@@ -2,30 +2,30 @@ module Monad
 
 open Repr
 
-type StateM<'s, 't> = 's -> Result<'t, Span * string> * 's
+type StateM<'s, 't, 'e> = 's -> Result<'t, 'e> * 's
 
 type StateBuilder() =
-    member inline this.Return (v: 't) : StateM<'s, 't> =
+    member inline this.Return (v: 't) : StateM<'s, 't, 'e> =
         fun s -> Ok v, s
-    member inline this.ReturnFrom ([<InlineIfLambda>] m: StateM<'s, 't>) : StateM<'s, 't> =
+    member inline this.ReturnFrom ([<InlineIfLambda>] m: StateM<'s, 't, 'e>) : StateM<'s, 't, 'e> =
         m
-    member inline this.Zero () : StateM<'s, unit> =
+    member inline this.Zero () : StateM<'s, unit, 'e> =
         this.Return ()
-    member inline this.Bind ([<InlineIfLambda>] m: StateM<'s, 't>, [<InlineIfLambda>] f: 't -> StateM<'s, 'u>) : StateM<'s, 'u> =
+    member inline this.Bind ([<InlineIfLambda>] m: StateM<'s, 't, 'e>, [<InlineIfLambda>] f: 't -> StateM<'s, 'u, 'e>) : StateM<'s, 'u, 'e> =
         fun s ->
             let a, n = m s
             match a with
             | Ok v -> (f v) n
             | Error err -> Error err, n
-    member inline this.Combine ([<InlineIfLambda>] m1: StateM<'s, 't>, [<InlineIfLambda>] m2: StateM<'s, 'u>) : StateM<'s, 'u> =
+    member inline this.Combine ([<InlineIfLambda>] m1: StateM<'s, 't, 'e>, [<InlineIfLambda>] m2: StateM<'s, 'u, 'e>) : StateM<'s, 'u, 'e> =
         fun s ->
             let a, n = m1 s
             match a with
             | Ok _ -> m2 n
             | Error err -> Error err, n
-    member inline this.Delay ([<InlineIfLambda>] f: unit -> StateM<'s, 't>) : StateM<'s, 't> =
+    member inline this.Delay ([<InlineIfLambda>] f: unit -> StateM<'s, 't, 'e>) : StateM<'s, 't, 'e> =
         this.Bind (this.Return (), f)
-    member this.While (f: unit -> bool, m : StateM<'s, unit>) : StateM<'s, unit> =
+    member this.While (f: unit -> bool, m : StateM<'s, unit, 'e>) : StateM<'s, unit, 'e> =
         fun s -> 
             if f() then 
                 let a, n = m s
@@ -37,31 +37,37 @@ type StateBuilder() =
 let state = StateBuilder()
 let just = state.Return
 let inline failure err = fun s -> Error err, s
-let inline set v : StateM<'a, unit> = fun _ -> (Ok (), v)
-let get : StateM<'a, 'a> = fun s -> (Ok s, s)
+let inline set v : StateM<'a, unit, 'e> = fun _ -> (Ok (), v)
+let get : StateM<'a, 'a, 'e> = fun s -> (Ok s, s)
 let inline fmap ([<InlineIfLambda>] f) ([<InlineIfLambda>] m) =
     fun s ->
         let a, n = m s
         match a with
         | Ok v -> Ok (f v), n
         | Error err -> Error err, n
+let inline fmapError ([<InlineIfLambda>] f) ([<InlineIfLambda>] m) =
+    fun s ->
+        let a, n = m s
+        match a with
+        | Ok v -> Ok v, n
+        | Error err -> Error (f err), n
 
 let inline ( >>= ) ([<InlineIfLambda>] a) ([<InlineIfLambda>] b) = state.Bind(a, b)
 let inline ( >>. ) ([<InlineIfLambda>] a) ([<InlineIfLambda>] b) = state.Combine(a, b)
-let inline ( >=> ) ([<InlineIfLambda>] l: 'a -> StateM<'s, 'b>) ([<InlineIfLambda>] r: 'b -> StateM<'s, 'c>) (v: 'a) : StateM<'s, 'c> = state {
+let inline ( >=> ) ([<InlineIfLambda>] l: 'a -> StateM<'s, 'b, 'e>) ([<InlineIfLambda>] r: 'b -> StateM<'s, 'c, 'e>) (v: 'a) : StateM<'s, 'c, 'e> = state {
     let! lv = l v
     let! rv = r lv
     return rv
 }
 
-type ReaderStateM<'r, 's, 't> = StateM<'r * 's, 't>
-let ask : ReaderStateM<'r, 's, 'r> =
+type ReaderStateM<'r, 's, 't, 'e> = StateM<'r * 's, 't, 'e>
+let ask : ReaderStateM<'r, 's, 'r, 'e> =
     fun s ->
         let a, n = get s
         match a with
         | Ok v -> Ok (fst v), n
         | Error err -> Error err, n
-let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderStateM<'r, 's, 't>) : ReaderStateM<'r, 's, 't> =
+let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderStateM<'r, 's, 't, 'e>) : ReaderStateM<'r, 's, 't, 'e> =
     fun s ->
         let res, o = get s
         match res with
@@ -73,7 +79,7 @@ let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderS
         | Error err -> Error err, o
 
 
-let rec inline mapM ([<InlineIfLambda>] f: 'a -> StateM<'s, 'b>) (t: 'a list) : StateM<'s, 'b list> =
+let rec inline mapM ([<InlineIfLambda>] f: 'a -> StateM<'s, 'b, 'e>) (t: 'a list) : StateM<'s, 'b list, 'e> =
     let rec inner t acc = state {
         match t with
         | h :: t ->
@@ -84,7 +90,7 @@ let rec inline mapM ([<InlineIfLambda>] f: 'a -> StateM<'s, 'b>) (t: 'a list) : 
     inner t List.empty
 let inline mapM_ ([<InlineIfLambda>] f) t = mapM f t >>. just ()
 
-let rec foldM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a> = state {
+let rec foldM (f: 'a -> 'b -> StateM<'s, 'a, 'e>) (acc: 'a) (t: 'b list) : StateM<'s, 'a, 'e> = state {
     match t with
     | h :: t ->
         let! v = f acc h 
@@ -93,7 +99,7 @@ let rec foldM (f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s
 }
 let inline foldM_ ([<InlineIfLambda>] f) acc t = foldM f acc t >>. just ()
 
-let rec inline scanM ([<InlineIfLambda>] f: 'a -> 'b -> StateM<'s, 'a>) (acc: 'a) (t: 'b list) : StateM<'s, 'a list> =
+let rec inline scanM ([<InlineIfLambda>] f: 'a -> 'b -> StateM<'s, 'a, 'e>) (acc: 'a) (t: 'b list) : StateM<'s, 'a list, 'e> =
     let rec inner va t acc = state {
         match t with
         | h :: t ->

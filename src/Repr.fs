@@ -8,6 +8,10 @@ let dummySpan = ((0, 0), (0, 0))
 
 // Error info
 type ErrorInfo = {
+    span: Span
+    msg: string
+}
+type FileErrorInfo = {
     file: string
     span: Span
     msg: string

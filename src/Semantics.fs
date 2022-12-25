@@ -224,9 +224,9 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
         ret
 
 // Essentially identity monad used for stateless error checking
-type CheckM<'t> = ReaderStateM<unit,unit,'t>
+type CheckM<'t> = ReaderStateM<unit,unit,'t,ErrorInfo>
 let check = state
-let runCheckM (m: CheckM<'t>) : Result<'t, Span * string> =
+let runCheckM m =
     m ((), ()) |> fst
 
 let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : CheckM<unit> = check {
@@ -234,7 +234,7 @@ let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : 
     let wildcardPat = [deconstructPattern env matcher (PName "_")]
     let witnesses = isUseful env patMatrix wildcardPat
     if not <| List.isEmpty witnesses then
-        do! failure (sp, "Match is not exhaustive.")
+        do! failure { span = sp; msg = "Match is not exhaustive." }
     }
 
 let checkMatches (env: UserEnv) (decls: TypedDecl list) : CheckM<TypedDecl list> =
@@ -266,9 +266,9 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : CheckM<TypedDecl list>
 
 // Function coloring analysis
 // Fun impures, exceptions, class impures
-type ColorM<'t> = ReaderStateM<unit,string Set * string Set * string Set,'t>
+type ColorM<'t> = ReaderStateM<unit,string Set * string Set * string Set,'t,ErrorInfo>
 let color = state
-let runColorM (m: ColorM<'t>) : Result<'t, Span * string> =
+let runColorM m =
     m ((), (funImpures, funImpureExceptions, Set.empty)) |> fst
 
 // Helpers to set state
@@ -338,7 +338,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                     let impures = Set.union impures (freeInPattern p)
                     do! setImpures (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
-                    return! failure (decl.span, "Impure binding must be marked with an impure qualifier.")
+                    return! failure { span = decl.span; msg = "Impure binding must be marked with an impure qualifier." }
                 else
                     return decl
             | DGroup bs ->
@@ -350,7 +350,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                     let impures = Set.union impures (List.map fst bs |> Set.ofList)
                     do! setImpures (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
-                    return! failure (decl.span, "Impure binding must be marked with an impure qualifier.")
+                    return! failure { span = decl.span; msg =  "Impure binding must be marked with an impure qualifier." }
                 else
                     return decl
             | DClass (name, _, _) when hasImpureQual ->
@@ -365,7 +365,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                     let isInherentlyPure = isInherentlyPureType (snd ex.data)
                     impl, (not isInherentlyPure) && (hasImpureQual || isBodyImpure)) impls
                 if List.exists snd isBodyImpures && not isClassImpure then
-                    return! failure (decl.span, "Impure bindings are not allowed in typeclasses unless the typeclass has the impure qualifier.")
+                    return! failure { span = decl.span; msg = "Impure bindings are not allowed in typeclasses unless the typeclass has the impure qualifier." }
                 else
                     let implImpures = List.filter snd isBodyImpures |> List.map fst
                     let impures = Set.union impures (Set.ofList implImpures)
@@ -375,14 +375,12 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                 if Set.isEmpty decl.qualifiers then
                     return decl
                 else
-                    return! failure (decl.span, "Qualifiers are invalid for this type of syntax element.")
+                    return! failure { span = decl.span; msg = "Qualifiers are invalid for this type of syntax element." }
         })
         decls
 
 // Put it all together
-let checkPrograms (env: UserEnv, decls: TypedProgram list) : Result<TypedProgram list, Span * string> =
-    let names, ds = List.unzip decls
-    ds
-    |> (mapM (checkMatches env) >> runCheckM)
-    |> Result.bind (mapM checkPurity >> runColorM)
-    |> Result.map (List.zip names)
+let checkPrograms (env: UserEnv, decls: TypedProgram list) : Result<TypedProgram list, FileErrorInfo> =
+    decls
+    |> (mapM (withFileErrorInfoM (checkMatches env)) >> runCheckM)
+    |> Result.bind (mapM (withFileErrorInfoM (checkPurity)) >> runColorM)
