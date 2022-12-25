@@ -6,13 +6,13 @@ sum Expr 'a =
     | Div (Expr 'a) * (Expr 'a)
 in
 
-let eval = rec [eval] [expr]
+rec evaluate = [expr]
     match expr with
     | Lit v -> v
-    | Add (l, r) -> eval l + eval r
-    | Sub (l, r) -> eval l - eval r
-    | Mul (l, r) -> eval l * eval r
-    | Div (l, r) -> eval l / eval r
+    | Add (l, r) -> evaluate l + evaluate r
+    | Sub (l, r) -> evaluate l - evaluate r
+    | Mul (l, r) -> evaluate l * evaluate r
+    | Div (l, r) -> evaluate l / evaluate r
 in
 
-eval (Mul (Lit 5, Add (Lit 3, Lit 2)))
+printfn (evaluate (Mul (Lit 5, Add (Lit 3, Lit 2))))

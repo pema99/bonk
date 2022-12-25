@@ -27,32 +27,45 @@ I've also [implemented a few common persistent data structures](https://github.c
 
 Other than that, the following program typechecks and runs. Syntax subject to change.
 ```fs
-// Bonk supports sum types.
-sum List 'a =
-    | Cons 'a * List 'a
-    | Nil unit
-
-// And recursive functions, though functions are just named lambdas.
-// The 'rec' keyword is used to denote that a function is recursive.
-rec map = [f] [lst]
-    match lst with
-    | Cons (h, t) -> Cons (f h, map f t)
-    | Nil _       -> Nil () 
-in
-
-rec fold = [f] [z] [lst]
-    match lst with
-    | Cons (h, t) -> f (h) (fold f z t)
-    | Nil _       -> z
-in
-
-// There is small standard library with functions like 'iota' and 'filter'.
+// Bonk ships with a small standard library.
 // Let's use them to calculate the sum of the 20 first square numbers which are even:
-let myList = iota 20 in
-let r1 = map ([x] x * x) myList in
-let r2 = filter ([x] x % 2 = 0) r1 in
-let r3 = fold (+) 0 r2 in
-r3
+let total =
+    let first20 = iota 20 in
+    let squares = map ([x] x * x) first20 in
+    let evens = filter ([x] x % 2 = 0) squares in
+    fold (+) 0 evens
+in
+
+// We can do the same thing more succintly with the pipeline operator.
+// Bonk supports shadowing, so we can shadow the previous binding.
+let total =
+    iota 20
+    |> map ([x] x * x)
+    |> filter ([x] x % 2 = 0)
+    |> fold (+) 0
+in
+
+// Bonk supports sum types:
+sum MyList 'a =
+    | MyNil unit
+    | MyCons 'a * MyList 'a
+
+// ... and recursive functions, which go well together:
+rec makeList = [n]
+    if n < 0 then MyNil ()
+    else MyCons (n, makeList (n - 1))
+in
+
+rec sumList = [lst]
+    match lst with
+    | MyNil _ -> 0
+    | MyCons (x, xs) -> x + sumList xs
+in
+
+// Let's print out some results:
+let total2 = sumList (makeList 10) in
+let _ = printfn total in
+let _ = printfn total2 in
 ```
 Check the examples folder for more examples.
 

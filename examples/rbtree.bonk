@@ -46,7 +46,7 @@ let rbInsert = [key] [val] [tree]
     makeBlack (insert tree)
 in
 
-let rbPrint = [tree]
+impure let rbPrint = [tree]
     rec rbPrintInner = [tree] [indent]
         match tree with
         | RBEmpty _ -> ()

@@ -7,10 +7,6 @@ member int of Number =
 member float of Number =
     | add : [x] [y] x + y
 
-sum List 'a =
-    | Cons 'a * List 'a
-    | Nil unit
-
 member List 'a of Number =
     | add : [x] [y] x
 

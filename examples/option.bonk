@@ -1,3 +1,5 @@
+// Must be compiled with --noprelude
+
 sum Option 'a =
     | Some 'a
     | None unit
