@@ -181,13 +181,16 @@ let nonAppP =
     <|> varP
     <|> listLiteralP
 
-let appP =
-    lamP
-    <|> letGroupP
-    <|> letP
-    <|> matchP
-    <|> ifP
-    <|> chainL1 nonAppP (just <| fun l r -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
+let appP = com {
+    let! next = look
+    match fst next with
+    | LBrack -> return! lamP
+    | Rec -> return! letGroupP
+    | Let -> return! letP
+    | Match -> return! matchP
+    | If -> return! ifP
+    | _ -> return! chainL1 nonAppP (just <| fun l r -> mkExpr (EApp (l, r)) (spanBetweenExprs l r))
+}
 
 let specificBinOpP op =
     opP op
@@ -278,7 +281,16 @@ let qualifiersP =
 
 let declP =
     qualifiersP <+>
-    (declLetGroupP <|> declLetP <|> declSumP <|> declClassP <|> declImplP <|> declExprP)
+    (com {
+        let! next = look
+        match fst next with
+        | Let -> return! declLetP
+        | Rec -> return! declLetGroupP
+        | Sum -> return! declSumP
+        | Class -> return! declClassP
+        | Member -> return! declImplP
+        | _ -> return! declExprP
+    })
     |> spannedP
     |>> fun ((quals, decl), span) -> {
             kind = decl;
