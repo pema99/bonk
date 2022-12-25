@@ -28,7 +28,7 @@ I've also [implemented a few common persistent data structures](https://github.c
 Other than that, the following program typechecks and runs. Syntax subject to change.
 ```fs
 // Bonk ships with a small standard library.
-// Let's use them to calculate the sum of the 20 first square numbers which are even:
+// Let's use it to calculate the sum of the 20 first square numbers which are even:
 let total =
     let first20 = iota 20 in
     let squares = map ([x] x * x) first20 in
