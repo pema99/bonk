@@ -55,14 +55,17 @@ let stringP   = extract (function (Lit (LString v), _) -> Some v | _ -> None)
 let typeDescP = extract (function (TypeDesc v, _) -> Some v | _ -> None)
 let qualP     = extract (function (Qual v, _) -> Some v | _ -> None)
 
+let upperIdentP = guard (fun (i: string) -> Char.IsUpper i.[0]) identP
+let lowerIdentP = guard (fun (i: string) -> not <| Char.IsUpper i.[0]) identP
+
 // Patterns
 let patP, patPImpl = declParser()
 
 let patUnionP =
-    attempt (identP <+> patP |>> PUnion)
+    attempt (upperIdentP <+> opt patP |>> PUnion)
 
 let patNameP =
-    identP |>> PName
+    lowerIdentP |>> PName
 
 let patLiteralP =
     literalP |>> PConstant
@@ -266,7 +269,7 @@ let declSumP =
     (tok Sum *> identP
     <+> (between (opP Less) (sepBy1 typeVarP (tok Comma)) (opP Greater) <|> just [])
     <* opP Equal <* opt (tok Pipe))
-    <+> (sepBy1 (identP <+> typeP) (tok Pipe))
+    <+> (sepBy1 (identP <+> opt typeP) (tok Pipe))
     <* opt (tok In)
     |>> (fun ((a,b),c) -> DUnion (a,b,c))
 

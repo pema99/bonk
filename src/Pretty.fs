@@ -133,7 +133,8 @@ let rec prettyValue v =
     | VString v -> sprintf "%A" v
     | VChar v -> sprintf "'%c'" v
     | VTuple v -> sprintf "(%s)" <| String.concat ", " (List.map prettyValue v)
-    | VUnionCase (n, v) -> sprintf "%s %s" n (prettyValue v)
+    | VUnionCase (n, Some v) -> sprintf "%s %s" n (prettyValue v)
+    | VUnionCase (n, None) -> n
     | VClosure _ | VUnionCtor _ | VIntrinsic _ | VOverload _ -> "Closure"
 
 let prettyLiteral = function

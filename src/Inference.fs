@@ -311,15 +311,23 @@ let rec gatherPatternConstraints (env: TypeEnv) (pat: Pattern) (ty: QualType) (p
         match lookup env case with
         | Some sc ->
             // Instantiate it with new fresh variables
-            match! instantiate sc with
-            | ps, TCtor (KArrow, [inp; TCtor (KSum name, oup)]) -> 
-                // Make a fresh type variable for the pattern being bound
-                let! tv = fresh
-                // Gather constrains from the inner pattern matched with the fresh type variable
-                let! env = gatherPatternConstraints env pat (Set.union pd ps, tv) poly
+            let! ps, ctor = instantiate sc
+            // Make a fresh type variable for the pattern being bound
+            let! tv = fresh
+            // Gather constrains from the inner pattern matched with the fresh type variable
+            let! env =
+                match pat with
+                | Some pat -> gatherPatternConstraints env pat (Set.union pd ps, tv) poly
+                | None -> just env
+            match ctor with
+            | TCtor (KArrow, [inp; TCtor (KSum name, oup)]) -> 
                 // Unify the variant constructor with an arrow type from the inner type to the type being matched on
                 // for example, unify `'a -> Option<'a>` with `typeof(x) -> typeof(h)` in `let Some x = h`
                 do! unify (TCtor (KArrow, [inp; TCtor (KSum name, oup)])) (TCtor (KArrow, [tv; ty]))
+                return env
+            | TCtor (KSum name, oup) ->
+                // Nullary variants
+                do! unify (TCtor (KSum name, oup)) ty
                 return env
             | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
         | _ -> return! typeError <| sprintf "Invalid union variant used '%s'." case
@@ -546,7 +554,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         let! usr = getUserEnv
         let nusr = extend usr name (typs, cases)
         // Gather all user type usages
-        let usages = List.map gatherUserTypesUsages (List.map snd cases)
+        let usages = List.map gatherUserTypesUsages (List.choose snd cases)
         let usages = List.fold Set.union Set.empty usages
         // If any user type usages are not to types in the user environment, error
         if not <| Set.forall (checkUserTypeUsage nusr) usages then
@@ -556,7 +564,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
                 |> String.concat ", "
             return! typeError <| sprintf "Use of undeclared type constructors in union declaration: %s." bad
         // Gather all free type vars in each union variant
-        let ftvs = List.map (snd >> ftvType) cases
+        let ftvs = List.map ftvType (List.choose snd cases)
         let ftvs = List.fold Set.union Set.empty ftvs
         let udecl = Set.filter (fun s -> not <| List.contains s typs) ftvs
         // If any of them are not explicitly declared, error
@@ -568,7 +576,11 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         // Put placeholder constructors for each variant in the environment
         let! _ = getTypeEnv
         let! nenv = mapM (fun (case, typ) -> infer {
-                            let! sc = generalize (Set.empty, (TCtor (KArrow, [typ; ret])))
+                            let ctor =
+                                match typ with
+                                | Some v -> (TCtor (KArrow, [v; ret]))
+                                | _ -> ret 
+                            let! sc = generalize (Set.empty, ctor)
                             return case, sc
                          }) cases
         return (nenv, [name, (typs, cases)], [], []), mkTypedDecl (DUnion (name, typs, cases)) inDecl.qualifiers inDecl.span

@@ -23,7 +23,7 @@ let rec freeInPattern (pat: Pattern) : string Set =
     | PName a -> Set.singleton a
     | PConstant _ -> Set.empty
     | PTuple pats -> pats |> List.map freeInPattern |> Set.unionMany
-    | PUnion (_, pat) -> freeInPattern pat
+    | PUnion (_, pat) -> Option.map freeInPattern pat |> Option.defaultValue Set.empty
 
 let rec calcArityType (ty: Type) : int =
     match ty with
@@ -157,11 +157,11 @@ let rec renameInType (map: Map<string, Type>) (ty: Type) : Type =
 
 // Instantiate the type of a union variant, given the class name, variant name, and types
 // to instantiate generic arguments with.
-let instantiateVariant (env: UserEnv) (klass: string) (variant: string) (tys: Type list) : Type =
+let instantiateVariant (env: UserEnv) (klass: string) (variant: string) (tys: Type list) : Type option =
     let (tvars, cases) = Map.find klass env
     let genCaseTy = List.find (fst >> (=) variant) cases |> snd
     let map = Map.ofList (List.zip tvars tys)
-    renameInType map genCaseTy
+    Option.map (renameInType map) genCaseTy
 
 // Take an action that maps over a program, and transform it into an action that maps over a named program.
 let withFileErrorInfoM action program =

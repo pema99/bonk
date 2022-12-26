@@ -66,7 +66,7 @@ type Token =
 and Pattern =
     | PName     of string
     | PTuple    of Pattern list
-    | PUnion    of string * Pattern
+    | PUnion    of string * Pattern option
     | PConstant of Literal
 
 // Expression AST
@@ -93,7 +93,7 @@ and DeclKind<'t> =
     | DExpr   of ExprRaw<'t>
     | DLet    of Pattern * ExprRaw<'t>
     | DGroup  of (string * ExprRaw<'t>) list
-    | DUnion  of string * string list * (string * Type) list 
+    | DUnion  of string * string list * (string * Type option) list 
     | DClass  of string * string list * (string * Type) list // name, (fname, ftype)
     | DMember of Pred * (string * ExprRaw<'t>) list          // pred, impls
 
@@ -151,8 +151,8 @@ type ImplBinding = string * Type
 type TypeEnv = Map<string, Scheme> // name -> scheme
 type VarBinding = string * Scheme
 
-type UserEnv = Map<string, (string list * (string * Type) list)>    // name -> tvars, (string * type) list
-type SumBinding = string * (string list * (string * Type) list)
+type UserEnv = Map<string, (string list * (string * Type option) list)>    // name -> tvars, (string * type) list
+type SumBinding = string * (string list * (string * Type option) list)
 
 type EnvUpdate = VarBinding list * SumBinding list * ClassBinding list * ImplBinding list
 
@@ -179,7 +179,7 @@ type Value =
     | VString    of string
     | VChar      of char
     | VTuple     of Value list
-    | VUnionCase of string * Value
+    | VUnionCase of string * Value option
     | VUnionCtor of string
     | VClosure   of string list * Pattern * TypedExpr * TermEnv
     | VIntrinsic of string * Value list

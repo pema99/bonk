@@ -60,7 +60,12 @@ let rec deconstructPattern (env: UserEnv) (ty: Type) (pat: Pattern) : Deconstruc
         // To find the fields, we need to instantiate the specific variant
         // since it might be generic.
         let instCaseTy = instantiateVariant env klass variant tys
-        { ctor = PCVariant variant; fields = [deconstructPattern env instCaseTy pat]; ty = ty }
+        let fields =
+            match instCaseTy, pat with
+            | Some v, Some pat -> [deconstructPattern env v pat]
+            | None, None -> []
+            | _ -> failwith "Invalid call to deconstructPattern"
+        { ctor = PCVariant variant; fields = fields; ty = ty }
     | (PConstant c, ty) ->
         let ctor = 
             match c with
@@ -83,7 +88,9 @@ let wildcards (ctx: PatternCtx) (ctor: PatternCtor) : PatternFields =
     | (PCTuple, TCtor (KProduct, tys)) -> wildcardsFromTypes tys
     | (PCVariant variant, TCtor (KSum klass, tys)) ->
         let instCaseTy = instantiateVariant ctx.env klass variant tys
-        wildcardsFromTypes [instCaseTy]
+        match instCaseTy with
+        | Some v -> wildcardsFromTypes [v]
+        | None -> []
     | _ -> []
 
 // Specialize 'pat' with 'ctor', yielding either nothing if the constructor doesn't match,

@@ -123,7 +123,7 @@ let rec hoist pat =
     match pat with
     | PName a -> [a]
     | PTuple ps -> List.collect hoist ps
-    | PUnion (_, p) -> hoist p
+    | PUnion (_, p) -> p |> Option.map hoist |> Option.defaultValue []
     | _ -> []
 
 // Does an expression contain a speficic function call
@@ -365,9 +365,13 @@ and emitPatternMatch (res: JsStmt) (pat: Pattern) (expr: TypedExpr) (hasAlternat
                 | [] -> next
             nest pats 0
         | PUnion (case, pat) ->
+            let inner =
+                match pat with
+                | Some pat -> [cont pat (JsField (expr, "val")) next]
+                | None -> [next]
             JsIf (
                 JsOp (JsField (expr, "tag"), "===", JsConst ("\""+case+"\"")),
-                [ cont pat (JsField (expr, "val")) next ],
+                inner,
                 None)
     cont pat (emitExpr expr) res
 
@@ -435,12 +439,15 @@ let emitDecl (d: TypedDecl) : JsStmt list =
             List.map (fun (name, body) -> JsDecl (name, emitExpr body)) bs
 
         | DUnion (_, _, cases) ->
-            let case n =
-                JsDecl (n, 
-                    JsFunc ("v", 
-                        [JsReturn (
-                            JsObject (["tag", JsConst ("\""+n+"\""); "val", JsVar "v"]))]))
-            List.map (fun (n, _) -> case n) cases
+            let case n raw =
+                if raw then
+                    JsDecl (n, JsObject (["tag", JsConst ("\""+n+"\""); "val", JsConst (emitLit LUnit)]))
+                else
+                    JsDecl (n, 
+                        JsFunc ("v", 
+                            [JsReturn (
+                                JsObject (["tag", JsConst ("\""+n+"\""); "val", JsVar "v"]))]))
+            List.map (fun (n, v) -> case n (Option.isNone v)) cases
         
         | DClass (_, _, _) ->
             []

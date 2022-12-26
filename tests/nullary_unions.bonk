@@ -1,0 +1,28 @@
+// Mode: types, values
+// Prelude: true
+// Description: Nullary unions work
+
+sum Test =
+    | Foo int
+    | Bar
+
+let a = Foo 42 in
+let b = Bar in
+
+let c =
+    match b with
+    | Bar -> printfn "Bar"
+    | Foo x -> printfn x
+in
+
+let d =
+    match a with
+    | Bar -> printfn "Bar"
+    | Foo x -> printfn x
+in
+
+let e =
+    match Foo 3 with
+    | bar -> printfn "Bar"
+    | Foo x -> printfn x
+in

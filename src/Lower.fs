@@ -118,8 +118,11 @@ let rec matchPattern tenv pat (v: AbstractValue) =
         let vs = List.map (fun (pat, va) -> matchPattern tenv pat va) (List.zip pats vs)
         vs |> List.concat
     | PUnion (case, pat), AVUnionCase (s, v) ->
-        if case = s then matchPattern tenv pat v
-        else []
+        match pat with
+        | None -> []
+        | Some pat ->
+            if case = s then matchPattern tenv pat v
+            else []
     | _ -> []
 
 and evalPattern (tenv: AbstractTermEnv) pat v =
@@ -287,8 +290,13 @@ let rec renameShadowedVarsInPattern (pat: Pattern) : ShadowM<Pattern> = shadow {
     | PTuple pats ->
         let! pats = mapM renameShadowedVarsInPattern pats
         return PTuple pats
-    | PUnion (case, pat) ->
-        return! fmap (fun rpat -> PUnion (case, rpat)) <| renameShadowedVarsInPattern pat
+    | PUnion (case, ipat) ->
+        match ipat with
+        | Some ipat ->
+            let! rpat = renameShadowedVarsInPattern ipat
+            return PUnion (case, Some rpat)
+        | _ ->
+            return pat
 }
 
 let shadowNewName (pat: Pattern) : ShadowM<Pattern * (ShadowEnv -> ShadowEnv)> = shadow {
