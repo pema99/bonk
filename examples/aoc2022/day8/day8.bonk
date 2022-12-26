@@ -9,7 +9,7 @@ let splitChars = [str]
         else
             splitCharsInner (i + 1) (Cons (toInt (substring str i 1), lst))
     in
-    reverse (splitCharsInner 0 (Nil ()))
+    reverse (splitCharsInner 0 (Nil))
 in
 
 // Some boilerplate helpers that should probably be in the standard library
@@ -19,10 +19,10 @@ let transpose = [lines]
         | Cons (h, t) ->
             let tails = transposeInner len t in
             map ([(h1, t1)] Cons (h1, t1)) (zip h tails)
-        | Nil () ->
-            replicate len (Nil ())
+        | Nil ->
+            replicate len (Nil)
     in
-    let len = length (getOption (Nil ()) (head lines)) in
+    let len = length (getOption (Nil) (head lines)) in
     transposeInner len lines
 in
 
@@ -35,7 +35,7 @@ let solveRow = [goal] [row] [cols] [acc] [y]
         match lst with
         | Cons ((height, col), t) ->
             solveRowInner t (goal (x, y) height row col acc) (x + 1)
-        | Nil () -> acc
+        | Nil -> acc
     in
     solveRowInner (zip row cols) acc 0
 in
@@ -44,7 +44,7 @@ rec solution = [goal] [rows] [cols] [acc] [y]
     match rows with
     | Cons (row, t) ->
         solution goal t cols (solveRow goal row cols acc y) (y + 1)
-    | Nil () -> acc
+    | Nil -> acc
 in
 
 let goal1 = [(x,  y)] [height] [row] [col] [acc]
@@ -67,7 +67,7 @@ let getViewDist = [height] [sightline]
     let obstruction = find ([x] fst x >= height) indexed in
     match obstruction with
     | Some (_, i) -> i + 1
-    | None () -> length sightline
+    | None -> length sightline
 in
 
 let goal2 = [(x,  y)] [height] [row] [col] [acc]

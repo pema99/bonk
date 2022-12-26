@@ -18,18 +18,18 @@ in
 
 // Bonk supports sum types:
 sum MyList<'a> =
-    | MyNil unit
+    | MyNil
     | MyCons 'a * MyList<'a>
 
 // ... and recursive functions, which go well together:
 rec makeList = [n]
-    if n < 0 then MyNil ()
+    if n < 0 then MyNil
     else MyCons (n, makeList (n - 1))
 in
 
 rec sumList = [lst]
     match lst with
-    | MyNil _ -> 0
+    | MyNil -> 0
     | MyCons (x, xs) -> x + sumList xs
 in
 

@@ -30,7 +30,11 @@ let rec matchPattern tenv pat v =
         if List.forall (Option.isSome) vs then List.choose id vs |> List.concat |> Some
         else None
     | PUnion (case, pat), VUnionCase (s, v) ->
-        if case = s then matchPattern tenv pat v
+        if case = s then
+            match pat, v with
+            | Some pat, Some v -> matchPattern tenv pat v
+            | None, None -> Some []
+            | _ -> None
         else None
     | _ -> None
 
@@ -107,7 +111,7 @@ and eval tenv (e: TypedExpr) =
         let arg = eval tenv x
         match clos, arg with
         | Some (VUnionCtor a), Some v ->
-            Some (VUnionCase (a, v))
+            Some (VUnionCase (a, Some v))
         | Some (VClosure (selfs, a, body, env)), Some v ->
             let env = List.fold (fun acc self ->
                 match lookup tenv self with
@@ -275,8 +279,11 @@ let rec handleDecl silent decl = repl {
         if List.exists Option.isNone vs then printfn "Evaluation failure"
         else do! handleBindings (List.choose id vs |> List.concat)
     | Some (DUnion (_, _, cases)) ->
-        let ctors = List.map fst cases
-        do! extendTermEnv (List.map (fun s -> s, (VUnionCtor s)) ctors)
+        do! extendTermEnv (
+            List.map (fun (s, v) ->
+                match v with
+                | Some _ -> s, VUnionCtor s
+                | None -> s, VUnionCase (s, None)) cases)
         let names, _ = List.unzip cases
         do! mapM_ (fun case -> repl {
                 let decl = {

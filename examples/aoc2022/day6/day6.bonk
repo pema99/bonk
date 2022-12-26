@@ -5,7 +5,7 @@ let isMarker = [str]
     rec hasDups = [rest]
         match rest with
         | Cons(h, t) -> (exists ([x] x = h) t) || hasDups t
-        | Nil () -> false
+        | Nil -> false
     in
     not (hasDups lst)
 in

@@ -22,7 +22,7 @@ rec addNode = [cd] [node] [tree]
                 else x
             | _ -> x) contents in
         Dir (dir, nextTree)
-    | (Nil (), Dir (dir, contents)) ->
+    | (Nil, Dir (dir, contents)) ->
         if exists ([x] getPathName x = getPathName node) contents then
             tree
         else
@@ -39,7 +39,7 @@ rec buildFileTree = [lines] [cd] [tree]
         if start = "$ cd" then
             let path = substring line 5 (lengthString line - 5) in
             if path = "/" then
-                buildFileTree t (Nil ()) tree
+                buildFileTree t (Nil) tree
             else if path = ".." then
                 buildFileTree t (getOption cd (tail cd)) tree
             else
@@ -48,7 +48,7 @@ rec buildFileTree = [lines] [cd] [tree]
             buildFileTree t cd tree
         else if start = "dir " then
             let dir = substring line 4 (lengthString line - 4) in
-            let dnode = Dir (dir, Nil()) in
+            let dnode = Dir (dir, Nil) in
             buildFileTree t cd (addNode (reverse cd) dnode tree)
         else
             let res = splitString ' ' line in
@@ -56,7 +56,7 @@ rec buildFileTree = [lines] [cd] [tree]
             let name = getOption "" (nth 1 res) in
             let fnode = File (name, toInt size) in 
             buildFileTree t cd (addNode (reverse cd) fnode tree)
-    | Nil () -> tree
+    | Nil -> tree
 in
 
 // Part 1
@@ -68,7 +68,7 @@ rec getDirSize = [tree]
 in
 
 let collect = [f] [lst]
-    fold append (Nil ()) (map f lst)
+    fold append (Nil) (map f lst)
 in
 
 rec getDirsMatching = [matcher] [tree]
@@ -79,10 +79,10 @@ rec getDirsMatching = [matcher] [tree]
             Cons (tree, next)
         else
             next
-    | _ -> Nil ()
+    | _ -> Nil
 in
 
-let tree = buildFileTree lines (Nil ()) (Dir("/", Nil())) in
+let tree = buildFileTree lines (Nil) (Dir("/", Nil)) in
 
 let smallDirs = getDirsMatching ([x] getDirSize x <= 100000) tree in
 let _ = print (toString (fold ([acc] [x] acc + getDirSize x) 0 smallDirs) + "\n") in

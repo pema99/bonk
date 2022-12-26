@@ -1,17 +1,7 @@
-let add = [x] [y]
-    x + y
-in
+sum Test =
+    | Foo int
+    | Bar
 
-let mul = [x] [y]
-    x * y
-in
-
-let compose = [f] [g]
-    [l] f (g l)
-in
-
-let foo =
-    compose (add 5) (mul 2)
-in
-
-foo 5
+match Bar with
+| Foo x -> printfn x
+| Bar -> printfn "Bar"

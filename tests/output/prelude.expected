@@ -1,7 +1,7 @@
 Cons : (('a * List<'a>) -> List<'a>)
 Left : ('a -> Either<'a, 'b>)
-Nil : (unit -> List<'a>)
-None : (unit -> Option<'a>)
+Nil : List<'a>
+None : Option<'a>
 Right : ('a -> Either<'b, 'a>)
 Some : ('a -> Option<'a>)
 absf : (float -> float)

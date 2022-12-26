@@ -4,4 +4,4 @@
 
 match Some true with
 | Some true -> 1
-| None () -> 2
+| None -> 2

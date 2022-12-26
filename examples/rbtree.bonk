@@ -5,7 +5,7 @@ sum RBTree<'k, 'v> =
 
 rec rbSearch = [key] [tree]
     match tree with
-    | RBEmpty _ -> None ()
+    | RBEmpty _ -> None
     | RBNode (k, v, _, l, r) ->
         if key < k then rbSearch key l
         else if key > k then rbSearch key r

@@ -34,15 +34,15 @@ rec expand = [lines] [acc]
         let steps = replicate len dir in
         let acc = append acc steps in
         expand t acc
-    | Nil () -> acc
+    | Nil -> acc
 in
 
-let steps = expand lines (Nil ()) in
+let steps = expand lines (Nil) in
 
 rec moveTails = [ts] [prev]
     match ts with
     | Cons (h, t) -> Cons (move h prev, moveTails t h)
-    | Nil () -> Nil ()
+    | Nil -> Nil
 in
 
 rec solution = [steps] [ts] [(hx, hy)] [acc]
@@ -60,13 +60,13 @@ rec solution = [steps] [ts] [(hx, hy)] [acc]
             solution t ts (hx, hy) acc
         else
             solution t ts (hx, hy) (Cons ((lx, ly), acc))
-    | Nil () -> acc
+    | Nil -> acc
 in
 
 // Part 1
-let acc = solution steps (Cons ((0, 0), Nil ())) (0, 0) (Nil ()) in
+let acc = solution steps (Cons ((0, 0), Nil)) (0, 0) (Nil) in
 let _ = print (toString (length acc) + "\n") in
 
 // Part 2
-let acc = solution steps (replicate 9 (0, 0)) (0, 0) (Nil ()) in
+let acc = solution steps (replicate 9 (0, 0)) (0, 0) (Nil) in
 let _ = print (toString (length acc) + "\n") in

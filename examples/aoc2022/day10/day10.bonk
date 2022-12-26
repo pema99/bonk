@@ -33,11 +33,11 @@ rec solution = [lines] [cyc] [x] [acc] [mem]
             let mem = drawPixel cyc x mem in
             let cyc = cyc + 1 in
             solution t cyc (x + arg) acc mem
-    | Nil () -> (acc, mem)
+    | Nil -> (acc, mem)
 in
 
 // Part 1
-let (acc, mem) = solution lines 1 1 0 (Nil ()) in
+let (acc, mem) = solution lines 1 1 0 (Nil) in
 let _ = print (toString (acc) + "\n") in
 
 // Part 2
@@ -50,6 +50,6 @@ impure rec printMem = [mem] [i]
             printMem t 1
         else
             printMem t (i + 1)
-    | Nil () -> ()
+    | Nil -> ()
 in
 printMem (reverse mem) 1

@@ -1,7 +1,7 @@
 // --- AA Trees ---
 sum AATree<'k, 'v> =
     | AANode int * (AATree<'k, 'v>) * 'k * 'v * (AATree<'k, 'v>) // level, left, key, value, right
-    | AAEmpty unit
+    | AAEmpty
 
 let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Helpers
@@ -28,22 +28,22 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     in
     rec tpred = [tree]
         match tree with
-        | AANode (_, _, k, v, AAEmpty ()) -> (k, v)
+        | AANode (_, _, k, v, AAEmpty) -> (k, v)
         | AANode (_, _, _, _, r) -> tpred r
     in
     rec tsucc = [tree]
         match tree with
-        | AANode (_, AAEmpty (), k, v, _) -> (k, v)
+        | AANode (_, AAEmpty, k, v, _) -> (k, v)
         | AANode (_, l, _, _, _) -> tsucc l
     in
     rec lvl = [tree]
         match tree with
-        | AAEmpty () -> Nil ()
-        | AANode (n, _, _, _, _) -> Cons (n, Nil ())
+        | AAEmpty -> Nil
+        | AANode (n, _, _, _, _) -> Cons (n, Nil)
     in
     let getLvl = [tree]
         match tree with
-        | AAEmpty () -> 0
+        | AAEmpty -> 0
         | AANode (n, _, _, _, _) -> n
     in
     let getRight = [tree]
@@ -52,12 +52,12 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     in
     rec declvl = [tree]
         match tree with
-        | AANode (n, AAEmpty (), k, v, AAEmpty ()) ->
+        | AANode (n, AAEmpty, k, v, AAEmpty) ->
             tree
-        | AANode (n, l, k, v, AAEmpty ()) ->
+        | AANode (n, l, k, v, AAEmpty) ->
             let s = getLvl l + 1 in
             if s < n then
-                AANode (s, l, k, v, AAEmpty ())
+                AANode (s, l, k, v, AAEmpty)
             else
                 tree
         | AANode (n, l, k, v, AANode (rn, rl, rk, rv, rr)) ->
@@ -70,12 +70,12 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     in
     rec remove = [tree] [key]
         match tree with
-        | AANode (n, AAEmpty (), k, v, AAEmpty ()) ->
-            if key = k then AAEmpty ()
+        | AANode (n, AAEmpty, k, v, AAEmpty) ->
+            if key = k then AAEmpty
             else tree
-        | AANode (n, AAEmpty (), k, v, r) ->
+        | AANode (n, AAEmpty, k, v, r) ->
             let (ks, s) = tsucc r in
-            if key = k then AANode (n, AAEmpty (), ks, s, remove r ks)
+            if key = k then AANode (n, AAEmpty, ks, s, remove r ks)
             else tree
         | AANode (n, l, k, v, r) ->
             if key > k then AANode (n, l, k, v, remove r key)
@@ -89,7 +89,7 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Insertion
     rec aaInsert = [key] [val] [tree]
         match tree with
-        | AAEmpty _ -> AANode (1, AAEmpty (), key, val, AAEmpty ())
+        | AAEmpty -> AANode (1, AAEmpty, key, val, AAEmpty)
         | AANode (n, l, k, v, r) ->
             if key < k then
                 fixup (AANode (n, (aaInsert key val l), k, v, r))
@@ -102,12 +102,12 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Deletion
     rec aaDelete = [key] [tree] 
         match tree with
-        | AAEmpty () -> AAEmpty ()
+        | AAEmpty -> AAEmpty
         | AANode _ ->
             let a = skew (declvl (remove tree key)) in
             match (a, getRight a) with
-            | (AAEmpty (), _) -> AAEmpty ()
-            | (_, AAEmpty ()) ->
+            | (AAEmpty, _) -> AAEmpty
+            | (_, AAEmpty) ->
                 let AANode (n, l, k, v, r) = split a in
                 AANode (n, l, k, v, split r)
             | _ ->
@@ -120,7 +120,7 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Lookups
     rec aaSearch = [key] [tree]
         match tree with
-        | AAEmpty _ -> None ()
+        | AAEmpty -> None
         | AANode (_, l, k, v, r) ->
             if key < k then aaSearch key l
             else if key > k then aaSearch key r
@@ -129,7 +129,7 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
 
     // Empty tree
     let aaEmpty =
-        AAEmpty ()
+        AAEmpty
     in
 
     // From list
@@ -143,7 +143,7 @@ in
 impure let aaPrint = [tree]
     rec aaPrintInner = [tree] [indent]
         match tree with
-        | AAEmpty _ -> ()
+        | AAEmpty -> ()
         | AANode (n, l, k, v, r) ->
             let istring = fold (+) "" (replicate indent "  ") in
             let _ = print (istring + toString n + "(" + toString k + ", " + toString v + ")\n") in
@@ -157,7 +157,7 @@ in
 sum Stack<'a> = Stack (List<'a>)
 
 let stackEmpty =
-    Stack (Nil ())
+    Stack (Nil)
 in
 
 let stackPop = [lst]
@@ -166,8 +166,8 @@ let stackPop = [lst]
         let tl = tail lst in
         (match (hd, tl) with
         | (Some a, Some b) -> Some (a, Stack b)
-        | (Some a, None) -> Some (a, Stack (Nil ()))
-        | _ -> None ())
+        | (Some a, None) -> Some (a, Stack (Nil))
+        | _ -> None)
 in
 
 let stackPush = [val] [lst]
@@ -179,7 +179,7 @@ in
 sum Queue<'a> = Queue (List<'a>) * (List<'a>)
 
 let queueEmpty =
-    Queue (Nil (), Nil ())
+    Queue (Nil, Nil)
 in
 
 let queueEnqueue = [val] [queue]
@@ -190,21 +190,21 @@ in
 rec queueDequeue = [queue]
     match queue with | Queue (l, r) ->
         (match (l, r) with
-        | (Nil (), Nil ()) -> (None (), queueEmpty) 
+        | (Nil, Nil) -> (None, queueEmpty) 
         | (Cons (x, xs), push) -> (Some x, Queue (xs, push))
-        | (Nil (), push) -> queueDequeue (Queue (reverse push, Nil ())))
+        | (Nil, push) -> queueDequeue (Queue (reverse push, Nil)))
 in
 
 // --- Heaps ---
 sum Heap<'k, 'v> =
     | HeapNode int * 'k * 'v * (Heap<'k, 'v>) * (Heap<'k, 'v>)
-    | HeapEmpty unit
+    | HeapEmpty
 
 let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapInsert, maxHeapExtract) =
     // Helpers
     let height = [heap]
         match heap with
-        | HeapEmpty() -> 0
+        | HeapEmpty -> 0
         | HeapNode(h, _, _, _, _) -> h
     in
     let leftify = [k] [v] [a] [b]
@@ -213,8 +213,8 @@ let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapI
     in
     rec merge = [comparer] [heaps]
         match heaps with
-        | (x, HeapEmpty()) -> x
-        | (HeapEmpty(), x) -> x
+        | (x, HeapEmpty) -> x
+        | (HeapEmpty, x) -> x
         | (HeapNode(d1, k1, v1, l1, r1), HeapNode(d2, k2, v2, l2, r2)) ->
             if comparer k1 k2 then leftify k1 v1 l1 (merge comparer (r1, HeapNode(d2, k2, v2, l2, r2)))
             else leftify k2 v2 l2 (merge comparer (HeapNode(d1, k1, v1, l1, r1), r2))
@@ -222,13 +222,13 @@ let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapI
 
     // Insertion
     let heapInsert = [comparer] [k] [v] [heap]
-        merge comparer (heap, HeapNode(1, k, v, HeapEmpty(), HeapEmpty()))
+        merge comparer (heap, HeapNode(1, k, v, HeapEmpty, HeapEmpty))
     in
 
     // Deletion / extraction
     let heapExtract = [comparer] [heap]
         match heap with
-        | HeapEmpty() -> None ()
+        | HeapEmpty -> None
         | HeapNode(h, k, v, l, r) ->
             let newHeap = merge comparer (l, r) in
             Some (v, newHeap)
@@ -236,7 +236,7 @@ let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapI
 
     // Empty heap
     let heapEmpty =
-        HeapEmpty ()
+        HeapEmpty
     in
 
     // Specialized heaps
@@ -252,7 +252,7 @@ let heapSort = [comparer] [lst]
     rec addToHeap = [heap] [lst]
         match lst with
         | Cons (h, t) -> addToHeap (heapInsert comparer h h heap) t
-        | Nil () -> heap
+        | Nil -> heap
     in
     rec takeFromHeap = [heap] [lst]
         match heapExtract comparer heap with
@@ -260,5 +260,5 @@ let heapSort = [comparer] [lst]
         | _ -> lst
     in
     let heap = addToHeap heapEmpty lst in
-    reverse (takeFromHeap heap (Nil ()))
+    reverse (takeFromHeap heap (Nil))
 in

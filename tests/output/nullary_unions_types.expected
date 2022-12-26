@@ -1,10 +1,12 @@
+Bar : Test
 Cons : (('a * List<'a>) -> List<'a>)
+Foo : (int -> Test)
 Left : ('a -> Either<'a, 'b>)
 Nil : List<'a>
 None : Option<'a>
 Right : ('a -> Either<'b, 'a>)
 Some : ('a -> Option<'a>)
-_ : unit
+a : Test
 absf : (float -> float)
 absi : (int -> int)
 acos : (float -> float)
@@ -12,9 +14,11 @@ append : (List<'a> -> (List<'a> -> List<'a>))
 asin : (float -> float)
 atan : (float -> float)
 atan2 : (float -> (float -> float))
+b : Test
 bindLeft : (('a -> Either<'b, 'c>) -> (Either<'a, 'c> -> Either<'b, 'c>))
 bindOption : (('a -> Option<'b>) -> (Option<'a> -> Option<'b>))
 bindRight : (('a -> Either<'b, 'c>) -> (Either<'b, 'a> -> Either<'b, 'c>))
+c : unit
 ceil : (float -> float)
 collect : (('a -> List<'b>) -> (List<'a> -> List<'b>))
 compose : (('a -> 'b) -> (('c -> 'a) -> ('c -> 'b)))
@@ -22,7 +26,8 @@ concat : (List<List<'a>> -> List<'a>)
 contains : (Eq 'a) => ('a -> (List<'a> -> bool))
 cos : (float -> float)
 curry : ((('a * 'b) -> 'c) -> ('a -> ('b -> 'c)))
-even : (int -> bool)
+d : unit
+e : unit
 exists : (('a -> bool) -> (List<'a> -> bool))
 exp : (float -> float)
 filter : (('a -> bool) -> (List<'a> -> List<'a>))
@@ -62,7 +67,6 @@ negf : (float -> float)
 negi : (int -> int)
 not : (bool -> bool)
 nth : (int -> (List<'a> -> Option<'a>))
-odd : (int -> bool)
 pow : (float -> (float -> float))
 print : (string -> unit)
 printf : (ToString 'a) => ('a -> unit)

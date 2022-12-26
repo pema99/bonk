@@ -38,16 +38,16 @@ in
 
 let getNeighbor = [flip] [(x, y)] [self]
     match aaSearch (posToIdx (x, y)) tree with
-    | None () -> Nil ()
+    | None -> Nil
     | Some target ->
         let (self, target) = if flip then (target, self) else (self, target) in
         let heightCheck = (getHeight self) >= ((getHeight target) - 1) in
         let inBounds = (x >= 0) && (y >= 0) && (x < width) && (y < height) in
         if inBounds && heightCheck then
             let node = getOption '~' (aaSearch (posToIdx (x, y)) tree) in
-            Cons (((x, y), node), Nil())
+            Cons (((x, y), node), Nil)
         else
-            Nil ()
+            Nil
 in
 
 let getNeighbors = [flip] [(x, y)] [self]
@@ -68,7 +68,7 @@ in
 let mightBeDijkstra = [start] [tar] [flip]
     rec search = [visited] [unvisited]
         match minHeapExtract unvisited with
-        | None () -> None ()
+        | None -> None
         | Some ((loc, height, dist, prev), rest) ->
             if height = tar then
                 Some (loc, dist)

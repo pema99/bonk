@@ -10,7 +10,7 @@ rec parseCrates = [stacks] [line]
                 Cons(h, cont t (i + 4))
             else
                 Cons(Cons(chr, h), cont t (i + 4))
-        | Nil () -> Nil ()
+        | Nil -> Nil
     in
     cont stacks 1
 in
@@ -25,8 +25,8 @@ in
 
 let runCommand = [stacks] [line]
     let (num, f, t) = parseCommand line in
-    let fstack = getOption (Nil ()) (nth f stacks) in
-    let tstack = getOption (Nil ()) (nth t stacks) in
+    let fstack = getOption (Nil) (nth f stacks) in
+    let tstack = getOption (Nil) (nth t stacks) in
     let (fafter, tafter) =
         fold ([acc] [_]
             match fst acc with
@@ -39,7 +39,7 @@ in
 
 // Part 1
 let header = reverse (take 8 lines) in
-let crates = fold parseCrates (replicate 9 (Nil ())) header in
+let crates = fold parseCrates (replicate 9 (Nil)) header in
 
 let commands = skip 10 lines in
 let crates1 = fold runCommand crates commands in
@@ -49,8 +49,8 @@ let _ = print "\n" in
 // Part 2
 let runCommandMulti = [stacks] [line]
     let (num, f, t) = parseCommand line in
-    let fstack = getOption (Nil ()) (nth f stacks) in
-    let tstack = getOption (Nil ()) (nth t stacks) in
+    let fstack = getOption (Nil) (nth f stacks) in
+    let tstack = getOption (Nil) (nth t stacks) in
     let items = take num fstack in
     let fafter = skip num fstack in
     let tafter = append items tstack in
