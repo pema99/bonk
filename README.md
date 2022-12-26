@@ -18,7 +18,7 @@ Yet another toy language I started working on, mainly to play with Hindley-Milne
 - List literals as syntax sugar for `Cons`-lists.
 - Pipeline operators for function application: `|>`, `<|`.
 - Import statements to work with programs spanning multiple files.
-- An automatic memoization keyword for pure functions.
+- An automatic [memoization keyword](https://github.com/pema99/bonk/blob/master/examples/memoize.bonk) for pure functions.
 - A tiny standard library (see `lib/bonk/prelude.bonk`).
 
 # Example code
