@@ -23,72 +23,72 @@ let min = [a] [b] if a < b then a else b in
 // --- Option module ---
 sum Option<'a> =
     | Some 'a
-    | None unit
+    | None
 in
 
 let mapOption = [f] [o]
     match o with
     | Some a -> Some (f a)
-    | None _ -> None ()
+    | None -> None
 in
 
 let bindOption = [f] [o]
     match o with
     | Some a -> f a
-    | None _ -> None ()
+    | None -> None
 in
 
 let getOption = [def] [o]
     match o with
     | Some a -> a
-    | None _ -> def
+    | None -> def
 in
 
 let isSome = [o]
     match o with
     | Some _ -> true
-    | None _ -> false
+    | None -> false
 in
 
 let isNone = [o]
     match o with
     | Some _ -> false
-    | None _ -> true
+    | None -> true
 in
 
 // --- List module ---
 sum List<'a> = 
     | Cons 'a * List<'a> 
-    | Nil unit 
+    | Nil 
 in 
 
 let reverse = [lst]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (Cons (h, acc))
-        | Nil ()      -> acc
+        | Nil         -> acc
     in
-    inner lst (Nil ())
+    inner lst (Nil)
 in
 
 let map = [f] [lst] 
     rec inner = [lst] [acc]
         match lst with 
         | Cons (h, t) -> inner t (Cons (f h, acc))
-        | Nil _       -> acc
+        | Nil         -> acc
     in
-    reverse (inner lst (Nil ()))
+    reverse (inner lst (Nil))
 in 
 
 let fold = [f] [z] [lst]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (f acc h)
-        | Nil _       -> acc
+        | Nil         -> acc
     in
     match lst with
     | Cons (h, t) -> inner lst z
-    | Nil _       -> z
+    | Nil         -> z
 in
 
 let filter = [f] [lst]
@@ -98,16 +98,16 @@ let filter = [f] [lst]
             if f h
             then inner t (Cons (h, acc))
             else inner t acc
-        | Nil _       -> acc
+        | Nil         -> acc
     in
-    reverse (inner lst (Nil ()))
+    reverse (inner lst (Nil))
 in
 
 let length = [lst]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (acc + 1)
-        | Nil _       -> acc
+        | Nil         -> acc
     in
     inner lst 0
 in
@@ -117,7 +117,7 @@ let iota = [n]
         if i < 0 then acc
         else inner (i-1) (Cons (i, acc))
     in
-    inner (n-1) (Nil ())
+    inner (n-1) (Nil)
 in
 
 let replicate = [n] [v]
@@ -125,14 +125,14 @@ let replicate = [n] [v]
         if i <= 0 then acc
         else inner (i-1) (Cons (v, acc))
     in
-    inner n (Nil ())
+    inner n (Nil)
 in
 
 let append = [a] [b]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (Cons (h, acc))
-        | Nil _       -> acc
+        | Nil         -> acc
     in
     inner (reverse a) b
 in
@@ -140,10 +140,10 @@ in
 rec nth = [n] [lst]
     match lst with
     | Cons (h, t) ->
-        if n < 0 then None ()
+        if n < 0 then None
         else if n = 0 then Some h
         else nth (n-1) t
-    | Nil _       -> None ()
+    | Nil         -> None
 in
 
 let exists = [f] [lst]
@@ -158,7 +158,7 @@ let forall = [f] [lst]
     rec inner = [lst] [acc]
         match lst with
         | Cons (h, t) -> inner t (acc && f h)
-        | Nil _       -> acc
+        | Nil         -> acc
     in
     inner lst true
 in
@@ -166,13 +166,13 @@ in
 let head = [lst]
     match lst with
     | Cons (h, _) -> Some h
-    | Nil _       -> None ()
+    | Nil         -> None
 in
 
 let tail = [lst]
     match lst with
     | Cons (h, t) -> Some t
-    | Nil _       -> None ()
+    | Nil         -> None
 in
 
 let find = [f] [lst]
@@ -186,9 +186,9 @@ let take = [n] [lst]
         else
             match lst with
             | Cons (h, t) -> inner (n - 1) t (Cons (h, acc))
-            | Nil () -> Nil ()
+            | Nil -> Nil
     in
-    reverse (inner n lst (Nil ()))
+    reverse (inner n lst (Nil))
 in
 
 rec skip = [n] [lst]
@@ -197,16 +197,16 @@ rec skip = [n] [lst]
     else
         match lst with
         | Cons (h, t) -> skip (n - 1) t
-        | Nil () -> Nil ()
+        | Nil -> Nil
 in
 
 let replace = [n] [v] [lst]
     rec inner = [lst] [i] [acc]
         match lst with
         | Cons (h, t) -> inner t (i + 1) (Cons (if i = n then v else h, acc))
-        | Nil () -> acc
+        | Nil -> acc
     in
-    reverse (inner lst 0 (Nil ()))
+    reverse (inner lst 0 (Nil))
 in
 
 let zip = [l] [r]
@@ -216,7 +216,7 @@ let zip = [l] [r]
             inner lt rt (Cons ((lh, rh), acc))
         | _ -> acc
     in
-    reverse (inner l r (Nil ()))
+    reverse (inner l r (Nil))
 in
 
 let unzip = [lst]
@@ -226,12 +226,12 @@ let unzip = [lst]
             inner lt (Cons (lh, accl)) (Cons (rh, accr))
         | _ -> (accl, accr)
     in
-    let (l, r) = inner lst (Nil ()) (Nil ()) in
+    let (l, r) = inner lst (Nil) (Nil) in
     (reverse l, reverse r)
 in
 
 let concat = [lst]
-    fold append (Nil ()) lst
+    fold append (Nil) lst
 in
 
 let collect = [f] [lst]
@@ -249,8 +249,8 @@ in
 let filterMap = [f] [lst]
     collect ([x]
         match f x with
-        | Some y -> Cons (y, Nil ())
-        | None _ -> Nil () 
+        | Some y -> Cons (y, Nil)
+        | None -> Nil 
     ) lst
 in
 
@@ -263,22 +263,22 @@ let splitAt = [n] [lst]
         if n <= 0 then (reverse acc, lst)
         else
             match lst with
-            | Nil() -> (reverse acc, Nil())
+            | Nil -> (reverse acc, Nil)
             | Cons(h, t) -> inner (n - 1) t (Cons(h, acc))
     in
-    inner n lst (Nil())
+    inner n lst (Nil)
 in
 
 rec stringToList = [str]
     let len = lengthString str in
-    if len = 0 then Nil ()
+    if len = 0 then Nil
     else Cons (indexString str 0, stringToList (substring str 1 (len - 1)))
 in
 
 rec listToString = [lst]
     match lst with
     | Cons (h, t) -> (toString h) + listToString t
-    | Nil _       -> ""
+    | Nil         -> ""
 in
 
 // --- Either module ---
@@ -347,7 +347,7 @@ let splitString = [sep] [str]
                 splitInner (f+s+1) 0 lst
             else
                 splitInner f (s + 1) acc
-    in reverse (splitInner 0 0 (Nil ()))
+    in reverse (splitInner 0 0 (Nil))
 in
 
 impure let printf = [x] print (toString x) in

@@ -16,10 +16,10 @@ rec parseLines = [lines] [tree] [lst]
         let pos = (toInt x, toInt y, toInt z) in
         let tree = aaInsert (posToIdx pos) 1 tree in
         parseLines t tree (Cons (pos, lst))
-    | Nil () -> (tree, lst)
+    | Nil -> (tree, lst)
 in
 
-let (tree, lst) = parseLines lines aaEmpty (Nil ()) in
+let (tree, lst) = parseLines lines aaEmpty (Nil) in
 
 let dirs = { (-1,0,0); (1,0,0); (0,-1,0); (0,1,0); (0,0,-1); (0,0,1) } in
 

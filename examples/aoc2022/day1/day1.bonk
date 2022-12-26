@@ -10,21 +10,21 @@ rec solution = [lst] [curr] [totals]
             let num = toInt line in
             let add = curr + num in
             solution tail add totals
-    | Nil () -> totals
+    | Nil -> totals
 in
 
-let totals = solution lines 0 (Nil ()) in
+let totals = solution lines 0 (Nil) in
 
 rec findMax = [lst] [m] [mi] [i]
     match lst with
     | Cons (h, t) -> if h > m then findMax t h i (i+1) else findMax t m mi (i+1)
-    | Nil () -> mi
+    | Nil -> mi
 in
 
 rec remove = [lst] [i] [curr]
     match lst with
     | Cons (h, t) -> if curr = i then t else Cons (h, remove t i (curr+1))
-    | Nil () -> Nil ()
+    | Nil -> Nil
 in
 
 // Part 1

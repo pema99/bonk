@@ -6,7 +6,7 @@ sum List<'a> =
 
 let iota = [n]
     rec inner = [acc]
-        if acc >= n then Nil ()
+        if acc >= n then Nil
         else Cons (acc, inner (acc + 1))
     in
     inner 0
@@ -15,13 +15,13 @@ in
 rec map = [f] [lst]
     match lst with
     | Cons (h, t) -> Cons (f h, map f t)
-    | Nil _       -> Nil () 
+    | Nil       -> Nil 
 in
 
 rec fold = [f] [z] [lst]
     match lst with
     | Cons (h, t) -> f (h) (fold f z t)
-    | Nil _       -> z
+    | Nil       -> z
 in
 
 rec filter = [f] [lst]
@@ -30,7 +30,7 @@ rec filter = [f] [lst]
         if f h
         then Cons (h, filter f t)
         else filter f t
-    | Nil _       -> Nil _
+    | Nil       -> Nil
 in
 
 let myList = iota 20 in

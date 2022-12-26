@@ -16,7 +16,7 @@ let splitStringByString = [sep] [str]
                 splitInner (f+s+sepLength) 0 lst
             else
                 splitInner f (s + 1) acc
-    in reverse (splitInner 0 0 (Nil ()))
+    in reverse (splitInner 0 0 (Nil))
 in
 
 let posToIdx = [(x, y)] y * 1000 + x in
@@ -50,7 +50,7 @@ let parseLine = [tree] [line]
             let (nx, ny) = parsePair h in
             let ntree = addPath (min px nx, min py ny) (max px nx, max py ny) tree in
             parseLineInner (nx, ny) t ntree
-        | Nil () ->
+        | Nil ->
             tree
     in
     parseLineInner first path tree

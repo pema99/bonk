@@ -39,9 +39,9 @@ let parseMonkeys = [lines]
         | Cons (h, t) -> 
             let (monkey, nlines, nlcm) = parseMonkey lines lcm in
             parseMonkeysInner nlines nlcm (Cons (monkey, acc))
-        | Nil () -> (reverse acc, lcm)
+        | Nil -> (reverse acc, lcm)
     in
-    parseMonkeysInner lines 1 (Nil ())
+    parseMonkeysInner lines 1 (Nil)
 in
 
 let (monkeys, lcm) = parseMonkeys lines in
@@ -58,7 +58,7 @@ rec addToNth = [n] [item] [monkeys]
     | Cons (h, t) ->
         if n = 0 then Cons (addItem item h, t)
         else Cons (h, addToNth (n-1) item t)
-    | Nil () -> Nil ()
+    | Nil -> Nil
 in
 
 rec simulateMonkey = [divisor] [idx] [monkey] [monkeys]
@@ -74,13 +74,13 @@ rec simulateMonkey = [divisor] [idx] [monkey] [monkeys]
             addToNth otherIdx worry acc
         ) monkeys items
     in
-    (length items, replace idx (Nil (), opf, div, tr, fl) monkeys)
+    (length items, replace idx (Nil, opf, div, tr, fl) monkeys)
 in
 
 rec simulateMonkeys = [divisor] [idx] [len] [monkeys] [counts]
     if idx >= len then (monkeys, counts)
     else
-        let monkey = getOption (Nil (), [x]x, 0, 0, 0) (nth idx monkeys) in
+        let monkey = getOption (Nil, [x]x, 0, 0, 0) (nth idx monkeys) in
         let res = simulateMonkey divisor idx monkey monkeys in
         let (inspections, monkeys) = res in
         let count = getOption 0 (nth idx counts) in
@@ -101,13 +101,13 @@ let solve = [divisor] [rounds]
     rec findMax = [lst] [m] [mi] [i]
         match lst with
         | Cons (h, t) -> if h > m then findMax t h i (i+1) else findMax t m mi (i+1)
-        | Nil () -> mi
+        | Nil -> mi
     in
 
     rec remove = [lst] [i] [curr]
         match lst with
         | Cons (h, t) -> if curr = i then t else Cons (h, remove t i (curr+1))
-        | Nil () -> Nil ()
+        | Nil -> Nil
     in
 
     let max1i = findMax res 0 0 0 in

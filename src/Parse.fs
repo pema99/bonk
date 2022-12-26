@@ -184,7 +184,7 @@ let listLiteralP =
                 mkExpr (EApp (
                     mkExpr (EVar "Cons") e.span, 
                         mkExpr (ETuple [mkExpr e.kind e.span; acc]) e.span)) e.span)
-            (mkExpr (EApp (mkExpr (EVar "Nil") span, mkExpr (ELit LUnit) span)) span)
+            (mkExpr (EVar "Nil") span)
 
 let nonAppP =
     opFunP

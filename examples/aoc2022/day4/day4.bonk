@@ -22,7 +22,7 @@ rec solution = [lst] [check] [curr]
             solution tail check (curr + 1)
         else
             solution tail check curr
-    | Nil () -> curr
+    | Nil -> curr
 in
 
 let _ = print (toString (solution lines intervalContains 0)) in

@@ -19,7 +19,7 @@ rec solution1 = [lst] [curr]
         let exo = getOption ' ' ex in
         let prio = getPriority exo in
         solution1 tail (curr + prio)
-    | Nil () -> curr
+    | Nil -> curr
 in
 
 let _ = print (toString (solution1 lines 0)) in

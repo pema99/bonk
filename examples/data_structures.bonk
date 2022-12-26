@@ -38,8 +38,8 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     in
     rec lvl = [tree]
         match tree with
-        | AAEmpty () -> Nil ()
-        | AANode (n, _, _, _, _) -> Cons (n, Nil ())
+        | AAEmpty () -> Nil
+        | AANode (n, _, _, _, _) -> Cons (n, Nil)
     in
     let getLvl = [tree]
         match tree with
@@ -120,7 +120,7 @@ let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
     // Lookups
     rec aaSearch = [key] [tree]
         match tree with
-        | AAEmpty _ -> None ()
+        | AAEmpty _ -> None
         | AANode (_, l, k, v, r) ->
             if key < k then aaSearch key l
             else if key > k then aaSearch key r
@@ -157,7 +157,7 @@ in
 sum Stack<'a> = Stack (List<'a>)
 
 let stackEmpty =
-    Stack (Nil ())
+    Stack (Nil)
 in
 
 let stackPop = [lst]
@@ -166,8 +166,8 @@ let stackPop = [lst]
         let tl = tail lst in
         (match (hd, tl) with
         | (Some a, Some b) -> Some (a, Stack b)
-        | (Some a, None) -> Some (a, Stack (Nil ()))
-        | _ -> None ())
+        | (Some a, None) -> Some (a, Stack (Nil))
+        | _ -> None)
 in
 
 let stackPush = [val] [lst]
@@ -179,7 +179,7 @@ in
 sum Queue<'a> = Queue (List<'a>) * (List<'a>)
 
 let queueEmpty =
-    Queue (Nil (), Nil ())
+    Queue (Nil, Nil)
 in
 
 let queueEnqueue = [val] [queue]
@@ -190,9 +190,9 @@ in
 rec queueDequeue = [queue]
     match queue with | Queue (l, r) ->
         (match (l, r) with
-        | (Nil (), Nil ()) -> (None (), queueEmpty) 
+        | (Nil, Nil) -> (None, queueEmpty) 
         | (Cons (x, xs), push) -> (Some x, Queue (xs, push))
-        | (Nil (), push) -> queueDequeue (Queue (reverse push, Nil ())))
+        | (Nil, push) -> queueDequeue (Queue (reverse push, Nil)))
 in
 
 // --- Heaps ---
@@ -228,7 +228,7 @@ let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapI
     // Deletion / extraction
     let heapExtract = [comparer] [heap]
         match heap with
-        | HeapEmpty() -> None ()
+        | HeapEmpty() -> None
         | HeapNode(h, k, v, l, r) ->
             let newHeap = merge comparer (l, r) in
             Some (v, newHeap)
@@ -252,7 +252,7 @@ let heapSort = [comparer] [lst]
     rec addToHeap = [heap] [lst]
         match lst with
         | Cons (h, t) -> addToHeap (heapInsert comparer h h heap) t
-        | Nil () -> heap
+        | Nil -> heap
     in
     rec takeFromHeap = [heap] [lst]
         match heapExtract comparer heap with
@@ -260,5 +260,5 @@ let heapSort = [comparer] [lst]
         | _ -> lst
     in
     let heap = addToHeap heapEmpty lst in
-    reverse (takeFromHeap heap (Nil ()))
+    reverse (takeFromHeap heap (Nil))
 in

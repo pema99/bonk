@@ -28,7 +28,7 @@ rec solution = [lst] [chooser] [curr]
         | ('B', 'X') -> solution tail chooser (curr + score + 0)
         | ('C', 'Y') -> solution tail chooser (curr + score + 0)
         | _ -> curr)
-    | Nil () -> curr
+    | Nil -> curr
 in
 
 let _ = print "Part 1 solution: " in

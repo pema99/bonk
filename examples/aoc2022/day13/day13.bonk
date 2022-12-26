@@ -22,7 +22,7 @@ let parseLit = [line]
                 (h + next, rest)
             else
                 ("", line)
-        | Nil () -> ("", line)
+        | Nil -> ("", line)
     in
     let (next, rest) = parseLitInner line in
     (Lit (toInt next), rest)
@@ -40,15 +40,15 @@ rec parseList = [line]
                     else parseLit line
                 in
                 parseListInner rest (Cons (next, acc))
-        | Nil () -> (acc, line)
+        | Nil -> (acc, line)
     in
     let line = skip 1 line in
-    let (next, rest) = parseListInner line (Nil ()) in
+    let (next, rest) = parseListInner line (Nil) in
     (Lst (reverse next), rest)
 in
 
 rec strToList = [str]
-    if lengthString str = 0 then Nil ()
+    if lengthString str = 0 then Nil
     else
         let next = strToList (substring str 1 ((lengthString str) - 1)) in
         Cons (substring str 0 1, next)
@@ -61,9 +61,9 @@ let parseLines = [lines]
             let (lp, _) = parseList (strToList l) in
             let (rp, _) = parseList (strToList r) in
             parseLinesInner t (Cons (rp, Cons (lp, acc)))
-        | Nil() -> acc
+        | Nil -> acc
     in
-    reverse (parseLinesInner lines (Nil ()))
+    reverse (parseLinesInner lines (Nil))
 in
 
 let packets = parseLines lines in
@@ -96,8 +96,8 @@ and compareList = [l] [r]
         if c = correct then correct
         else if c = incorrect then incorrect
         else compareList lt rt
-    | (Nil (), Cons (rh, rt)) -> correct
-    | (Cons (lh, lt), Nil ()) -> incorrect
+    | (Nil, Cons (rh, rt)) -> correct
+    | (Cons (lh, lt), Nil) -> incorrect
     | _ -> unknown
 in
 
@@ -115,8 +115,8 @@ in
 let _ = print (toString (solution packets 1 0) + "\n") in
 
 // Part 2
-let adiv = Lst (Cons (Lst (Cons (Lit 2, Nil ())), Nil())) in
-let bdiv = Lst (Cons (Lst (Cons (Lit 6, Nil ())), Nil())) in
+let adiv = Lst (Cons (Lst (Cons (Lit 2, Nil)), Nil)) in
+let bdiv = Lst (Cons (Lst (Cons (Lit 6, Nil)), Nil)) in
 let packets = Cons (adiv, Cons (bdiv, packets)) in
 let sorted = heapSort ([l] [r] if compare l r = correct then true else false) (packets) in
 
