@@ -72,7 +72,7 @@ in
 
 let bottom = findBottom tree 0 in
 
-sum StepResult 'a =
+sum StepResult<'a> =
     | Step int * int
     | Stop int * int
     | Halt unit

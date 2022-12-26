@@ -4,7 +4,7 @@ let content = readFile "examples/aoc2022/day13/input.txt" in
 let lines = splitString (indexString "\n" 0) content in
 
 sum T =
-    | Lst (List T)
+    | Lst List<T>
     | Lit int
 
 // Parsing logic

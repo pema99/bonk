@@ -87,8 +87,17 @@ let primTypeP =
     (typeVarP |>> TVar)
     <|> typeDescP
 
+let typeParamsP =
+    (between (opP Less) (sepBy1 typeP (tok Comma)) (opP Greater))
+
+let higherKindedTypeP =
+    (primTypeP <+> typeParamsP)
+    >>= function (TVar me, args) -> just (me, args) | _ -> fail()
+    |>> (fun (name, lst) -> TCtor (KVar name, lst))
+    |> attempt
+
 let typeTermP =
-    (attempt <| identP <+> many typeP |>> (fun (name, lst) -> TCtor (KSum name, lst)))
+    (attempt <| identP <+> (typeParamsP <|> just []) |>> (fun (name, lst) -> TCtor (KSum name, lst)))
     <|> primTypeP
     <|> parens typeP
 
@@ -98,7 +107,7 @@ let productP =
     |> attempt
 
 let arrowP =
-    chainR1 (productP <|> typeTermP) (tok Arrow *> just (fun a b -> TCtor (KArrow, [a;b])))
+    chainR1 (higherKindedTypeP <|> productP <|> typeTermP) (tok Arrow *> just (fun a b -> TCtor (KArrow, [a;b])))
 
 typePImpl := arrowP
 
@@ -255,7 +264,8 @@ let declLetGroupP =
 
 let declSumP =
     (tok Sum *> identP
-    <+> (many typeVarP) <* opP Equal <* opt (tok Pipe))
+    <+> (between (opP Less) (sepBy1 typeVarP (tok Comma)) (opP Greater) <|> just [])
+    <* opP Equal <* opt (tok Pipe))
     <+> (sepBy1 (identP <+> typeP) (tok Pipe))
     <* opt (tok In)
     |>> (fun ((a,b),c) -> DUnion (a,b,c))

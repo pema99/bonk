@@ -124,6 +124,7 @@ and PrimType =
 
 // Kinds of type constructors
 and Kind =
+    | KVar of string
     | KSum of string
     | KProduct
     | KArrow

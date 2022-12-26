@@ -3,15 +3,15 @@
 // can be included in a HTML file to render the classic counter app.
 
 // --- Boilerplate code ---
-sum Value 'a =
+sum Value<'a> =
     | Text string
     | Op 'a
 
-sum Attribute 'a =
-    Attribute string * Value 'a
+sum Attribute<'a> =
+    Attribute string * Value<'a>
 
-sum Html 'a =
-    | Html string * (List (Attribute 'a)) * (List (Html 'a))
+sum Html<'a> =
+    | Html string * (List<Attribute<'a>>) * (List<Html<'a>>)
     | RawHtml string
 
 let node = [tag] [attrs] [htmls]
@@ -28,7 +28,7 @@ in
 
 let onClick = on "click" in
 
-impure let sandbox = $'model -> ('msg -> 'model -> 'model) -> ('model -> Html 'msg) -> unit$
+impure let sandbox = $'model -> ('msg -> 'model -> 'model) -> ('model -> Html<'msg>) -> unit$
     (init) => (update) => (view) => {
         let listToArray = (lst) => {
             let extracted = [];

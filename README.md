@@ -47,9 +47,9 @@ let total =
 in
 
 // Bonk supports sum types:
-sum MyList 'a =
+sum MyList<'a> =
     | MyNil unit
-    | MyCons 'a * MyList 'a
+    | MyCons 'a * MyList<'a>
 
 // ... and recursive functions, which go well together:
 rec makeList = [n]

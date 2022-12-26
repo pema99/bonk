@@ -316,6 +316,7 @@ let rec isInherentlyPureType (ty: Type) : bool =
     | TCtor (KProduct, tys)
     | TCtor (KSum _, tys) ->
         List.forall isInherentlyPureType tys
+    | _ -> false
 
 let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
     traverseTypedDecls

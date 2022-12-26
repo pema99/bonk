@@ -108,11 +108,6 @@ let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExp
     | Some goal -> Some goal
     | None -> None
 
-let rec calcArityType (ty: Type) : int =
-    match ty with
-    | TCtor (KArrow, [_; b]) -> 1 + calcArityType b
-    | _ -> 0
-
 let rec matchPattern tenv pat (v: AbstractValue) =
     match pat, v with
     | PName a, v ->
@@ -157,7 +152,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
             let applied = (getExprType x) :: args
             if arity = List.length applied then
                 let! (a, (resolved, b)) = get
-                match resolveOverload overloads applied with
+                match resolveOverload overloads (List.rev applied) with
                 | Some overload ->
                     let mangled =
                         overload

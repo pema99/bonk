@@ -1,5 +1,5 @@
 // Bonk ships with a small standard library.
-// Let's use them to calculate the sum of the 20 first square numbers which are even:
+// Let's use it to calculate the sum of the 20 first square numbers which are even:
 let total =
     let first20 = iota 20 in
     let squares = map ([x] x * x) first20 in
@@ -8,7 +8,7 @@ let total =
 in
 
 // We can do the same thing more succintly with the pipeline operator.
-// Bonk supports shadowing, so we can shadow the previous binding.
+// Bonk supports shadowing, so we can shadow the previous binding:
 let total =
     iota 20
     |> map ([x] x * x)
@@ -17,9 +17,9 @@ let total =
 in
 
 // Bonk supports sum types:
-sum MyList 'a =
+sum MyList<'a> =
     | MyNil unit
-    | MyCons 'a * MyList 'a
+    | MyCons 'a * MyList<'a>
 
 // ... and recursive functions, which go well together:
 rec makeList = [n]

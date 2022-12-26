@@ -2,7 +2,7 @@ let content = readFile "examples/aoc2022/day7/input.txt" in
 let lines = splitString (indexString "\n" 0) content in
 
 sum Node =
-    | Dir string * List Node
+    | Dir string * List<Node>
     | File string * int
 
 let getPathName = [path]

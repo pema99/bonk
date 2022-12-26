@@ -1,16 +1,13 @@
-class Number =
-    | add : this -> this -> this
+class Functor =
+    | fmap : ('a -> 'b) -> (this<'a>) -> (this<'b>)
 
-member int of Number =
-    | add : [x] [y] x + y
+member List<'a> of Functor =
+    | fmap : map
 
-member float of Number =
-    | add : [x] [y] x + y
+member Option<'a> of Functor =
+    | fmap : mapOption
 
-member List 'a of Number =
-    | add : [x] [y] x
+let a = map ((+)2) (fmap ((+) 1) { 1; 2; 3 }) in
+let b = fmap ((+) 1) (Some 3) in
 
-let b = add 3 in
-let c = if true then add 3 5 else 5 in
-let d = b 7 in
-let e = add (Nil ()) (Nil ()) in
+let c = printfn (getOption 0 b) in

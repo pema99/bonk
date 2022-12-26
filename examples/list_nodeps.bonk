@@ -1,7 +1,7 @@
 // Must be compiled using --noprelude
 
-sum List 'a =
-    | Cons 'a * List 'a
+sum List<'a> =
+    | Cons 'a * List<'a>
     | Nil unit
 
 let iota = [n]

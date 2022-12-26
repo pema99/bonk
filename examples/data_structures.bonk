@@ -1,6 +1,6 @@
 // --- AA Trees ---
-sum AATree 'k 'v =
-    | AANode int * (AATree 'k 'v) * 'k * 'v * (AATree 'k 'v) // level, left, key, value, right
+sum AATree<'k, 'v> =
+    | AANode int * (AATree<'k, 'v>) * 'k * 'v * (AATree<'k, 'v>) // level, left, key, value, right
     | AAEmpty unit
 
 let (aaInsert, aaDelete, aaSearch, aaEmpty, aaFromList) =
@@ -154,7 +154,7 @@ impure let aaPrint = [tree]
 in
 
 // --- Stacks ---
-sum Stack 'a = Stack (List 'a)
+sum Stack<'a> = Stack (List<'a>)
 
 let stackEmpty =
     Stack (Nil ())
@@ -176,7 +176,7 @@ let stackPush = [val] [lst]
 in
 
 // --- Queues ---
-sum Queue 'a = Queue (List 'a) * (List 'a)
+sum Queue<'a> = Queue (List<'a>) * (List<'a>)
 
 let queueEmpty =
     Queue (Nil (), Nil ())
@@ -196,8 +196,8 @@ rec queueDequeue = [queue]
 in
 
 // --- Heaps ---
-sum Heap 'k 'v =
-    | HeapNode int * 'k * 'v * (Heap 'k 'v) * (Heap 'k 'v)
+sum Heap<'k, 'v> =
+    | HeapNode int * 'k * 'v * (Heap<'k, 'v>) * (Heap<'k, 'v>)
     | HeapEmpty unit
 
 let (heapInsert, heapExtract, heapEmpty, minHeapInsert, minHeapExtract, maxHeapInsert, maxHeapExtract) =

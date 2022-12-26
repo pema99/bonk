@@ -1,6 +1,6 @@
 // Red Black Tree. Only does insertions because I am too stupid.
-sum RBTree 'k 'v =
-    | RBNode 'k * 'v * bool * (RBTree 'k 'v) * (RBTree 'k 'v) // value, black?, left, right
+sum RBTree<'k, 'v> =
+    | RBNode 'k * 'v * bool * (RBTree<'k, 'v>) * (RBTree<'k, 'v>) // value, black?, left, right
     | RBEmpty unit
 
 rec rbSearch = [key] [tree]

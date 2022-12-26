@@ -36,6 +36,14 @@ let rec renameFreshInner (t: Type) subst count =
             let nt = TVar name
             nt, Map.add a name subst, count + 1
     | TCtor (kind, args) ->
+        let (kind, subst, count) =
+            match kind with
+            | KVar name ->
+                let tvar, subst, count = renameFreshInner (TVar name) subst count
+                match tvar with
+                | TVar v -> KVar v, subst, count
+                | _ -> kind, subst, count
+            | _ -> kind, subst, count
         let lst =
             args
             |> List.scan (fun (_, subst, count) x -> renameFreshInner x subst count) (tVoid, subst, count)
@@ -85,10 +93,19 @@ let rec prettyTypeInner (t: Type) : string =
                 |> String.concat ", "
             if fmt = "" then name
             else sprintf "%s<%s>" name fmt
+        | KVar name ->
+            let fmt =
+                args
+                |> List.map prettyTypeInner
+                |> List.toArray
+                |> String.concat ", "
+            if fmt = "" then name
+            else sprintf "'%s<%s>" name fmt
         | KArrow ->
             match args with
             | [l; r] -> sprintf "(%s -> %s)" (prettyTypeInner l) (prettyTypeInner r)
             | _ -> failwith "Invalid arrow type"
+
 
 let prettyType =
     renameFreshType >> prettyTypeInner

@@ -1,0 +1,17 @@
+// Mode: values, types
+// Prelude: true
+// Description: Higher kinded types kinda
+
+class Functor =
+    | fmap : ('a -> 'b) -> (this<'a>) -> (this<'b>)
+
+member List<'a> of Functor =
+    | fmap : map
+
+member Option<'a> of Functor =
+    | fmap : mapOption
+
+let a = fmap ((+) 1) { 1; 2; 3 } in
+let b = fmap ((+) 1) (Some 3) in
+
+let d = printfn (getOption 0 b) in

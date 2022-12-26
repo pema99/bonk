@@ -6,4 +6,4 @@
 impure rec x = [y] y in
 
 // But this should not
-impure sum Stack 'a = Stack (List 'a)
+impure sum Stack<'a> = Stack (List<'a>)

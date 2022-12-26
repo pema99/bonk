@@ -21,7 +21,7 @@ let max = [a] [b] if a > b then a else b in
 let min = [a] [b] if a < b then a else b in
 
 // --- Option module ---
-sum Option 'a =
+sum Option<'a> =
     | Some 'a
     | None unit
 in
@@ -57,8 +57,8 @@ let isNone = [o]
 in
 
 // --- List module ---
-sum List 'a = 
-    | Cons 'a * List 'a 
+sum List<'a> = 
+    | Cons 'a * List<'a> 
     | Nil unit 
 in 
 
@@ -271,7 +271,7 @@ rec listToString = [lst]
 in
 
 // --- Either module ---
-sum Either 'a 'b =
+sum Either<'a, 'b> =
     | Left 'a
     | Right 'b
 in

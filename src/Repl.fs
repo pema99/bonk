@@ -10,39 +10,9 @@ open Parse
 open Prelude
 open CodeGen
 open Semantics
+open Lower
 
 // Evaluation
-let rec compatible (l: QualType) (r: QualType) : bool =
-    match l, r with
-    | l, r when l = r -> // precisely equall types
-        true
-    | (_, TConst a), (_, TConst b) when a = b -> // same typed constants
-        true
-    | (qs, TVar a), b | b, (qs, TVar a) ->
-        true // TODO!!!
-    | (ql, TCtor (lk, ls)), (qr, TCtor (rk, rs)) when lk = rk -> // ctor types, check all pairs
-        let qls = List.map (fun a -> ql, a) ls
-        let qrs = List.map (fun a -> qr, a) rs
-        List.forall (fun (a, b) -> compatible a b) (List.zip qls qrs)
-    | _ -> false
-
-let rec candidate (overload: TypedExpr) (args: QualType list) : bool =
-    match overload, args with
-    | { kind = ELam (_, rest); data = (qt, TCtor (KArrow, [a; _])) }, h :: t ->
-        compatible (qt, a) h && candidate rest t
-    | _, [] -> true 
-    | _ -> false
-
-let resolveOverload (overloads: TypedExpr list) (args: QualType list) : TypedExpr option =
-    match List.tryFind (fun ex -> candidate ex args) overloads with
-    | Some goal -> Some goal
-    | None -> None
-
-let rec calcArity (ex: TypedExpr) : int =
-    match ex.kind with
-    | ELam (_, rest) -> 1 + calcArity rest
-    | _ -> 0
-
 let rec buildApp (f: TypedExpr) (args: TypedExpr list): TypedExpr =
     match args with
     | h :: t -> mkFakeExpr (EApp (buildApp f t, h))
@@ -154,7 +124,7 @@ and eval tenv (e: TypedExpr) =
         | Some (VOverload (lst, arity, args)), Some _ ->
             let applied = x :: args
             if arity = List.length applied then
-                let typs = List.map getExprType applied
+                let typs = List.map getExprType (List.rev applied)
                 let goal = resolveOverload lst typs
                 Option.bind (fun goal -> eval tenv (buildApp goal applied)) goal
             else
@@ -318,12 +288,11 @@ let rec handleDecl silent decl = repl {
                 return! handleDecl silent decl 
                 }) names
     | Some (DMember (pred, impls)) ->
-        let _ = pred
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv
             match lookup env s with
             | Some (VOverload (lst, arity, v)) -> do! extendTermEnv [s, VOverload (e :: lst, arity, v)]
-            | None -> do! extendTermEnv [s, VOverload ([e], calcArity e, [])]
+            | None -> do! extendTermEnv [s, VOverload ([e], calcArityType (snd e.data), [])]
             | _ -> ()
             }) impls
     | _ -> ()// TODO: Typeclasses

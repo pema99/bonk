@@ -25,6 +25,11 @@ let rec freeInPattern (pat: Pattern) : string Set =
     | PTuple pats -> pats |> List.map freeInPattern |> Set.unionMany
     | PUnion (_, pat) -> freeInPattern pat
 
+let rec calcArityType (ty: Type) : int =
+    match ty with
+    | TCtor (KArrow, [_; b]) -> 1 + calcArityType b
+    | _ -> 0
+
 // Env helpers
 let extend env x s = Map.add x s env
 let lookup env x = Map.tryFind x env
