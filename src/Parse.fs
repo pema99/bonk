@@ -269,7 +269,7 @@ let declSumP =
     (tok Sum *> identP
     <+> (between (opP Less) (sepBy1 typeVarP (tok Comma)) (opP Greater) <|> just [])
     <* opP Equal <* opt (tok Pipe))
-    <+> (sepBy1 (identP <+> opt typeP) (tok Pipe))
+    <+> (sepBy1 (upperIdentP <+> opt typeP) (tok Pipe))
     <* opt (tok In)
     |>> (fun ((a,b),c) -> DUnion (a,b,c))
 
