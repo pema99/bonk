@@ -317,8 +317,8 @@ let rec handleDecl silent decl = repl {
                 }
                 return! handleDecl silent decl 
                 }) names
-    | Some (DMember (blankets, pred, impls)) ->
-        let _ = blankets, pred
+    | Some (DMember (pred, impls)) ->
+        let _ = pred
         do! mapM_ (fun (s, e) -> repl {
             let! env = getTermEnv
             match lookup env s with

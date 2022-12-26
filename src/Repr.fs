@@ -94,8 +94,8 @@ and DeclKind<'t> =
     | DLet    of Pattern * ExprRaw<'t>
     | DGroup  of (string * ExprRaw<'t>) list
     | DUnion  of string * string list * (string * Type) list 
-    | DClass  of string * string list * (string * Type) list // name, reqs, (fname, ftype)
-    | DMember of Pred Set * Pred * (string * ExprRaw<'t>) list     // blankets, pred, impls
+    | DClass  of string * string list * (string * Type) list // name, (fname, ftype)
+    | DMember of Pred * (string * ExprRaw<'t>) list          // pred, impls
 
 and DeclRaw<'t, 'u> = {
     kind: DeclKind<'t>

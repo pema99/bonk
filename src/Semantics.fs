@@ -365,7 +365,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                 let classImpures = Set.add name classImpures
                 do! setImpures (impures, excepts, classImpures)
                 return decl
-            | DMember (_, (name, _), impls) ->
+            | DMember ((name, _), impls) ->
                 let isClassImpure = Set.contains name classImpures
                 let isBodyImpures = List.map (fun (impl, ex) ->
                     let isBodyImpure = not <| isExprPure impures ex

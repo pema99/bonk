@@ -445,7 +445,7 @@ let emitDecl (d: TypedDecl) : JsStmt list =
         | DClass (_, _, _) ->
             []
         
-        | DMember (_, _, impls) ->
+        | DMember (_, impls) ->
             List.map (fun (name, body) ->
                 let mangled = mangleOverload name (getExprType body)
                 JsDecl (mangled, emitExpr body)) impls

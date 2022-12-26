@@ -115,7 +115,7 @@ let mapTypedDecl fe fd (decl: TypedDecl) : TypedDecl =
     | DGroup (es)                     -> { decl with kind = fd <| DGroup (List.map (fun (a, b) -> a, mapTypedExpr fe b) es) }
     | DUnion (name, tvs, cases)       -> { decl with kind = fd <| DUnion (name, tvs, cases) }
     | DClass (blankets, pred, impls)  -> { decl with kind = fd <| DClass (blankets, pred, impls) }
-    | DMember (blankets, pred, impls) -> { decl with kind = fd <| DMember (blankets, pred, impls) }
+    | DMember (pred, impls) -> { decl with kind = fd <| DMember (pred, impls) }
 
 // Haskell traverse again, but for decls
 let traverseTypedDecl (exMapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) (declMapper: TypedDecl -> ReaderStateM<'a,'b,TypedDecl,'e>) (decl: TypedDecl) : ReaderStateM<'a,'b,TypedDecl,'e> = state {
@@ -135,8 +135,8 @@ let traverseTypedDecl (exMapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) 
         return { decl with kind = DUnion (name, tvs, cases) }
     | DClass (blankets, pred, impls) -> 
         return { decl with kind = DClass (blankets, pred, impls) }
-    | DMember (blankets, pred, impls) -> 
-        return { decl with kind = DMember (blankets, pred, impls) }
+    | DMember (pred, impls) -> 
+        return { decl with kind = DMember (pred, impls) }
     }
 
 // Chain them

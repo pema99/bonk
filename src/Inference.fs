@@ -563,7 +563,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         let vars = List.map (fun (mem, typ) -> mem, (["this"], (Set.singleton (name, TVar "this"), typ))) mems
         let cls = name, (reqs, [])
         return (vars, [], [cls], []), mkTypedDecl (DClass (name, reqs, mems)) inDecl.qualifiers inDecl.span
-    | DMember (blankets, pred, exprs) ->
+    | DMember (pred, exprs) ->
         // TODO: Semantic checking
         // o Check that the typeclass exists
         // - Check that the names of the member match exactly
@@ -607,7 +607,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         // let! ps = reduce (List.concat apreds @ List.concat epreds)
         // Make the implementation to extend the class environment with
         // Return the class implementation and the type-annotated expression for each function
-        return ([], [], [], [pred]), mkTypedDecl (DMember (blankets, pred, List.zip names aexprs)) inDecl.qualifiers inDecl.span
+        return ([], [], [], [pred]), mkTypedDecl (DMember (pred, List.zip names aexprs)) inDecl.qualifiers inDecl.span
     }
 
 // TODO: Deduplicate some of the code in Repl

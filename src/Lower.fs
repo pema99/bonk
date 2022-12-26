@@ -235,7 +235,7 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
         return { decl with kind = DUnion (name, tvs, cases) }
     | DClass (blankets, pred, impls) ->
         return { decl with kind = DClass (blankets, pred, impls) } // TODO: Checking?
-    | DMember (blankets, pred, impls) ->
+    | DMember (pred, impls) ->
         let addMember (s, e) = lower {
             let! tenv = getAbtractTermEnv
             match lookup tenv s with
@@ -248,7 +248,7 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
                 do! setAbtractTermEnv tenv
         }
         do! mapM_ addMember impls
-        return { decl with kind = DMember (blankets, pred, impls) }
+        return { decl with kind = DMember (pred, impls) }
     }
 
 let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
@@ -405,13 +405,13 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
         return { decl with kind = DUnion (name, tvs, cases) }
     | DClass (blankets, pred, impls) ->
         return { decl with kind = DClass (blankets, pred, impls) }
-    | DMember (blankets, pred, impls) ->
+    | DMember (pred, impls) ->
         let! impls = 
             mapM (fun (name, expr) -> lower {
                 let! expr = renameShadowedVarsInExpr expr
                 return name, expr
             }) impls
-        return { decl with kind = DMember (blankets, pred, impls) }
+        return { decl with kind = DMember (pred, impls) }
     }
 
 let renamedShadowedVarsInPrograms (decls: TypedProgram list) : TypedProgram list =
