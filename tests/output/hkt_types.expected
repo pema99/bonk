@@ -4,7 +4,7 @@ Nil : (unit -> List<'a>)
 None : (unit -> Option<'a>)
 Right : ('a -> Either<'b, 'a>)
 Some : ('a -> Option<'a>)
-a : 'a<int>
+a : List<int>
 absf : (float -> float)
 absi : (int -> int)
 acos : (float -> float)
@@ -12,7 +12,7 @@ append : (List<'a> -> (List<'a> -> List<'a>))
 asin : (float -> float)
 atan : (float -> float)
 atan2 : (float -> (float -> float))
-b : 'a<int>
+b : Option<int>
 bindLeft : (('a -> Either<'b, 'c>) -> (Either<'a, 'c> -> Either<'b, 'c>))
 bindOption : (('a -> Option<'b>) -> (Option<'a> -> Option<'b>))
 bindRight : (('a -> Either<'b, 'c>) -> (Either<'b, 'a> -> Either<'b, 'c>))

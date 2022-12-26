@@ -45,11 +45,11 @@ let applyType =
         match t with
         | TConst _ -> t
         | TVar a -> Map.tryFind a s |> Option.defaultValue t
-        //| TCtor (KVar name, args) ->
-        //    match Map.tryFind name s with
-        //    | Some (TCtor (kind, _)) -> TCtor (kind, List.map (applyTypeFP s) args)
-        //    | Some (TVar n) -> TCtor (KVar n, List.map (applyTypeFP s) args)
-        //    | _ -> t
+        | TCtor (KVar name, args) ->
+            match Map.tryFind name s with
+            | Some (TCtor (kind, _)) -> TCtor (kind, List.map (applyTypeFP s) args)
+            | Some (TVar n) -> TCtor (KVar n, List.map (applyTypeFP s) args)
+            | _ -> t
         | TCtor (kind, args) -> TCtor (kind, List.map (applyTypeFP s) args)
     fixedPoint applyTypeFP
 
@@ -156,10 +156,14 @@ and mgu (t1: Type) (t2: Type) : InferM<Substitution> = infer {
     | a, TVar b when not (occurs b a) -> return Map.ofList [(b, a)]
     | TCtor (kind1, lts), TCtor (kind2, rts) when kind1 = kind2 && List.length lts = List.length rts ->
         return! mguList lts rts
-    | TCtor (KVar _, lts), TCtor (_, rts)
-    | TCtor (_, lts), TCtor (KVar _, rts) when List.length lts = List.length rts ->
+    | TCtor (KVar name, lts), TCtor (_, rts) when List.length lts = List.length rts ->
         // TODO: Occurs check
-        return! mguList lts rts    
+        let! subs = mguList lts rts
+        return extend subs name t2 
+    | TCtor (_, rts), TCtor (KVar name, lts) when List.length lts = List.length rts ->
+        // TODO: Occurs check
+        let! subs = mguList lts rts
+        return extend subs name t1
     | _ ->
         return! typeError <| sprintf "Failed to unify types '%s' and '%s'." (prettyType t1) (prettyType t2)
     }
