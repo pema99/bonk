@@ -258,6 +258,17 @@ let filterPick = [f] [lst]
     head (filterMap f lst)
 in
 
+let splitAt = [n] [lst]
+    rec inner = [n] [lst] [acc]
+        if n <= 0 then (reverse acc, lst)
+        else
+            match lst with
+            | Nil() -> (reverse acc, Nil())
+            | Cons(h, t) -> inner (n - 1) t (Cons(h, acc))
+    in
+    inner n lst (Nil())
+in
+
 rec stringToList = [str]
     let len = lengthString str in
     if len = 0 then Nil ()

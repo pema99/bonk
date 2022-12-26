@@ -1,0 +1,32 @@
+rec mergeSort = [op] [lst]
+    rec merge = [op] [l] [r] [acc]
+        match (l, r) with
+        | (Nil(), Nil()) -> reverse acc
+        | (Nil(), Cons(h, t)) -> merge op l t (Cons(h, acc))
+        | (Cons(h, t), Nil()) -> merge op t r (Cons(h, acc))
+        | (Cons(lh, lt), Cons(rh, rt)) ->
+            if op lh rh then merge op lt r (Cons(lh, acc))
+            else merge op l rt (Cons(rh, acc))
+    in
+    match lst with
+    | Nil() -> Nil()
+    | Cons(h, Nil()) -> Cons(h, Nil())
+    | _ ->
+        let (l, r) = splitAt (length lst / 2) lst in
+        merge op (mergeSort op l) (mergeSort op r) (Nil())
+in
+
+impure let printList = [lst]
+    let showList = [lst]
+        rec inner = [lst] [acc]
+            match lst with
+            | Nil() -> acc
+            | Cons(h, Nil()) -> acc + toString h
+            | Cons(h, t) -> inner t (acc + toString h + "; ")
+        in
+        "{" + inner lst "" + "}"
+    in
+    printfn (showList lst)
+in
+
+let _ = printList (mergeSort (<) {31;41;59;66;26;41;58;65}) in
