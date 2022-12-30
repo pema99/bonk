@@ -1,0 +1,7 @@
+
+Error: Unexpected token 'In'.
+ --> tests/half_expression_2.bonk:11:1
+   | 
+11 | in
+   | ^^
+

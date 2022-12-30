@@ -1,0 +1,5 @@
+
+Error: Failed to unify types 'bool' and 'int'.
+ --> tests/typeclass_invalid_self.bonk:0:0
+
+

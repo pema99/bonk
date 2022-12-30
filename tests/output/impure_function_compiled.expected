@@ -1,0 +1,7 @@
+
+Error: Impure binding must be marked with an impure qualifier.
+ --> tests/impure_function.bonk:5:1
+  | 
+5 | let foo = [x]
+  | 
+

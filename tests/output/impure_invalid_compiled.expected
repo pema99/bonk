@@ -1,0 +1,7 @@
+
+Error: Qualifiers are invalid for this type of syntax element.
+ --> tests/impure_invalid.bonk:9:1
+  | 
+9 | impure sum Stack<'a> = Stack (List<'a>)
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+

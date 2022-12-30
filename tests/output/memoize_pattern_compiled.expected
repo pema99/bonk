@@ -1,0 +1,7 @@
+
+Error: Memoized functions cannot be defined with a pattern match.
+ --> tests/memoize_pattern.bonk:5:1
+  | 
+5 | memoize let (foo, bar) =
+  | 
+

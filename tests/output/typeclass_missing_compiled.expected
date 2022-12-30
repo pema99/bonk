@@ -1,0 +1,5 @@
+
+Error: Typeclass 'Add' does not exist.
+ --> tests/typeclass_missing.bonk:0:0
+
+
