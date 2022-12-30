@@ -48,18 +48,6 @@ let javaScriptRunner =
     |> Seq.find fileExists
 
 let testJS prelude file =
-    // Set up process
-    use cmd = new Process()
-    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
-        cmd.StartInfo.FileName <- "/bin/sh"
-    else
-        cmd.StartInfo.FileName <- "cmd.exe"
-    cmd.StartInfo.RedirectStandardInput <- true
-    cmd.StartInfo.RedirectStandardOutput <- true
-    cmd.StartInfo.RedirectStandardError <- true
-    cmd.StartInfo.CreateNoWindow <- true
-    cmd.StartInfo.UseShellExecute <- false
-    cmd.Start() |> ignore
     // Compile program
     File.Delete "out.js"
     let inputPath = "tests/" + file + ".bonk"
@@ -68,8 +56,22 @@ let testJS prelude file =
     Console.SetOut(sw)
     startCompile prelude "out.js" [inputPath]
     Console.SetOut(old)
+    // Set up process
+    use cmd = new Process()
+    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+        cmd.StartInfo.FileName <- "/bin/sh"
+    else
+        cmd.StartInfo.FileName <- "cmd.exe"
+        cmd.StartInfo.Arguments <- $"/C {javaScriptRunner} out.js"
+    cmd.StartInfo.RedirectStandardInput <- true
+    cmd.StartInfo.RedirectStandardOutput <- true
+    cmd.StartInfo.RedirectStandardError <- true
+    cmd.StartInfo.CreateNoWindow <- true
+    cmd.StartInfo.UseShellExecute <- false
     // Run program
-    cmd.StandardInput.WriteLine($"{javaScriptRunner} out.js")
+    cmd.Start() |> ignore
+    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+        cmd.StandardInput.WriteLine($"{javaScriptRunner} out.js")
     cmd.StandardInput.Flush()
     cmd.StandardInput.Close()
     cmd.WaitForExit()
