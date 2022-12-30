@@ -1,0 +1,7 @@
+
+Error: Typeclass 'Add' does not have an instance for 'List<int>'.
+ --> tests/typeclass_polymorphic_invalid.bonk:10:9
+   | 
+10 | let a = add { 1; 2; 3 } { 4; 5; 6 } in
+   |         ^^^^^^^^^^^^^^^^^^^
+

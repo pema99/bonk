@@ -1,0 +1,7 @@
+
+Error: Match is not exhaustive.
+ --> tests/incomplete_match.bonk:5:1
+  | 
+5 | match Some true with
+  | 
+

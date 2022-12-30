@@ -1,0 +1,7 @@
+
+Error: Impure functions cannot be memoized.
+ --> tests/memoize_impure.bonk:5:1
+  | 
+5 | memoize impure rec fib = [n]
+  | 
+

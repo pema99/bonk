@@ -1,0 +1,5 @@
+
+Error: Failed to unify types 'string' and 'int'.
+ --> tests/typeclass_invalid.bonk:0:0
+
+

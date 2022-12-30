@@ -1,0 +1,7 @@
+
+Error: Memoize is an invalid qualifier for this syntax element.
+ --> tests/memoize_invalid.bonk:11:1
+   | 
+11 | memoize class MyClass =
+   | 
+

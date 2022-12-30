@@ -1,0 +1,7 @@
+
+Error: Impure bindings are not allowed in typeclasses unless the typeclass has the impure qualifier.
+ --> tests/impure_typeclass.bonk:8:1
+  | 
+8 | member string of MyClass =
+  | 
+
