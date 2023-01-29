@@ -141,9 +141,31 @@ let prettyLiteral = function
     | LInt v -> string v
     | LBool v -> string v
     | LFloat v -> string v
-    | LString v -> sprintf "\"%s\"" v
+    | LString v -> sprintf "'%s'" v
     | LChar v -> sprintf "'%c'" v
     | LUnit -> "()"
+
+let rec prettyPattern = function
+    | PName x -> x
+    | PTuple xs -> List.map prettyPattern xs |> String.concat ", " |> sprintf "(%s)"
+    | PUnion (n, Some p) -> n + " (" + prettyPattern p + ")"
+    | PUnion (n, None) -> n
+    | PConstant n -> prettyLiteral n
+
+let rec prettyOp = function
+    | Plus -> "+"
+    | Minus -> "-"
+    | Star -> "*"
+    | Slash -> "/"
+    | Equal -> "="
+    | NotEq -> "!="
+    | Greater -> ">"
+    | GreaterEq -> ">="
+    | Less -> "<"
+    | LessEq -> "<="
+    | BoolAnd -> "&&"
+    | BoolOr -> "||"
+    | Modulo -> "%"
 
 // Errors
 let prettyError ({file = filename; span = span; msg = msg }) : string =
