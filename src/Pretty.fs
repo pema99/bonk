@@ -1,6 +1,7 @@
 module Pretty
 
 open Repr
+open Monad
 
 let printColor str =
     let rec cont str =
@@ -186,3 +187,123 @@ let prettyError ({file = filename; span = span; msg = msg }) : string =
             preamble + mid + spaces + caret
         else
             preamble + mid
+
+// Mermaid
+type MermaidM<'t> = StateM<int * string, 't, unit>
+let bumpIdx: MermaidM<unit> = fun (i, s) -> Ok (), (i+1, s)
+let getIdx: MermaidM<int> = fun (i, s) -> Ok i, (i, s)
+let getNext: MermaidM<int> = fmap ((+)1) getIdx
+let add (s: string): MermaidM<unit> = fun (i, s') -> Ok (), (i, s' + "\n" + s)
+
+type MermaidBuilder() =
+    inherit StateBuilder()
+    member inline this.Yield(x: string): MermaidM<string> =
+        fun (i, s) -> Ok x, (i, s + x + "\n")
+    member inline this.YieldFrom(x: MermaidM<string>): MermaidM<string> =
+        fun (i, s) -> x (i, s)
+    member inline this.For (lst: seq<'T>, f: 'T -> MermaidM<string>): MermaidM<string> =
+        fmap (String.concat "\n") <| mapM f (Seq.toList lst)
+
+let mermaid = MermaidBuilder()
+
+let inline linkNext (me: int) (m: MermaidM<string>): MermaidM<string> = mermaid {
+    let! next = getNext
+    yield sprintf "%i---%i" me next
+    yield! m
+}
+
+let rec prettyMermaidExpr (ast: ExprRaw<'t>): MermaidM<string> = mermaid {
+    do! bumpIdx
+    let! me = getIdx
+    match ast.kind with
+    | EVar v ->
+        yield sprintf "%i[\"%s\"]" me v
+    | EApp (f, x) ->
+        yield sprintf "%i[apply]" me
+        let! s = get
+        yield! linkNext me (prettyMermaidExpr f)
+        yield! linkNext me (prettyMermaidExpr x)
+    | ELam (v, b) ->
+        yield sprintf "%i[\"\\%s\"]" me (prettyPattern v)
+        yield! linkNext me (prettyMermaidExpr b)
+    | ELet (v, e, b) ->
+        yield sprintf "%i[\"let %s\"]" me (prettyPattern v)
+        yield! linkNext me (prettyMermaidExpr e)
+        yield! linkNext me (prettyMermaidExpr b)
+    | ELit (LString "") ->
+        yield sprintf "%i[\" \"]" me
+    | ELit l ->
+        yield sprintf "%i[\"%s\"]" me (prettyLiteral l)
+    | EIf (c, t, f) ->
+        yield sprintf "%i[if]" me
+        yield! linkNext me (prettyMermaidExpr c)
+        yield! linkNext me (prettyMermaidExpr t)
+        yield! linkNext me (prettyMermaidExpr f)
+    | EOp (l, op, r) ->
+        yield sprintf "%i[\"%s\"]" me (prettyOp op)
+        yield! linkNext me (prettyMermaidExpr l)
+        yield! linkNext me (prettyMermaidExpr r)
+    | EGroup ([v, e], b) ->
+        yield sprintf "%i[\"rec %s\"]" me v
+        yield! linkNext me (prettyMermaidExpr e)
+        yield! linkNext me (prettyMermaidExpr b)
+    | ETuple ls ->
+        yield sprintf "%i[tuple]" me
+        for a in ls do
+            yield! linkNext me (prettyMermaidExpr a)
+    | EMatch (e, cases) ->
+        yield sprintf "%i[match]" me
+        yield! linkNext me (prettyMermaidExpr e)
+        for (p, b) in cases do
+            yield! linkNext me (prettyMermaidExpr b)
+    | EGroup (a, b) ->
+        yield sprintf "%i[rec]" me
+        for (v, e) in a do
+            yield! linkNext me (prettyMermaidExpr e)
+        yield! linkNext me (prettyMermaidExpr b)
+    | ERaw (_, s) ->
+        yield sprintf "%i[\"%s\"]" me s
+}
+
+let prettyMermaidDecl ast : MermaidM<string> = mermaid {
+    do! bumpIdx
+    let! me = getIdx
+    match ast.kind with
+    | DExpr e ->
+        yield! prettyMermaidExpr e
+    | DLet (v, b) ->
+        yield sprintf "%i[\"let %s\"]" me (prettyPattern v)
+        yield! linkNext me (prettyMermaidExpr b)
+    | DGroup [v, b] ->
+        yield sprintf "%i[\"let %s\"]" me v
+        yield! linkNext me (prettyMermaidExpr b)
+    | _ ->
+        yield ""
+}
+
+let prettyMermaidDecls asts : MermaidM<string> =
+    let rec cont (asts: seq<DeclRaw<'t, 'u>>) : MermaidM<string> = mermaid {
+        for a in asts do
+            yield! prettyMermaidDecl a
+    }
+    mermaid {
+        yield "graph TD"
+        yield! cont asts
+    }
+
+let startMermaidPopup mermaid =
+    $"{{
+        \"code\": \"{System.Web.HttpUtility.JavaScriptStringEncode mermaid}\",
+        \"mermaid\": {{
+            \"theme\": \"dark\"
+        }},
+        \"autoSync\": \"false\",
+        \"updateDiagram\": \"true\"
+    }}"
+    |> System.Text.Encoding.UTF8.GetBytes
+    |> System.Convert.ToBase64String
+    |> fun s ->
+        let mutable proc = System.Diagnostics.ProcessStartInfo()
+        proc.FileName <- $"https://mermaid.live/view#base64:{s}"
+        proc.UseShellExecute <- true
+        System.Diagnostics.Process.Start proc
