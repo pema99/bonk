@@ -12,6 +12,7 @@ let printHelp() =
     printfn "   compile <files>     Compile bonk source files to JavaScript."
     printfn "   test                Run all tests."
     printfn "   bless               Bless current output of tests as correct."
+    printfn "   mermaid <file>      Generate a mermaid graph of from a bonk file."
     printfn "   help <command>      Print help about a command and exit."
     printfn ""
     printfn "Options:"
@@ -67,6 +68,12 @@ let main args =
             printCompileHelp()
         else
             startCompile prelude output files
+    else if args.[0] = "mermaid" then
+        Parse.parseProgram (System.IO.File.ReadAllText args.[1])
+        |> Result.mapError (fun _ -> ())
+        |> Result.map (fun p -> (snd >> snd) <| Pretty.prettyMermaidDecls p (0, ""))
+        |> Result.map (Pretty.startMermaidPopup)
+        |> ignore
     else
         printHelp()
     0

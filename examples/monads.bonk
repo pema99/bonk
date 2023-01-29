@@ -1,0 +1,44 @@
+// Monad class
+class Monad =
+    | bind : ('a -> this<'b>) -> this<'a> -> this<'b>
+    | pure : 'a -> this<'a>
+
+// Option monad
+member Option<'a> of Monad =
+    | bind : bindOption
+    | pure : Some
+
+let fallible = [x]
+    pure x
+    |> bind ([x] Some (x * 2))
+    |> bind ([x] Some (x + 2))
+in
+
+let _ =
+    fallible 3 
+    |> getOption 0 
+    |> [x] printfn ("Option: " + toString x + "\n") 
+in
+
+// Logger monad
+sum Logger<'t> = Logger 't * List<string>
+
+member Logger<'t> of Monad =
+    | bind : [f] [m]
+        let Logger (r0, w0) = m in
+        let Logger (r1, w1) = f r0 in
+        Logger (r1, append w0 w1)
+    | pure : [x]
+        Logger (x, {})
+
+let logs = [x]
+    pure x
+    |> bind ([x] Logger (x * 2, {"x * 2\n"}))
+    |> bind ([x] Logger (x + 2, {"x + 2\n"}))
+in
+
+
+let Logger (r, w) = logs 3 in
+let log = fold (+) "" w in
+let _ = printfn ("Result: " + toString r) in
+let _ = printfn ("Log:\n" + log) in

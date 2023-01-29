@@ -17,8 +17,8 @@
     <EmbeddedResource Include="lib/js/intrinsics.js" />
     <Compile Include="src/Repr.fs" />
     <Compile Include="src/Prelude.fs" />
-    <Compile Include="src/Pretty.fs" />
     <Compile Include="src/Monad.fs" />
+    <Compile Include="src/Pretty.fs" />
     <Compile Include="src/ReprUtil.fs" />
     <Compile Include="src/Lex.fs" />
     <Compile Include="src/Parse.fs" />

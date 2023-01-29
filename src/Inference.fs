@@ -516,14 +516,18 @@ let inferExprTop (e: UntypedExpr) : InferM<QualType * TypedExpr> =
     }
 
 // Gather variable bindings from a type and pattern
-let rec gatherVarBindings (pat: Pattern) (typ: QualType) : VarBinding list =
+let rec gatherVarBindings (pat: Pattern) (typ: QualType) (uenv: UserEnv) : VarBinding list =
     match pat, typ with
     | PName a, typ ->
         [a, (ftvQualType typ |> Set.toList, typ)]
     | PTuple pats, (ps, TCtor (KProduct, typs)) ->
         let rep = List.replicate (List.length typs) ps
         let packed = List.zip rep typs |> List.map (fun (ps, ty) -> Set.filter (isRelevant ty) ps, ty)
-        List.collect (fun (pat, va) -> gatherVarBindings pat va) (List.zip pats packed)
+        List.collect (fun (pat, va) -> gatherVarBindings pat va uenv) (List.zip pats packed)
+    | PUnion (variant, Some pat), (ps, TCtor (KSum klass, tys)) ->
+        instantiateVariant uenv klass variant tys
+        |> Option.map (fun typ -> gatherVarBindings pat (ps, typ) uenv)
+        |> Option.defaultValue []
     | _ -> [] // TODO
 
 // Infer a declaration. Returns an update to the environment.
@@ -534,7 +538,8 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
         return (["it", (ftvQualType qt |> Set.toList, qt)], [], [], []), mkTypedDecl (DExpr (te)) inDecl.qualifiers inDecl.span
     | DLet (name, e) ->
         let! qt, te = inferExprTop e
-        let bindings = gatherVarBindings name qt
+        let! uenv = getUserEnv
+        let bindings = gatherVarBindings name qt uenv
         return (bindings, [], [], []), mkTypedDecl (DLet (name, te)) inDecl.qualifiers inDecl.span
     | DGroup (ds) ->
         let names, _ = List.unzip ds
@@ -547,7 +552,8 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
                 match te.kind with
                 | EGroup (bs, _) -> List.filter (fst >> (=) name) bs
                 | _ -> [])
-        let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b) (List.zip names qts)
+        let! uenv = getUserEnv
+        let bindings = List.collect (fun (a, b) -> gatherVarBindings (PName a) b uenv) (List.zip names qts)
         return (bindings, [], [], []), mkTypedDecl (DGroup (tes)) inDecl.qualifiers inDecl.span
     | DUnion (name, typs, cases) ->
         // Sum types are special since they create types, first extend the user env with the new type
@@ -613,7 +619,7 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
             mapM (fun (fname, impl) -> infer {
                 match lookup env fname with
                 | Some (_, qt) -> return applyQualType (Map.ofList ["this", tv]) qt
-                | None -> return! typeError <| sprintf "Couldn't find typeclass member '%s'." name
+                | None -> return! typeError <| sprintf "Couldn't find typeclass member '%s' of '%s'." fname name
             }) exprs
         let epreds, etyps = List.unzip eqtypes
         // Infer the actual function types from their implementations

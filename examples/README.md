@@ -15,6 +15,7 @@ Contains files reproducing various bugs. A to-do list of sorts.
 - list_nodeps.bonk: Demonstrates lists but can run without the standard library.
 - memoize.bonk: Demonstrates automatic memoization.
 - mergesort.bonk: Mergesort implementation.
+- monads.bonk: Monad typeclass demo.
 - option.bonk: Shows how to use optional types.
 - rbtree.bonk: Implementation of red-black trees.
 - test.bonk: Shows very basic syntax.
