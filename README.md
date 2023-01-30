@@ -90,6 +90,7 @@ dotnet run bless
 # To do (maybe, stuff I'm looking at)
 - Rust-style traits/typeclasses for ad-hoc polymorphism
 - Type ascription
+- Higher kinded types
 
 # Fluff
 - Dependencies are cringe.
