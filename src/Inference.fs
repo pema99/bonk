@@ -13,7 +13,6 @@ open ReprUtil
 open Monad
 open Pretty
 open Prelude
-open Semantics
 
 // Substitutions
 type Substitution = Map<string, Type>
@@ -26,7 +25,9 @@ let composeAll lst = List.fold compose Map.empty lst
 // The span is the last known good position.
 type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv * Span, Substitution * int, 't, ErrorInfo>
 let infer = state
-let fresh : InferM<Type> = fun ((te, ue, ce, err), (s, c)) -> Ok (TVar (sprintf "_t%A" c)), ((te, ue, ce, err), (s, c + 1))
+let fresh : InferM<Type> =
+    modifyR (fun (s, c) -> s, c + 1)
+    >>. (TVar << sprintf "_t%i" << snd <!> getR)
 
 // Substitution application up to fixed point
 let rec fixedPoint f s t =
@@ -85,14 +86,14 @@ let applyEnv =
     fixedPoint applyEnvFP
 
 // Environment helpers
-let getSubstitution = fun (r, (c, d)) -> Ok c, (r, (c, d))
-let setSubstitution x = fun (r, (_, d)) -> Ok (), (r, (x, d))
-let getCurrSpan = fun ((a, b, c, d), s) -> Ok d, ((a, b, c, d), s)
+let getSubstitution = fst <!> getR
+let setSubstitution x = modifyR (fun (_, a) -> x, a)
+let getCurrSpan = (fun (_, _, _, a) -> a) <!> ask
 let withSpan x m = local (fun (te, ue, ce, _) -> te, ue, ce, x) m
 let withSpanOf (x: UntypedExpr) m = local (fun (te, ue, ce, _) -> te, ue, ce, x.span) m
-let getTypeEnvRaw = fun ((a, b, c, d), s) -> Ok a, ((a, b, c, d), s)
-let getUserEnv = fun ((a, b, c, d), s) -> Ok b, ((a, b, c, d), s)
-let getClassEnv = fun ((a, b, c, d), s) -> Ok c, ((a, b, c, d), s)
+let getTypeEnvRaw = (fun (a, _, _, _) -> a) <!> ask
+let getUserEnv = (fun (_, a, _, _) -> a) <!> ask
+let getClassEnv = (fun (_, _, a, _) -> a) <!> ask
 let inTypeEnv x m = local (fun (_, ue, ce, sp) -> x, ue, ce, sp) m
 let inUserEnv x m = local (fun (te, _, ce, sp) -> te, x, ce, sp) m
 let inClassEnv x m = local (fun (te, ue, _, sp) -> te, ue, x, sp) m
@@ -227,7 +228,7 @@ let instanceOf ((_, instances): Class) (ty: Type) : InferM<bool> = infer {
     | TCtor _ ->
         // Technically this should apply to type vars as well, but my logic is too brittle for that.
         let! state = get
-        let overloads = List.map (fun impl -> fst <| mgu ty impl state) instances
+        let overloads = List.map (fun impl -> fst <| runStateM (mgu ty impl) state) instances
         let anyValid = List.exists (function Ok _ -> true | _ -> false) overloads
         return anyValid
     | _ ->
@@ -662,7 +663,7 @@ let rec inferDecl (d: UntypedDecl) : InferM<TypedDecl> = infer {
 let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list), FileErrorInfo> =
     let names, ds = List.unzip decls
     let res, ((_,userEnv,_,_),_) =
-        mapM (withFileErrorInfoM (mapM inferDecl)) decls ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+        runStateM (mapM (withFileErrorInfoM (mapM inferDecl)) decls) ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
     match res with
     | Ok typedDecls -> Ok (userEnv, typedDecls)
     | Error err -> Error err

@@ -1,6 +1,5 @@
 module CodeGen
 
-open System.IO
 open Repr
 open ReprUtil
 open Lower

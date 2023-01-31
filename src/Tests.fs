@@ -1,10 +1,7 @@
 module Tests
 
-open Repr
 open ReprUtil
 open Prelude
-open Parse
-open Repr
 open Repl
 open Monad
 open Pretty

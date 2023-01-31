@@ -3,6 +3,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net7.0</TargetFramework>
     <WarnOn>3390;$(WarnOn)</WarnOn>
+    <Tailcalls>True</Tailcalls>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="plonk/src/Util.fs" />

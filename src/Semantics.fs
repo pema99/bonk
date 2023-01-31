@@ -5,7 +5,6 @@ module Semantics
 open Repr
 open ReprUtil
 open Prelude
-open Pretty
 open Monad
 
 // The code below performs exhaustiveness checking for pattern matching.
@@ -276,10 +275,6 @@ type ColorM<'t> = StateM<(string Set * string Set * string Set),'t,ErrorInfo>
 let color = state
 let runColorM m = runStateM m (funImpures, funImpureExceptions, Set.empty) |> fst
 
-// Helpers to set state
-let getImpures = get
-let setImpures impures = fun _ -> (Ok (), (impures))
-
 // Remove bindings which are about to be shadowed, and are pure.
 let removeBound (pat: Pattern) (impures: string Set) : string Set =
     (Set.difference impures (freeInPattern pat)) 
@@ -329,7 +324,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
         (fun decl -> check {
             let hasImpureQual = Set.contains QImpure decl.qualifiers
             let hasMemoizeQual = Set.contains QMemoize decl.qualifiers 
-            let! sets = getImpures
+            let! sets = get
             let (impures, excepts, classImpures) = sets
             match decl.kind with
             | _ when hasImpureQual && hasMemoizeQual ->
@@ -349,7 +344,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                 let isImpure = (not isInherentlyPure) && (hasImpureQual || isBodyImpure)
                 if isImpure then
                     let impures = Set.union impures (freeInPattern p)
-                    do! setImpures (impures, excepts, classImpures)
+                    do! set (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
                     return! failure { span = decl.span; msg = "Impure binding must be marked with an impure qualifier." }
                 else
@@ -361,7 +356,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                 let isImpure = (not isInherentlyPure) && (hasImpureQual || isBodyImpure)
                 if isImpure then
                     let impures = Set.union impures (List.map fst bs |> Set.ofList)
-                    do! setImpures (impures, excepts, classImpures)
+                    do! set (impures, excepts, classImpures)
                 if isImpure && not hasImpureQual then
                     return! failure { span = decl.span; msg =  "Impure binding must be marked with an impure qualifier." }
                 else
@@ -369,7 +364,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
             | DClass (name, _, _) when hasImpureQual ->
                 // TODO: Make this more granular
                 let classImpures = Set.add name classImpures
-                do! setImpures (impures, excepts, classImpures)
+                do! set (impures, excepts, classImpures)
                 return decl
             | DMember ((name, _), impls) ->
                 let isClassImpure = Set.contains name classImpures
@@ -382,7 +377,7 @@ let checkPurity (decls: TypedDecl list) : ColorM<TypedDecl list> =
                 else
                     let implImpures = List.filter snd isBodyImpures |> List.map fst
                     let impures = Set.union impures (Set.ofList implImpures)
-                    do! setImpures (impures, excepts, classImpures)
+                    do! set (impures, excepts, classImpures)
                     return decl
             | _ ->
                 if Set.isEmpty decl.qualifiers then

@@ -1,6 +1,5 @@
 module Lex
 
-open Util
 open Combinator
 open Common
 open System

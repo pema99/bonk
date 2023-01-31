@@ -71,7 +71,7 @@ let main args =
     else if args.[0] = "mermaid" then
         Parse.parseProgram (System.IO.File.ReadAllText args.[1])
         |> Result.mapError (fun _ -> ())
-        |> Result.map (fun p -> (snd >> snd) <| Pretty.prettyMermaidDecls p (0, ""))
+        |> Result.map (fun p -> (snd >> snd) <| Monad.runStateM (Pretty.prettyMermaidDecls p) (0, ""))
         |> Result.map (Pretty.startMermaidPopup)
         |> ignore
     else

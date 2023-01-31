@@ -31,9 +31,9 @@ type ResolvedOverloads = Map<int, string>
 
 type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't, ErrorInfo>
 let lower = state
-let getAbtractTermEnv = fun (ate, s) -> Ok ate, (ate, s)
-let setAbtractTermEnv env = fun (_, s) -> Ok (), (env, s)
-let freshId = fun (ate, (overloads, id)) -> Ok id, (ate, (overloads, id + 1))
+let getAbtractTermEnv = ask
+let setAbtractTermEnv env = modify (fun (_, s) -> env, s)
+let freshId = modifyR (fun (overloads, id) -> overloads, id + 1) >>. (snd <!> getR)
 
 let zEncode: string -> string = 
     String.collect (function
@@ -251,7 +251,7 @@ let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
 
 let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
     let names, ds = List.unzip decls
-    let res, (_, (overloads, _)) = mapM (mapM gatherOverloadsDecl) ds (Map.empty, (Map.empty, 0))
+    let res, (_, (overloads, _)) = runStateM (mapM (mapM gatherOverloadsDecl) ds) (Map.empty, (Map.empty, 0))
     match res with
     | Ok mdecls ->
         mdecls
@@ -270,8 +270,8 @@ let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
 type ShadowEnv = Map<string, int>
 type ShadowM<'t> = ReaderM<ShadowEnv, 't, ErrorInfo>
 let shadow = state
-let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
-let setShadowEnv env = fun (_, s) -> Ok (), (env, s)
+let getShadowEnv = ask
+let setShadowEnv env = modify (fun (_, s) -> env, s)
 let renameShadowed name = shadow {
     let! senv = getShadowEnv
     match lookup senv name with
@@ -419,7 +419,7 @@ let renamedShadowedVarsInDecl (decl: TypedDecl) : ShadowM<TypedDecl> = shadow {
 
 let renamedShadowedVarsInPrograms (decls: TypedProgram list) : TypedProgram list =
     let names, ds = List.unzip decls
-    let res, _ = mapM (mapM renamedShadowedVarsInDecl) ds (Map.empty, ())
+    let res = runReaderM (mapM (mapM renamedShadowedVarsInDecl) ds) Map.empty
     match res with
     | Ok mdecls -> List.zip names mdecls
     | _ -> decls

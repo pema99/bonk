@@ -3,14 +3,12 @@ module Repl
 open Repr
 open ReprUtil
 open Inference
-open Monad
 open Pretty
-open Combinator
 open Parse
 open Prelude
-open CodeGen
 open Semantics
 open Lower
+open Monad
 
 // Evaluation
 let rec buildApp (f: TypedExpr) (args: TypedExpr list): TypedExpr =
@@ -182,9 +180,9 @@ type InferState = TypeEnv * UserEnv * ClassEnv * int
 type CheckState = (Set<string> * Set<string> * Set<string>)
 type ReplM<'t> = StateM<InferState * CheckState * TermEnv, 't, ErrorInfo>
 let repl = state
-let getTermEnv : ReplM<TermEnv> = fmap (fun (_,_,a) -> a) get
-let setTermEnv x : ReplM<unit> = fun (s, b, _) -> (Ok (), (s, b, x))
-let setFreshCount x : ReplM<unit> = fun ((a,b,c,_),d,e) -> (Ok (), ((a,b,c,x),d,e))
+let getTermEnv : ReplM<TermEnv> = (fun (_,_,a) -> a) <!> get
+let setTermEnv x : ReplM<unit> = modify (fun (s, b, _) -> (s, b, x))
+let setFreshCount x : ReplM<unit> = modify (fun ((a,b,c,_),d,e) -> ((a,b,c,x),d,e))
 
 let applyEnvUpdate (up: EnvUpdate) (check: CheckState) : ReplM<unit> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), _, termEnv) = get
@@ -198,7 +196,7 @@ let applyEnvUpdate (up: EnvUpdate) (check: CheckState) : ReplM<unit> = repl {
 
 // Returns state of checking, just for the REPL
 let runColorMRepl (checkState: CheckState) (m: ColorM<_>) =
-    let (res, state) = m checkState
+    let (res, state) = runStateM m checkState
     res |> Result.map (fun a -> a, state)
 
 let checkProgramRepl (env: UserEnv, checkState: CheckState, decls: TypedDecl list) =
@@ -215,7 +213,7 @@ let replError (from: Loc) (err: string) =
 
 let runInfer (decl: UntypedDecl) : ReplM<EnvUpdate * TypedDecl option> = repl {
     let! ((typeEnv, userEnv, classEnv, freshCount), checkState, _) = get
-    let res, ((_,uenv,_,_), (_, i)) = inferDeclImmediate decl ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
+    let res, ((_,uenv,_,_), (_, i)) = runStateM (inferDeclImmediate decl) ((typeEnv, userEnv, classEnv, dummySpan), (Map.empty, freshCount))
     do! setFreshCount i
     match res with
     | Ok (update, tdecl) ->
@@ -374,12 +372,12 @@ let runRepl stdlib : ReplM<unit> = repl {
 
 let runReplAction prelude (action: ReplM<'t>) =
     let funSchemes = if prelude then funSchemes else Map.empty
-    action (
+    runStateM action (
         (funSchemes, Map.empty, classes, 0),                // Infer state
-        (funImpures, funImpureExceptions, Set.empty),  // Check state
+        (funImpures, funImpureExceptions, Set.empty),       // Check state
         Map.map (fun k _ -> VIntrinsic (k, [])) funSchemes) // Term state
     |> fst
-
+    
 let startRepl builtins stdlib =
     runReplAction builtins (runRepl stdlib)
     |> ignore

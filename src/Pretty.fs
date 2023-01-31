@@ -190,17 +190,17 @@ let prettyError ({file = filename; span = span; msg = msg }) : string =
 
 // Mermaid
 type MermaidM<'t> = StateM<int * string, 't, unit>
-let bumpIdx: MermaidM<unit> = fun (i, s) -> Ok (), (i+1, s)
-let getIdx: MermaidM<int> = fun (i, s) -> Ok i, (i, s)
-let getNext: MermaidM<int> = fmap ((+)1) getIdx
-let add (s: string): MermaidM<unit> = fun (i, s') -> Ok (), (i, s' + "\n" + s)
+let bumpIdx: MermaidM<unit> = modify (fun (i, s) -> i+1, s)
+let getIdx: MermaidM<int> = fst <!> get
+let getNext: MermaidM<int> = ((+)1) <!> getIdx
+let add (s: string): MermaidM<unit> = modify (fun (i, s') -> i, s' + "\n" + s)
 
 type MermaidBuilder() =
     inherit StateBuilder()
     member inline this.Yield(x: string): MermaidM<string> =
-        fun (i, s) -> Ok x, (i, s + x + "\n")
+        State (fun (i, s) -> Ok x, (i, s + x + "\n"))
     member inline this.YieldFrom(x: MermaidM<string>): MermaidM<string> =
-        fun (i, s) -> x (i, s)
+        State (fun (i, s) -> unstate x (i, s))
     member inline this.For (lst: seq<'T>, f: 'T -> MermaidM<string>): MermaidM<string> =
         fmap (String.concat "\n") <| mapM f (Seq.toList lst)
 
