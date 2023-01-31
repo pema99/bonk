@@ -231,10 +231,10 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
         ret
 
 // Essentially identity monad used for stateless error checking
-type CheckM<'t> = ReaderStateM<unit,unit,'t,ErrorInfo>
+type CheckM<'t> = ResultM<'t,ErrorInfo>
 let check = state
 let runCheckM m =
-    m ((), ()) |> fst
+    m () |> fst
 
 let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : CheckM<unit> = check {
     let patMatrix = List.map (deconstructPattern env matcher >> List.singleton) pats
@@ -273,14 +273,14 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : CheckM<TypedDecl list>
 
 // Function coloring analysis
 // Fun impures, exceptions, class impures
-type ColorM<'t> = ReaderStateM<unit,string Set * string Set * string Set,'t,ErrorInfo>
+type ColorM<'t> = StateM<(string Set * string Set * string Set),'t,ErrorInfo>
 let color = state
 let runColorM m =
-    m ((), (funImpures, funImpureExceptions, Set.empty)) |> fst
+    m (funImpures, funImpureExceptions, Set.empty) |> fst
 
 // Helpers to set state
-let getImpures = fmap snd get
-let setImpures impures = fun ((), _) -> (Ok (), ((), impures))
+let getImpures = get
+let setImpures impures = fun _ -> (Ok (), (impures))
 
 // Remove bindings which are about to be shadowed, and are pure.
 let removeBound (pat: Pattern) (impures: string Set) : string Set =

@@ -37,7 +37,7 @@ let remove env x = Map.remove x env
 let extendEnv env up = List.fold (fun env (name, v) -> extend env name v) env up
 
 // Like Haskell traverse
-let rec traverseTypedExpr (mapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr,'e> = state {
+let rec traverseTypedExpr (mapper: TypedExpr -> StateM<'a,TypedExpr,'e>) (ex: TypedExpr) : StateM<'a,TypedExpr,'e> = state {
     let! mapped = mapper ex
     match mapped.kind with
     | ELit (v) ->
@@ -90,7 +90,7 @@ let getExprType (ex: TypedExpr) : QualType =
     ex.data
 
 // Monadic map over a typed expression
-let rec mapTypeInTypedExpr (s: QualType -> ReaderStateM<'a,'b,QualType,'e>) (ex: TypedExpr) : ReaderStateM<'a,'b,TypedExpr,'e> =
+let rec mapTypeInTypedExpr (s: QualType -> StateM<'a,QualType,'e>) (ex: TypedExpr) : StateM<'a,TypedExpr,'e> =
     traverseTypedExpr (fun ex -> state {
         let pt = getExprType ex
         let! npt = s pt
@@ -123,7 +123,7 @@ let mapTypedDecl fe fd (decl: TypedDecl) : TypedDecl =
     | DMember (pred, impls) -> { decl with kind = fd <| DMember (pred, impls) }
 
 // Haskell traverse again, but for decls
-let traverseTypedDecl (exMapper: TypedExpr -> ReaderStateM<'a,'b,TypedExpr,'e>) (declMapper: TypedDecl -> ReaderStateM<'a,'b,TypedDecl,'e>) (decl: TypedDecl) : ReaderStateM<'a,'b,TypedDecl,'e> = state {
+let traverseTypedDecl (exMapper: TypedExpr -> StateM<'a,TypedExpr,'e>) (declMapper: TypedDecl -> StateM<'a,TypedDecl,'e>) (decl: TypedDecl) : StateM<'a,TypedDecl,'e> = state {
     let! decl = declMapper decl
     match decl.kind with
     | DExpr expr -> 

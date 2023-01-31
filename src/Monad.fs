@@ -3,6 +3,9 @@ module Monad
 open Repr
 
 type StateM<'s, 't, 'e> = 's -> Result<'t, 'e> * 's
+type ResultM<'t, 'e> = StateM<unit, 't, 'e>
+type ReaderStateM<'r, 's, 't, 'e> = StateM<'r * 's, 't, 'e>
+type ReaderM<'r, 't, 'e> = ReaderStateM<'r, unit, 't, 'e>
 
 type StateBuilder() =
     member inline this.Return (v: 't) : StateM<'s, 't, 'e> =
@@ -60,7 +63,6 @@ let inline ( >=> ) ([<InlineIfLambda>] l: 'a -> StateM<'s, 'b, 'e>) ([<InlineIfL
     return rv
 }
 
-type ReaderStateM<'r, 's, 't, 'e> = StateM<'r * 's, 't, 'e>
 let ask : ReaderStateM<'r, 's, 'r, 'e> =
     fun s ->
         let a, n = get s

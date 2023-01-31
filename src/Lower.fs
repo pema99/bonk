@@ -268,7 +268,7 @@ let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
     | _ -> decls
 
 type ShadowEnv = Map<string, int>
-type ShadowM<'t> = ReaderStateM<ShadowEnv, unit, 't, ErrorInfo>
+type ShadowM<'t> = ReaderM<ShadowEnv, 't, ErrorInfo>
 let shadow = state
 let getShadowEnv = fun (ate, s) -> Ok ate, (ate, s)
 let setShadowEnv env = fun (_, s) -> Ok (), (env, s)
