@@ -171,3 +171,31 @@ let withFileErrorInfoM action program =
         (fun (err: ErrorInfo) -> { file = fst program; msg = err.msg; span = err.span })
     |> fmap
         (fun decls -> file, decls)
+
+let readOverDecls'
+    (m: 't -> ReaderStateM<'r, 's, 'r * 'u, 'e>)
+    (xs: 't list)
+    : ReaderStateM<'r, 's, 'r * 'u list, 'e> = state {
+    let! env = ask
+    let! nenv, res =
+        foldM (fun (env, acc) x -> state {
+            let! (nenv, x) = local (fun _ -> env) (m x)
+            return nenv, x :: acc
+        }) (env, []) xs
+    return nenv, List.rev res
+}
+let readOverDecls a b = snd <!> readOverDecls' a b
+
+let readOverPrograms'
+    (m: 't -> ReaderStateM<'r,'s, ('r * 'u), ErrorInfo>)
+    (xs: list<string * list<'t>>)
+    : ReaderStateM<'r, 's, 'r * list<string * list<'u>>, FileErrorInfo> = state {
+    let! env = ask
+    let! nenv, res =
+        foldM (fun (env, acc) x -> state {
+            let! name, (nenv, res) = local (fun _ -> env) (withFileErrorInfoM (readOverDecls' m) x)
+            return nenv, (name, res) :: acc
+        }) (env, []) xs
+    return nenv, List.rev res
+}
+let readOverPrograms a b = snd <!> readOverPrograms' a b

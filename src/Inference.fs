@@ -23,7 +23,9 @@ let composeAll lst = List.fold compose Map.empty lst
 // The reader environment contains the known typed variables. 
 // The state is the current set of substitutions as well as an integer for generatin fresh names.
 // The span is the last known good position.
-type InferM<'t> = ReaderStateM<TypeEnv * UserEnv * ClassEnv * Span, Substitution * int, 't, ErrorInfo>
+type InferEnv = TypeEnv * UserEnv * ClassEnv * Span
+type InferState = Substitution * int
+type InferM<'t> = ReaderStateM<InferEnv, InferState, 't, ErrorInfo>
 let infer = state
 let fresh : InferM<Type> =
     modifyR (fun (s, c) -> s, c + 1)
@@ -529,7 +531,7 @@ let rec gatherVarBindings (pat: Pattern) (typ: QualType) (uenv: UserEnv) : VarBi
         instantiateVariant uenv klass variant tys
         |> Option.map (fun typ -> gatherVarBindings pat (ps, typ) uenv)
         |> Option.defaultValue []
-    | _ -> [] // TODO
+    | _ -> []
 
 // Infer a declaration. Returns an update to the environment.
 let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl> = infer {
@@ -644,26 +646,25 @@ let rec inferDeclImmediate (inDecl: UntypedDecl) : InferM<EnvUpdate * TypedDecl>
 
 // TODO: Deduplicate some of the code in Repl
 // Infer a decl, update the environment underways
-let rec inferDecl (d: UntypedDecl) : InferM<TypedDecl> = infer {
-    let applyEnvUpdate (up: EnvUpdate) : InferM<unit> = infer {
+let rec inferDecl (d: UntypedDecl) : InferM<InferEnv * TypedDecl> = infer {
+    let applyEnvUpdate (up: EnvUpdate) : InferM<InferEnv> = infer {
         let! (typeEnv, userEnv, classEnv, span), other = get
         let (typeUp, userUp, classUp, implUp) = up
         let typeEnv = extendEnv typeEnv typeUp
         let userEnv = extendEnv userEnv userUp
         let classEnv = extendEnv classEnv classUp
         let classEnv = List.fold addClassInstance classEnv implUp
-        do! set ((typeEnv, userEnv, classEnv, span), other)
+        return (typeEnv, userEnv, classEnv, span)
         }
     let! envUpdate, typedDecl = inferDeclImmediate d
-    do! applyEnvUpdate envUpdate
-    return typedDecl
+    let! nenv = applyEnvUpdate envUpdate
+    return nenv, typedDecl
     }
 
 // Infer entire program and return the useful parts
 let inferPrograms (decls: UntypedProgram list) : Result<(UserEnv * TypedProgram list), FileErrorInfo> =
-    let names, ds = List.unzip decls
-    let res, ((_,userEnv,_,_),_) =
-        runStateM (mapM (withFileErrorInfoM (mapM inferDecl)) decls) ((funSchemes, Map.empty, classes, (dummySpan)), (Map.empty, 0))
+    let res, _ =
+        runReaderStateM (readOverPrograms' inferDecl decls) (funSchemes, Map.empty, classes, (dummySpan)) (Map.empty, 0)
     match res with
-    | Ok typedDecls -> Ok (userEnv, typedDecls)
+    | Ok ((_, userEnv, _, _), typedDecls) -> Ok (userEnv, typedDecls)
     | Error err -> Error err

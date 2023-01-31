@@ -31,8 +31,6 @@ type ResolvedOverloads = Map<int, string>
 
 type LowerM<'t> = ReaderStateM<AbstractTermEnv, ResolvedOverloads * int, 't, ErrorInfo>
 let lower = state
-let getAbtractTermEnv = ask
-let setAbtractTermEnv env = modify (fun (_, s) -> env, s)
 let freshId = modifyR (fun (overloads, id) -> overloads, id + 1) >>. (snd <!> getR)
 
 let zEncode: string -> string = 
@@ -140,7 +138,7 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
         let! e2, v2 = gatherOverloadsExpr r
         return { inExpr with kind = EOp (e1, op, e2) }, combinePartials v1 v2
     | EVar (a) ->
-        let! tenv = getAbtractTermEnv
+        let! tenv = ask
         match lookup tenv a with
         | Some (AVPartialTemplate (name, arity, overloads)) ->
             let! id = freshId
@@ -210,61 +208,59 @@ and gatherOverloadsExpr (inExpr: TypedExpr) : LowerM<TypedExpr * AbstractValue> 
         return inExpr, AVType inExpr.data
     }
 
-let gatherOverloadsDecl (decl: TypedDecl) : LowerM<TypedDecl> = lower {
+let gatherOverloadsDecl (decl: TypedDecl) : LowerM<AbstractTermEnv * TypedDecl> = lower {
+    let! tenv = ask
     match decl.kind with
     | DExpr expr -> 
         let! expr, _ = gatherOverloadsExpr expr
-        return { decl with kind = DExpr expr }
+        return tenv, { decl with kind = DExpr expr }
     | DLet (pat, expr) ->
         let! e, v = gatherOverloadsExpr expr
-        let! tenv = getAbtractTermEnv
+        let! tenv = ask
         let bindings = matchPattern tenv pat v
-        let tenv = extendEnv tenv bindings
-        do! setAbtractTermEnv tenv
-        return { decl with kind = DLet (pat, e) }
+        return extendEnv tenv bindings, { decl with kind = DLet (pat, e) }
     | DGroup (es) -> // TODO Bindings
         let! exprs =
             mapM (fun (a, b) -> lower {
                 let! b, _ = gatherOverloadsExpr b 
                 return a, b
             }) es
-        return { decl with kind = DGroup exprs }
+        return tenv, { decl with kind = DGroup exprs }
     | DUnion (name, tvs, cases) ->
-        return { decl with kind = DUnion (name, tvs, cases) }
+        return tenv, { decl with kind = DUnion (name, tvs, cases) }
     | DClass (blankets, pred, impls) ->
-        return { decl with kind = DClass (blankets, pred, impls) } // TODO: Checking?
+        return tenv, { decl with kind = DClass (blankets, pred, impls) } // TODO: Checking?
     | DMember (pred, impls) ->
         let addMember (s, e) = lower {
-            let! tenv = getAbtractTermEnv
+            let! tenv = ask
             match lookup tenv s with
             | Some (AVPartialTemplate (name, arity, overloads)) ->
-                let tenv = extend tenv s (AVPartialTemplate (name, arity, e :: overloads))
-                do! setAbtractTermEnv tenv
+                return fun tenv -> extend tenv s (AVPartialTemplate (name, arity, e :: overloads))
             | _ ->
                 let ty = snd (getExprType e)
-                let tenv = extend tenv s (AVPartialTemplate (s, calcArityType ty, [e]))
-                do! setAbtractTermEnv tenv
+                return fun tenv -> extend tenv s (AVPartialTemplate (s, calcArityType ty, [e]))
         }
-        do! mapM_ addMember impls
-        return { decl with kind = DMember (pred, impls) }
+        let! mappers = mapM addMember impls
+        let mapper = List.fold (>>) id mappers
+        return mapper tenv, { decl with kind = DMember (pred, impls) }
     }
 
 let monomorphizePrograms (decls: TypedProgram list) : TypedProgram list =
-    let names, ds = List.unzip decls
-    let res, (_, (overloads, _)) = runStateM (mapM (mapM gatherOverloadsDecl) ds) (Map.empty, (Map.empty, 0))
+    let res, (overloads, _) = runReaderStateM (readOverPrograms gatherOverloadsDecl decls) Map.empty (Map.empty, 0)
     match res with
     | Ok mdecls ->
         mdecls
-        |> List.map (List.map (mapTypedDecl (fun ex ->
-            match ex with
-            | EVar (name) when name.StartsWith(monomorphPrefix) -> // TODO: Unsafe
-                let id = int <| name.Substring(monomorphPrefix.Length)
-                match lookup overloads id with
-                | Some mangled -> EVar (mangled)
-                | _ -> ex // TODO: This is the case where a monomorphable type is ambiguous, should report it
-            | _ -> ex
-            ) id))
-        |> List.zip names
+        |> List.map (fun (name, lst) -> 
+            name,
+            lst |> List.map (mapTypedDecl (fun ex ->
+                match ex with
+                | EVar (name) when name.StartsWith(monomorphPrefix) -> // TODO: Unsafe
+                    let id = int <| name.Substring(monomorphPrefix.Length)
+                    match lookup overloads id with
+                    | Some mangled -> EVar (mangled)
+                    | _ -> ex // TODO: This is the case where a monomorphable type is ambiguous, should report it
+                | _ -> ex
+                ) id))
     | _ -> decls
 
 type ShadowEnv = Map<string, int>
