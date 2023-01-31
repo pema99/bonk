@@ -2,11 +2,27 @@ module Monad
 
 open Repr
 
+// Type shortcuts
 type StateM<'s, 't, 'e> = 's -> Result<'t, 'e> * 's
 type ResultM<'t, 'e> = StateM<unit, 't, 'e>
 type ReaderStateM<'r, 's, 't, 'e> = StateM<'r * 's, 't, 'e>
 type ReaderM<'r, 't, 'e> = ReaderStateM<'r, unit, 't, 'e>
 
+let runStateM (monad: StateM<'s, 't, 'e>) (state: 's) : Result<'t, 'e> * 's =
+    monad state
+
+let runResultM (monad: ResultM<'t, 'e>) : Result<'t, 'e> =
+    monad () |> fst
+
+let runReaderStateM (monad: ReaderStateM<'r, 's, 't, 'e>) (env: 'r) (state: 's) : Result<'t, 'e> * 's =
+    let res, state = runStateM monad (env, state)
+    res, snd state
+
+let runReaderM (monad: ReaderM<'r, 't, 'e>) (env: 'r) : Result<'t, 'e> =
+    let res, _ = runStateM monad (env, ())
+    res
+
+// Main CE builder
 type StateBuilder() =
     member inline this.Return (v: 't) : StateM<'s, 't, 'e> =
         fun s -> Ok v, s
@@ -36,7 +52,8 @@ type StateBuilder() =
                 | Ok _ -> this.While(f, m) n
                 | Error err -> (Error err, n)
             else (Ok (), s)
-        
+
+// General utilities
 let state = StateBuilder()
 let just = state.Return
 let inline failure err = fun s -> Error err, s
@@ -62,24 +79,6 @@ let inline ( >=> ) ([<InlineIfLambda>] l: 'a -> StateM<'s, 'b, 'e>) ([<InlineIfL
     let! rv = r lv
     return rv
 }
-
-let ask : ReaderStateM<'r, 's, 'r, 'e> =
-    fun s ->
-        let a, n = get s
-        match a with
-        | Ok v -> Ok (fst v), n
-        | Error err -> Error err, n
-let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderStateM<'r, 's, 't, 'e>) : ReaderStateM<'r, 's, 't, 'e> =
-    fun s ->
-        let res, o = get s
-        match res with
-        | Ok (r, s) ->
-            let a, (_, n) = m (f r, s)
-            match a with
-            | Ok v -> Ok v, (r, n)
-            | Error err -> Error err, (r, n)
-        | Error err -> Error err, o
-
 
 let rec inline mapM ([<InlineIfLambda>] f: 'a -> StateM<'s, 'b, 'e>) (t: 'a list) : StateM<'s, 'b list, 'e> =
     let rec inner t acc = state {
@@ -111,3 +110,21 @@ let rec inline scanM ([<InlineIfLambda>] f: 'a -> 'b -> StateM<'s, 'a, 'e>) (acc
     }
     inner acc t List.empty
 let inline scanM_ ([<InlineIfLambda>] f) acc t = scanM f acc t >>. just ()
+
+// Reader functionality
+let ask : ReaderStateM<'r, 's, 'r, 'e> =
+    fun s ->
+        let a, n = get s
+        match a with
+        | Ok v -> Ok (fst v), n
+        | Error err -> Error err, n
+let inline local ([<InlineIfLambda>] f: 'r -> 'r) ([<InlineIfLambda>] m: ReaderStateM<'r, 's, 't, 'e>) : ReaderStateM<'r, 's, 't, 'e> =
+    fun s ->
+        let res, o = get s
+        match res with
+        | Ok (r, s) ->
+            let a, (_, n) = m (f r, s)
+            match a with
+            | Ok v -> Ok v, (r, n)
+            | Error err -> Error err, (r, n)
+        | Error err -> Error err, o

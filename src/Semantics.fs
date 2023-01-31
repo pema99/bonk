@@ -233,8 +233,7 @@ let rec isUseful (env: UserEnv) (rows: PatternMatrix) (v: PatternStack) : Witnes
 // Essentially identity monad used for stateless error checking
 type CheckM<'t> = ResultM<'t,ErrorInfo>
 let check = state
-let runCheckM m =
-    m () |> fst
+let runCheckM = runResultM
 
 let checkMatch (env: UserEnv) (sp: Span) (matcher: Type) (pats: Pattern list) : CheckM<unit> = check {
     let patMatrix = List.map (deconstructPattern env matcher >> List.singleton) pats
@@ -275,8 +274,7 @@ let checkMatches (env: UserEnv) (decls: TypedDecl list) : CheckM<TypedDecl list>
 // Fun impures, exceptions, class impures
 type ColorM<'t> = StateM<(string Set * string Set * string Set),'t,ErrorInfo>
 let color = state
-let runColorM m =
-    m (funImpures, funImpureExceptions, Set.empty) |> fst
+let runColorM m = runStateM m (funImpures, funImpureExceptions, Set.empty) |> fst
 
 // Helpers to set state
 let getImpures = get
